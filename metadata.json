@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Copy of Gemini Prompt Architect",
+  "description": "High-fidelity audio-to-prompt transcriber using Gemini 2.5 Flash. Converts spoken audio (any language) into impeccable English prompts.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
