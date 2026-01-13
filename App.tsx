@@ -9,23 +9,17 @@ import {
   Plus,
   Terminal,
   FolderOpen,
-  Edit3,
   X,
   FileAudio,
   Brain,
-  Music,
   Zap,
   Save,
-  Database,
   Feather,
   Activity,
   Mic,
   Settings,
-  Palette,
-  Type,
   Minus, 
   Users,
-  Sliders,
   Cpu,
   Monitor,
   LogOut,
@@ -168,14 +162,6 @@ const IconEditor = ({ className, active }: { className?: string, active?: boolea
   </svg>
 );
 
-const IconMic = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M12 2C10.3431 2 9 3.34315 9 5V11C9 12.6569 10.3431 14 12 14C13.6569 14 15 12.6569 15 11V5C15 3.34315 13.6569 2 12 2Z"/>
-    <path d="M19 11C19 14.866 15.866 18 12 18C8.13401 18 5 14.866 5 11" strokeLinecap="round"/>
-    <path d="M12 18V22M8 22H16" strokeLinecap="round"/>
-  </svg>
-);
-
 const IconUpload = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
     <path d="M4 16V17C4 19.2091 5.79086 21 8 21H16C18.2091 21 20 19.2091 20 17V16" strokeLinecap="round"/>
@@ -226,6 +212,7 @@ type RecordingStyle = 'Dictation' | 'Interview';
 type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
 
 type OutputStyle = 
+  | 'Verbatim'
   | 'Elegant Prose'
   | 'Ana Suy'
   | 'Poetic / Verses'
@@ -569,7 +556,8 @@ export default function App() {
     return (localStorage.getItem('gemini_outputLanguage') as any) || 'English';
   });
   const [outputStyle, setOutputStyle] = useState<OutputStyle>(() => {
-    return (localStorage.getItem('gemini_outputStyle') as any) || 'Elegant Prose';
+    // Default to 'Verbatim' if nothing is stored, to satisfy "simple audio to text" need
+    return (localStorage.getItem('gemini_outputStyle') as any) || 'Verbatim';
   });
   const [customStylePrompt, setCustomStylePrompt] = useState<string>(() => {
     return localStorage.getItem('gemini_customStylePrompt') || "";
@@ -619,9 +607,6 @@ export default function App() {
     navigator.mediaDevices.enumerateDevices().then(devices => {
         const mics = devices.filter(d => d.kind === 'audioinput');
         setAvailableMics(mics);
-        if (mics.length > 0 && selectedMicId === 'default') {
-            // Keep default, let browser handle it, but we have list
-        }
     });
   }, []);
 
@@ -686,12 +671,12 @@ export default function App() {
         addLog("Restored previous session audio.", 'info');
       }
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  const addLog = (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
+  const addLog = useCallback((msg: string, type: 'info' | 'success' | 'error' = 'info') => {
     setLogs(prev => [...prev.slice(-4), { msg, type }]); 
-  };
+  }, []);
 
   const handleAddContext = async () => {
     const name = prompt("Name your new Context Pool (e.g. 'Project Alpha', 'React Docs'):");
@@ -772,7 +757,7 @@ export default function App() {
       saveAudioToDB(null);
       setAudioMetrics(null);
     }
-  }, [audioBlob, isRecording]);
+  }, [audioBlob, isRecording, addLog]);
 
   const startRecording = async () => {
     try {
@@ -901,7 +886,7 @@ export default function App() {
       // Get memory for current context
       const currentMemory = contextMemory[activeContext] || "No previous context.";
 
-      // --- CRITICAL SPLIT: LITERARY VS. PROMPT ARCHITECT ---
+      // --- CRITICAL SPLIT: LITERARY VS. PROMPT ARCHITECT VS. VERBATIM ---
       // This ensures we do not break the "Literary" styles while fixing "Prompt" styles.
       const isPromptEngineeringMode = [
           'Prompt (Claude)', 
@@ -910,6 +895,8 @@ export default function App() {
           'Tech Docs', 
           'Bullet Points'
       ].includes(outputStyle);
+
+      const isVerbatimMode = outputStyle === 'Verbatim';
 
       const isPortuguese = outputLanguage === 'Portuguese';
 
@@ -928,10 +915,15 @@ export default function App() {
               `;
           } else if (outputStyle === 'Prompt (Gemini)') {
               formatInstruction = `
-              CRITICAL OUTPUT FORMATTING:
-              - Use clear Markdown headers (## Role, ## Task, ## Constraints).
-              - Use bullet points for clarity.
-              - Ensure the tone is highly structured and ready for a large context window model.
+              ## Prompt Engineering Directives:
+              * **Minimize Interpretation:** Reduce subjective interpretation of the input.
+              * **Idea Refinement:** Prioritize clarification of the core idea.
+              * **Output Format Conjecturing:** Actively anticipate the optimal format.
+              * **Order Preservation:** Maintain original sequence.
+              * **No Merging:** Do not combine distinct requests.
+              * **Independent Delineation:** Distinct requests must be separated.
+
+              FORMAT: Use clear Markdown headers (## Role, ## Task, ## Constraints). Bullet points for clarity.
               `;
           } else if (outputStyle === 'Code Generator') {
               formatInstruction = `OUTPUT ONLY VALID CODE inside Markdown code blocks. No conversational filler.`;
@@ -967,6 +959,24 @@ export default function App() {
             - Do not strictly transcribe; ARCHITECT the response.
           `;
 
+      } else if (isVerbatimMode) {
+          // --- MODE C: FL FLAWLESS TRANSCRIPTION (Verbatim) ---
+          systemPrompt = `
+            ROLE: You are a professional, high-fidelity transcription engine.
+            
+            TASK: Convert the spoken audio into text with absolute accuracy.
+            
+            RULES:
+            1. **Verbatim Fidelity:** Transcribe exactly what is said. Do not paraphrase.
+            2. **Punctuation:** Add standard punctuation for readability, but do not alter sentence structure.
+            3. **Filler Words:** Remove excessive stuttering or non-lexical sounds (um, uh) ONLY if they distract significantly. Keep them if they add context/hesitation.
+            4. **No Meta-Commentary:** Do NOT add "Here is the transcript:" or any intro. Just the text.
+            
+            TARGET LANGUAGE: ${outputLanguage}
+            
+            CONTEXT MEMORY (For terminology reference only):
+            "${currentMemory.slice(-2000)}"
+          `;
       } else {
           // --- MODE B: LITERARY EDITOR (Preserved Legacy Logic) ---
           // This path handles 'Elegant Prose', 'Ana Suy', 'Normal', etc.
@@ -1054,7 +1064,7 @@ export default function App() {
       const response = await ai.models.generateContent({
         model: aiModel,
         config: {
-            temperature: isPromptEngineeringMode ? 0.2 : 0.4, 
+            temperature: isPromptEngineeringMode ? 0.2 : isVerbatimMode ? 0.1 : 0.4, 
         },
         contents: {
             parts: [
@@ -1350,6 +1360,7 @@ export default function App() {
                                         onChange={(e) => setOutputStyle(e.target.value as OutputStyle)}
                                         className="w-full bg-white/5 border border-white/10 rounded-sm py-3 md:py-2 px-3 text-xs focus:outline-none transition-colors appearance-none"
                                     >
+                                        <option value="Verbatim">Verbatim (Exact Transcription)</option>
                                         <option value="Elegant Prose">Elegant Prose</option>
                                         <option value="Ana Suy">Ana Suy (Poetic/Psychoanalytic)</option>
                                         <option value="Poetic / Verses">Poetic / Verses</option>
@@ -1399,7 +1410,7 @@ export default function App() {
                         }}
                     >
                         {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Zap className="w-3.5 h-3.5 fill-current"/>}
-                        {isProcessing ? "Processing..." : outputStyle === 'Code Generator' ? "Generate Code" : "Refine Text"}
+                        {isProcessing ? "Processing..." : outputStyle === 'Verbatim' ? "Transcribe" : outputStyle === 'Code Generator' ? "Generate Code" : "Refine Text"}
                     </button>
 
                      {audioBlob && !isProcessing && (
