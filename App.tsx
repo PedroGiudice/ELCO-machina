@@ -827,7 +827,22 @@ export default function App() {
       const element = document.createElement("a");
       const file = new Blob([transcription], {type: 'text/plain'});
       element.href = URL.createObjectURL(file);
-      element.download = `transcription-${Date.now()}.${format}`;
+      
+      let filename = `transcription-${Date.now()}`;
+      if (transcription) {
+        const lines = transcription.split('\n');
+        // Use first line if available and valid
+        if (lines.length > 0) {
+             const candidate = lines[0].trim();
+             // Sanitize filename (Alphanumeric + Common safe chars + Accents)
+             const safeName = candidate.replace(/[^a-zA-Z0-9 \-_().\u00C0-\u00FF]/g, '').trim();
+             if (safeName.length > 0 && safeName.length < 255) {
+                 filename = safeName;
+             }
+        }
+      }
+      
+      element.download = `${filename}.${format}`;
       document.body.appendChild(element); // Required for this to work in FireFox
       element.click();
       document.body.removeChild(element);
@@ -1059,6 +1074,15 @@ export default function App() {
             Return ONLY the refined text. No preambles or conversational filler.
           `;
       }
+      
+      // --- FORCE FILENAME RULE ---
+      systemPrompt += `
+      
+      MANDATORY OUTPUT STRUCTURE:
+      Line 1: Suggested filename for this content (concise, valid chars, no extension, no "Filename:" prefix).
+      Line 2: [Empty]
+      Line 3+: The actual content.
+      `;
 
       // FIX: Payload structure simplified to prevent 500 errors on multimodal requests
       const response = await ai.models.generateContent({
