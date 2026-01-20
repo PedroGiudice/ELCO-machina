@@ -1852,16 +1852,14 @@ export default function App() {
                  )}
             </div>
             
-            <div className="flex items-center gap-2">
-                <div className="flex items-center bg-white/5 rounded-sm mr-2">
+            <div className="flex items-center gap-1 md:gap-2">
+                <div className="hidden md:flex items-center bg-white/5 rounded-sm mr-2">
                     <button onClick={() => setFontSize(Math.max(10, fontSize - 1))} className="p-1.5 hover:bg-white/10 text-xs"><Minus className="w-3 h-3"/></button>
                     <span className="text-[10px] px-2 font-mono w-8 text-center">{fontSize}</span>
                     <button onClick={() => setFontSize(Math.min(32, fontSize + 1))} className="p-1.5 hover:bg-white/10 text-xs"><Plus className="w-3 h-3"/></button>
                 </div>
 
-                <div className="w-px h-4 bg-white/10 mx-1"></div>
-
-                <button 
+                <button
                     onClick={() => setTranscription('')}
                     className="p-1.5 hover:bg-white/10 rounded-sm opacity-50 hover:opacity-100 hover:text-red-400 transition-colors"
                     title="Clear"
@@ -1869,27 +1867,28 @@ export default function App() {
                     <Trash2 className="w-4 h-4" />
                 </button>
                 <div className="w-px h-4 bg-white/10 mx-1"></div>
-                <button 
+                <button
                     onClick={() => handleDownloadText('txt')}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-sm transition-colors border border-white/5"
+                    className="flex items-center gap-1 px-2 md:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-sm transition-colors border border-white/5"
                     title="Export TXT"
                 >
-                    <IconDownload className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">TXT</span>
+                    <IconDownload className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                    <span className="text-[10px] md:text-xs">TXT</span>
                 </button>
-                <button 
+                <button
                     onClick={() => handleDownloadText('md')}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-sm transition-colors border border-white/5"
+                    className="flex items-center gap-1 px-2 md:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-sm transition-colors border border-white/5"
                     title="Export Markdown"
                 >
-                    <IconMarkdown className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">MD</span>
+                    <IconMarkdown className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                    <span className="text-[10px] md:text-xs">MD</span>
                 </button>
-                <button 
+                <button
                     onClick={() => {navigator.clipboard.writeText(transcription); addLog('Copied to clipboard', 'success')}}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white text-black text-xs font-semibold rounded-sm transition-colors hover:bg-gray-200"
+                    className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 bg-white text-black text-xs font-semibold rounded-sm transition-colors hover:bg-gray-200"
+                    title="Copy to clipboard"
                 >
-                    <Copy className="w-3 h-3" /> Copy
+                    <Copy className="w-3 h-3" /> <span className="hidden md:inline">Copy</span>
                 </button>
             </div>
         </div>

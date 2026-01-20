@@ -57,7 +57,8 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 
 | Data | Erro | Regra |
 |------|------|-------|
-| | | |
+| 2026-01-20 | `enableEdgeToEdge()` no Android faz conteúdo ir atrás das barras do sistema | CSS `env(safe-area-inset-*)` não funciona no Android WebView. Remover `enableEdgeToEdge()` do MainActivity.kt |
+| 2026-01-20 | API do Tauri plugin-store mudou de `LazyStore` para `load()` | Usar `import { load } from '@tauri-apps/plugin-store'` e `await load('file.json')` |
 
 <!--
 Formato para adicionar:
