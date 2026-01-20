@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Environment files (NEVER commit API keys)
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+service-account.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
