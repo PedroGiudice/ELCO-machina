@@ -116,6 +116,118 @@ const loadAllContextsFromDB = async (): Promise<ContextItem[]> => {
     }
 };
 
+// --- TAURI STORE HELPER (Robust History Persistence) ---
+type HistoryItem = { text: string; date: string; id: string };
+
+// Detect Tauri environment
+const isTauri = (): boolean => {
+    return typeof window !== 'undefined' && '__TAURI__' in window;
+};
+
+// Dynamic import for Tauri Store (only loads in Tauri environment)
+let storeInstance: any = null;
+
+const getStore = async () => {
+    if (!isTauri()) return null;
+    if (storeInstance) return storeInstance;
+
+    try {
+        const { LazyStore } = await import('@tauri-apps/plugin-store');
+        storeInstance = new LazyStore('history.json', { autoSave: 100 });
+        return storeInstance;
+    } catch (e) {
+        console.error('Failed to initialize Tauri Store:', e);
+        return null;
+    }
+};
+
+// Generate unique ID for history items
+const generateHistoryId = (): string => {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Load history from Tauri Store or localStorage fallback
+const loadHistory = async (): Promise<HistoryItem[]> => {
+    const store = await getStore();
+
+    if (store) {
+        try {
+            const history = await store.get<HistoryItem[]>('transcription_history');
+            if (history && history.length > 0) {
+                return history;
+            }
+            // Migration: Check localStorage for existing data
+            const lsHistory = localStorage.getItem('gemini_history_v2');
+            if (lsHistory) {
+                const parsed = JSON.parse(lsHistory) as { text: string; date: string }[];
+                const migrated: HistoryItem[] = parsed.map(item => ({
+                    ...item,
+                    id: generateHistoryId()
+                }));
+                if (migrated.length > 0) {
+                    await store.set('transcription_history', migrated);
+                    console.log(`Migrated ${migrated.length} history items to Tauri Store`);
+                }
+                return migrated;
+            }
+            return [];
+        } catch (e) {
+            console.error('Failed to load from Tauri Store:', e);
+        }
+    }
+
+    // Fallback: localStorage (browser environment)
+    try {
+        const saved = localStorage.getItem('gemini_history_v2');
+        if (saved) {
+            const parsed = JSON.parse(saved) as { text: string; date: string }[];
+            return parsed.map(item => ({
+                ...item,
+                id: item.id || generateHistoryId()
+            }));
+        }
+    } catch (e) {
+        console.error('Failed to load from localStorage:', e);
+    }
+    return [];
+};
+
+// Save history to Tauri Store or localStorage fallback
+const saveHistory = async (history: HistoryItem[]): Promise<void> => {
+    const store = await getStore();
+
+    if (store) {
+        try {
+            await store.set('transcription_history', history);
+            return;
+        } catch (e) {
+            console.error('Failed to save to Tauri Store:', e);
+        }
+    }
+
+    // Fallback: localStorage (browser environment)
+    try {
+        localStorage.setItem('gemini_history_v2', JSON.stringify(history));
+    } catch (e) {
+        console.error('Failed to save to localStorage:', e);
+    }
+};
+
+// Delete single history item
+const deleteHistoryItem = async (history: HistoryItem[], id: string): Promise<HistoryItem[]> => {
+    const updated = history.filter(item => item.id !== id);
+    await saveHistory(updated);
+    return updated;
+};
+
+// Clear all history
+const clearAllHistory = async (): Promise<void> => {
+    await saveHistory([]);
+};
+
+// Max history items (generous limit for Tauri Store - no localStorage size constraints)
+const MAX_HISTORY_ITEMS = 500;
+
 
 // --- CUSTOM ICONS (Technical / Hard Surface Design) ---
 
@@ -583,21 +695,30 @@ export default function App() {
   const [tempMemoryEdit, setTempMemoryEdit] = useState('');
   const [isSavingContext, setIsSavingContext] = useState(false);
 
-  // History State
-  const [history, setHistory] = useState<{text: string, date: string}[]>(() => {
-    try {
-      const saved = localStorage.getItem('gemini_history_v2');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) { return []; }
-  });
+  // History State (Robust Persistence via Tauri Store)
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
   useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
-  useEffect(() => localStorage.setItem('gemini_history_v2', JSON.stringify(history)), [history]);
   useEffect(() => localStorage.setItem('gemini_current_work', transcription), [transcription]);
   useEffect(() => localStorage.setItem('gemini_ai_model', aiModel), [aiModel]);
+
+  // History Persistence: Load on mount, save on change
+  useEffect(() => {
+    loadHistory().then(loaded => {
+      setHistory(loaded);
+      setHistoryLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (historyLoaded && history.length >= 0) {
+      saveHistory(history);
+    }
+  }, [history, historyLoaded]);
   
   // Context Active State Persistence
   useEffect(() => localStorage.setItem('gemini_active_context', activeContext), [activeContext]);
@@ -1138,8 +1259,12 @@ export default function App() {
       
       setLastStats(newStats);
 
-      // Add to history (Max 15)
-      setHistory(prev => [{ text: cleanedText, date: new Date().toISOString() }, ...prev].slice(0, 15));
+      // Add to history (robust persistence via Tauri Store)
+      setHistory(prev => [{
+        text: cleanedText,
+        date: new Date().toISOString(),
+        id: generateHistoryId()
+      }, ...prev].slice(0, MAX_HISTORY_ITEMS));
       addLog("Processing complete & Memory secured.", 'success');
 
     } catch (err: any) {
@@ -1605,21 +1730,70 @@ export default function App() {
             {/* HISTORY PANEL */}
             {activeTab === 'history' && (
                 <div className="space-y-3 animate-in fade-in slide-in-from-left-2 duration-200">
-                     {history.map((item, idx) => (
-                        <div 
-                            key={idx}
-                            onClick={() => { setTranscription(item.text); setMobileView('editor'); }}
-                            className="group bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 p-3 rounded-sm cursor-pointer transition-all"
+                     <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-mono opacity-40">{history.length} item{history.length !== 1 ? 's' : ''}</span>
+                        {isTauri() && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">Synced</span>}
+                     </div>
+                     {history.map((item) => (
+                        <div
+                            key={item.id}
+                            className="group bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 p-3 rounded-sm transition-all relative"
                         >
                             <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] opacity-50 font-mono">{new Date(item.date).toLocaleTimeString()}</span>
+                                <span className="text-[10px] opacity-50 font-mono">
+                                    {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString()}
+                                </span>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setHistory(prev => prev.filter(h => h.id !== item.id));
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 text-red-400/60 hover:text-red-400 transition-opacity p-1 -m-1"
+                                    title="Delete this item"
+                                >
+                                    <Trash2 className="w-3 h-3" />
+                                </button>
                             </div>
-                            <p className="text-xs line-clamp-2 font-sans opacity-80 group-hover:opacity-100">{item.text}</p>
+                            <p
+                                onClick={() => { setTranscription(item.text); setMobileView('editor'); }}
+                                className="text-xs line-clamp-3 font-sans opacity-80 group-hover:opacity-100 cursor-pointer"
+                            >
+                                {item.text}
+                            </p>
+                            <div className="flex gap-2 mt-2 pt-2 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={() => { setTranscription(item.text); setMobileView('editor'); }}
+                                    className="text-[9px] px-2 py-1 bg-white/5 hover:bg-white/10 rounded transition-colors"
+                                >
+                                    Load
+                                </button>
+                                <button
+                                    onClick={() => { navigator.clipboard.writeText(item.text); addLog('Copied to clipboard', 'success'); }}
+                                    className="text-[9px] px-2 py-1 bg-white/5 hover:bg-white/10 rounded transition-colors flex items-center gap-1"
+                                >
+                                    <Copy className="w-2.5 h-2.5" /> Copy
+                                </button>
+                            </div>
                         </div>
                     ))}
-                    {history.length === 0 && <p className="text-xs opacity-40 text-center py-10">No history available.</p>}
-                     {history.length > 0 && (
-                        <button onClick={() => setHistory([])} className="w-full text-[10px] opacity-50 hover:text-red-400 py-2 border-t border-white/10 mt-4">Clear All History</button>
+                    {history.length === 0 && (
+                        <div className="text-center py-10">
+                            <IconHistory className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                            <p className="text-xs opacity-40">No history yet.</p>
+                            <p className="text-[10px] opacity-30 mt-1">Transcriptions will appear here.</p>
+                        </div>
+                    )}
+                    {history.length > 0 && (
+                        <button
+                            onClick={async () => {
+                                await clearAllHistory();
+                                setHistory([]);
+                                addLog('History cleared', 'info');
+                            }}
+                            className="w-full text-[10px] opacity-50 hover:text-red-400 py-2 border-t border-white/10 mt-4 flex items-center justify-center gap-1"
+                        >
+                            <Trash2 className="w-3 h-3" /> Clear All History
+                        </button>
                     )}
                 </div>
             )}
