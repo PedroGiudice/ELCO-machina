@@ -126,19 +126,31 @@ const isTauri = (): boolean => {
 
 // Dynamic import for Tauri Store (only loads in Tauri environment)
 let storeInstance: any = null;
+let storeInitPromise: Promise<any> | null = null;
 
 const getStore = async () => {
     if (!isTauri()) return null;
     if (storeInstance) return storeInstance;
 
-    try {
-        const { LazyStore } = await import('@tauri-apps/plugin-store');
-        storeInstance = new LazyStore('history.json', { autoSave: 100 });
-        return storeInstance;
-    } catch (e) {
-        console.error('Failed to initialize Tauri Store:', e);
-        return null;
-    }
+    // Prevent multiple concurrent initializations
+    if (storeInitPromise) return storeInitPromise;
+
+    storeInitPromise = (async () => {
+        try {
+            const { load } = await import('@tauri-apps/plugin-store');
+            storeInstance = await load('history.json', { autoSave: 100 });
+            console.log('Tauri Store initialized successfully');
+            return storeInstance;
+        } catch (e) {
+            console.error('Failed to initialize Tauri Store:', e);
+            storeInstance = null;
+            return null;
+        } finally {
+            storeInitPromise = null;
+        }
+    })();
+
+    return storeInitPromise;
 };
 
 // Generate unique ID for history items
@@ -1297,9 +1309,19 @@ export default function App() {
   );
 
   return (
-    <div 
-        className="flex h-screen w-full overflow-hidden select-none flex-col md:flex-row relative transition-colors duration-300"
-        style={{ backgroundColor: bgColor, color: textColor, fontFamily: fontFamily }}
+    <div
+        className="flex w-full overflow-hidden select-none flex-col md:flex-row relative transition-colors duration-300"
+        style={{
+          backgroundColor: bgColor,
+          color: textColor,
+          fontFamily: fontFamily,
+          height: '100%',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingLeft: 'env(safe-area-inset-left, 0px)',
+          paddingRight: 'env(safe-area-inset-right, 0px)',
+          boxSizing: 'border-box'
+        }}
     >
       
       {/* 1. DESKTOP SIDEBAR (Hidden on Mobile) */}
@@ -1906,7 +1928,13 @@ export default function App() {
       </main>
 
       {/* 4. MOBILE BOTTOM NAVIGATION (Hidden on Desktop) */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full h-[60px] bg-black border-t border-white/10 flex items-center justify-around z-50 pb-safe">
+      <nav
+        className="md:hidden fixed bottom-0 left-0 w-full bg-black border-t border-white/10 flex items-center justify-around z-50"
+        style={{
+          height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+        }}
+      >
           <button onClick={() => { setActiveTab('workspace'); setMobileView('tools'); }} className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'workspace' && mobileView === 'tools' ? 'opacity-100' : 'opacity-40'}`} style={activeTab === 'workspace' && mobileView === 'tools' ? { color: themeColor } : {}}>
               <IconWorkspace className="w-6 h-6" active={activeTab === 'workspace' && mobileView === 'tools'}/>
               <span className="text-[9px]">Input</span>
