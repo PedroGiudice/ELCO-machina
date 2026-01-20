@@ -1,14 +1,15 @@
 # ARCHITECTURE.md
 
-Documento técnico de referência para o **gemini-prompt-architect**.
+Documento técnico de referência para **Pro ATT Machine** (anteriormente gemini-prompt-architect).
 
 ---
 
 ## Visão Geral
 
-Aplicação web client-side que transcreve áudio em alta fidelidade usando Gemini 2.5 Flash, convertendo gravações em prompts formatados com múltiplos estilos de output.
+Aplicação desktop/mobile nativa (via Tauri 2.0) que transcreve áudio em alta fidelidade usando Gemini 2.5 Flash, convertendo gravações em prompts formatados com múltiplos estilos de output.
 
-**Deploy:** https://ai.studio/apps/drive/1OYWhoDTEqpA_Wqi5-bFHl-F053u4LssU
+**Plataformas:** Linux, Android (Windows/macOS possíveis)
+**App ID:** `com.proatt.machine`
 
 ---
 
@@ -16,6 +17,8 @@ Aplicação web client-side que transcreve áudio em alta fidelidade usando Gemi
 
 | Camada | Tecnologia | Versão |
 |--------|------------|--------|
+| Runtime | Tauri | 2.9.5 |
+| Backend | Rust | 1.77+ |
 | Framework | React | 19.2.1 |
 | Build | Vite | 6.2.0 |
 | Linguagem | TypeScript | 5.8.2 |
@@ -23,21 +26,40 @@ Aplicação web client-side que transcreve áudio em alta fidelidade usando Gemi
 | AI | @google/genai | 1.31.0 |
 | Icons | Lucide React | 0.556.0 |
 
+### Plugins Tauri Instalados
+
+| Plugin | Uso |
+|--------|-----|
+| dialog | Seleção/salvamento de arquivos |
+| fs | Acesso ao filesystem |
+| store | Persistência key-value |
+| notification | Notificações nativas |
+| clipboard-manager | Clipboard read/write |
+| shell | Abrir URLs externas |
+
 ---
 
 ## Estrutura de Arquivos
 
 ```
 /
-├── App.tsx           # Componente principal (~2000 linhas)
-├── index.tsx         # Entry point React
-├── index.html        # Template HTML + CDN imports
-├── vite.config.ts    # Config Vite (porta 3000, env vars)
-├── tsconfig.json     # Config TypeScript
-├── package.json      # Dependências
-├── metadata.json     # Metadata AI Studio (permissões)
-├── .env.local        # GEMINI_API_KEY (não commitado)
-└── .claude/          # Config Claude Code
+├── App.tsx              # Componente principal (~2000 linhas)
+├── index.tsx            # Entry point React
+├── index.html           # Template HTML + CDN imports
+├── vite.config.ts       # Config Vite (porta 3000, env vars)
+├── tsconfig.json        # Config TypeScript
+├── package.json         # Dependências
+├── .env.local           # GEMINI_API_KEY (não commitado)
+├── src-tauri/           # Backend Tauri (Rust)
+│   ├── src/
+│   │   ├── main.rs      # Entry point
+│   │   └── lib.rs       # Plugins e commands
+│   ├── Cargo.toml       # Dependências Rust
+│   ├── tauri.conf.json  # Config Tauri
+│   ├── capabilities/    # Permissões granulares
+│   └── gen/
+│       └── android/     # Projeto Android gerado
+└── .claude/
     └── settings.local.json
 ```
 
@@ -179,4 +201,72 @@ npm run preview
 **Variável obrigatória:**
 ```
 GEMINI_API_KEY=sua_chave_aqui
+```
+
+---
+
+## Arquitetura Modular (App Base)
+
+Este app serve como **base** para integrar outros módulos de áudio. Padrões a seguir:
+
+### Estrutura de Módulos (Futura)
+
+```
+src/
+├── modules/
+│   ├── transcriber/     # Módulo atual (Gemini Prompt Architect)
+│   │   ├── index.tsx
+│   │   ├── hooks/
+│   │   └── components/
+│   ├── recorder/        # Futuro: Gravador de áudio
+│   └── editor/          # Futuro: Editor de áudio
+├── shared/
+│   ├── audio-engine/    # Web Audio API compartilhado
+│   ├── persistence/     # IndexedDB/Store helpers
+│   └── ui/              # Componentes UI base
+└── App.tsx              # Router entre módulos
+```
+
+### Padrões de Frontend (Obrigatórios)
+
+1. **Styling:** Tailwind CSS (classes utilitárias)
+2. **Layout:** Sidebar + Action Panel + Main View
+3. **Cores:** Tema escuro com accent color configurável
+4. **Tipografia:** IBM Plex Sans (UI) + JetBrains Mono (code)
+5. **Icons:** Lucide React
+
+### Padrões de Áudio
+
+1. **Captura:** MediaRecorder API
+2. **Análise:** AudioContext + AnalyserNode
+3. **Persistência:** IndexedDB para blobs
+4. **Export:** WAV (PCM 16-bit), WebM
+
+### Integração de Novo Módulo
+
+```typescript
+// 1. Criar módulo em src/modules/[nome]/
+// 2. Exportar componente principal
+export const MyModule: React.FC = () => { ... }
+
+// 3. Adicionar rota no App.tsx
+// 4. Adicionar entrada no sidebar
+```
+
+---
+
+## Build Targets
+
+| Plataforma | Comando | Output |
+|------------|---------|--------|
+| Linux | `cargo tauri build` | .deb, .rpm |
+| Android | `cargo tauri android build --debug` | .apk |
+| Dev | `bun run tauri dev` | Hot reload |
+
+### Variáveis de Ambiente (Android)
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
