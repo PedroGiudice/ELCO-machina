@@ -21,7 +21,8 @@
     "@tauri-apps/plugin-updater": "^2.9.0",
     "lucide-react": "^0.556.0",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "tauri-plugin-mic-recorder-api": "^2.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.6",

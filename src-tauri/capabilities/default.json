@@ -29,6 +29,7 @@
     "shell:default",
     "shell:allow-open",
     "updater:default",
-    "process:default"
+    "process:default",
+    "mic-recorder:default"
   ]
 }

@@ -742,6 +742,7 @@ export default function App() {
 
   // Audio State
   const [isRecording, setIsRecording] = useState(false);
+  const [isNativeRecording, setIsNativeRecording] = useState(false); // Tracking if using native plugin
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]); // Ref for memory efficiency
@@ -1056,6 +1057,24 @@ export default function App() {
   }, [audioBlob, isRecording, addLog]);
 
   const startRecording = async () => {
+    // Tentar plugin nativo primeiro (funciona no Linux desktop onde WebKit2GTK nao tem permissoes)
+    if (isTauri()) {
+      try {
+        const { startRecording: startNativeRecording } = await import('tauri-plugin-mic-recorder-api');
+        await startNativeRecording();
+        setIsNativeRecording(true);
+        setIsRecording(true);
+        setRecordingStartTime(Date.now());
+        setAudioBlob(null);
+        addLog("Gravacao iniciada (nativo)", 'info');
+        return;
+      } catch (e) {
+        console.warn('Native recording not available, falling back to Web API:', e);
+        // Continuar para fallback Web API
+      }
+    }
+
+    // Fallback: Web API (funciona no Android e navegador)
     try {
       const constraints = {
         audio: {
@@ -1069,7 +1088,7 @@ export default function App() {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const recorder = new MediaRecorder(stream);
-      
+
       chunksRef.current = []; // Reset chunks
 
       recorder.ondataavailable = (e) => {
@@ -1089,6 +1108,7 @@ export default function App() {
       recorder.start();
       setMediaRecorder(recorder);
       setAudioStream(stream);
+      setIsNativeRecording(false);
       setIsRecording(true);
       setRecordingStartTime(Date.now());
       setAudioBlob(null);
@@ -1099,7 +1119,35 @@ export default function App() {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
+    // Se usando gravacao nativa
+    if (isNativeRecording) {
+      try {
+        const { stopRecording: stopNativeRecording } = await import('tauri-plugin-mic-recorder-api');
+        const { readFile } = await import('@tauri-apps/plugin-fs');
+
+        // stopRecording retorna o caminho do arquivo WAV
+        const filePath = await stopNativeRecording();
+        addLog(`Audio salvo em: ${filePath}`, 'info');
+
+        // Ler o arquivo WAV e converter para Blob
+        const audioData = await readFile(filePath);
+        const blob = new Blob([audioData], { type: 'audio/wav' });
+        setAudioBlob(blob);
+        setIsRecording(false);
+        setIsNativeRecording(false);
+        addLog("Gravacao capturada.", 'success');
+        return;
+      } catch (e) {
+        console.error('Native stop failed:', e);
+        addLog("Erro ao parar gravacao nativa.", 'error');
+        setIsRecording(false);
+        setIsNativeRecording(false);
+        return;
+      }
+    }
+
+    // Fallback: parar MediaRecorder (Web API)
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
       setIsRecording(false);
