@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { GoogleGenAI } from "@google/genai";
 import { 
   Loader2,
@@ -711,6 +713,11 @@ export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
+  // Auto-Update State
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'ready'>('idle');
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
@@ -734,6 +741,50 @@ export default function App() {
   
   // Context Active State Persistence
   useEffect(() => localStorage.setItem('gemini_active_context', activeContext), [activeContext]);
+
+  // Check for updates on startup
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        setUpdateStatus('checking');
+        const update = await check();
+        if (update) {
+          setUpdateStatus('available');
+          setUpdateVersion(update.version);
+          console.log(`Update available: ${update.version}`);
+
+          // Auto-download
+          setUpdateStatus('downloading');
+          await update.downloadAndInstall((event) => {
+            if (event.event === 'Progress') {
+              const data = event.data as { chunkLength: number; contentLength?: number };
+              if (data.contentLength && data.contentLength > 0) {
+                setUpdateProgress(prev => {
+                  const newProgress = prev + (data.chunkLength / data.contentLength!) * 100;
+                  return Math.min(newProgress, 100);
+                });
+              }
+            }
+          });
+          setUpdateStatus('ready');
+
+          // Prompt user to restart
+          if (confirm(`Nova versao ${update.version} instalada! Reiniciar agora?`)) {
+            await relaunch();
+          }
+        } else {
+          setUpdateStatus('idle');
+        }
+      } catch (e) {
+        console.log('Update check failed (normal in dev):', e);
+        setUpdateStatus('idle');
+      }
+    };
+
+    // Check after 3 seconds to not block startup
+    const timer = setTimeout(checkForUpdates, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load Microphones on mount
   useEffect(() => {

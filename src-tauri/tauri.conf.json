@@ -23,15 +23,27 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM0QjIxRDRDMkE2MDMxMzQKUldRME1XQXFUQjJ5eE9aL25iUm4zeUhJdHBORjlDNnlxVDJFNW9Dc290MlpSTzRmNGtzSW14TTgK",
+      "endpoints": [
+        "https://github.com/PedroGiudice/ELCO-machina/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["deb", "rpm"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": false
   }
 }
