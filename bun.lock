@@ -18,6 +18,7 @@
         "lucide-react": "^0.556.0",
         "react": "^19.2.1",
         "react-dom": "^19.2.1",
+        "tauri-plugin-mic-recorder-api": "^2.0.0",
       },
       "devDependencies": {
         "@tauri-apps/cli": "^2.9.6",
@@ -420,6 +421,8 @@
     "strip-ansi": ["strip-ansi@7.1.2", "", { "dependencies": { "ansi-regex": "^6.0.1" } }, "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA=="],
 
     "strip-ansi-cjs": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A=="],
+
+    "tauri-plugin-mic-recorder-api": ["tauri-plugin-mic-recorder-api@2.0.0", "", { "dependencies": { "@tauri-apps/api": ">=2.0.0-beta.6" } }, "sha512-04wqYCX4WIlYd6KUY7aS3+W4B5RtnSoVczaQCBSXKpQkEx9XdaaBN05XCee2unxGva0btSXBItFqQSdosnS4jQ=="],
 
     "tinyglobby": ["tinyglobby@0.2.15", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.3" } }, "sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ=="],
 
