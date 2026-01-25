@@ -1063,7 +1063,8 @@ export default function App() {
             echoCancellation: echoCancellation,
             noiseSuppression: noiseSuppression,
             autoGainControl: autoGainControl
-        }
+        },
+        video: false  // Explicitamente desabilitar video para evitar prompt de camera
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);

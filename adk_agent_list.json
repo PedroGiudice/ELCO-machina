@@ -1,0 +1,20 @@
+{
+  "agents": [
+    {
+      "name": "remote_rust_expert",
+      "url": "http://64.181.162.38:8000"
+    },
+    {
+      "name": "remote_rust_tunneled",
+      "url": "http://localhost:9000"
+    },
+    {
+      "name": "tauri_local",
+      "url": "http://localhost:9001"
+    },
+    {
+      "name": "frontend_local",
+      "url": "http://localhost:9002"
+    }
+  ]
+}
