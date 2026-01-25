@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { GoogleGenAI } from "@google/genai";
-import { 
+import {
   Loader2,
   Trash2,
   Copy,
@@ -20,12 +20,15 @@ import {
   Activity,
   Mic,
   Settings,
-  Minus, 
+  Minus,
   Users,
   Cpu,
   Monitor,
   LogOut,
-  AlertTriangle
+  AlertTriangle,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 // --- INDEXEDDB HELPER (For Audio & Context Persistence) ---
@@ -118,6 +121,58 @@ const loadAllContextsFromDB = async (): Promise<ContextItem[]> => {
     }
 };
 
+// --- INDEXEDDB PARA HISTORICO (Fallback robusto para Android) ---
+const HISTORY_DB_NAME = 'ProATTHistoryDB';
+const HISTORY_STORE_NAME = 'history';
+
+const openHistoryDB = (): Promise<IDBDatabase> => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(HISTORY_DB_NAME, 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+                db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'key' });
+            }
+        };
+    });
+};
+
+const saveHistoryToIndexedDB = async (history: HistoryItem[]): Promise<void> => {
+    try {
+        const db = await openHistoryDB();
+        const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(HISTORY_STORE_NAME);
+        store.put({ key: 'transcription_history', data: history });
+        await new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+    } catch (e) {
+        console.error('IndexedDB save failed:', e);
+    }
+};
+
+const loadHistoryFromIndexedDB = async (): Promise<HistoryItem[] | null> => {
+    try {
+        const db = await openHistoryDB();
+        const tx = db.transaction(HISTORY_STORE_NAME, 'readonly');
+        const store = tx.objectStore(HISTORY_STORE_NAME);
+        const request = store.get('transcription_history');
+        const result = await new Promise<any>((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        db.close();
+        return result?.data || null;
+    } catch (e) {
+        console.error('IndexedDB load failed:', e);
+        return null;
+    }
+};
+
 // --- TAURI STORE HELPER (Robust History Persistence) ---
 type HistoryItem = { text: string; date: string; id: string };
 
@@ -155,12 +210,61 @@ const getStore = async () => {
     return storeInitPromise;
 };
 
+// --- API KEY PERSISTENCE ---
+const loadApiKey = async (): Promise<string> => {
+    const store = await getStore();
+
+    if (store) {
+        try {
+            const key = await store.get<string>('gemini_api_key');
+            if (key) return key;
+        } catch (e) {
+            console.error('Failed to load API key from store:', e);
+        }
+    }
+
+    // Fallback: variavel de ambiente
+    if (process.env.API_KEY) {
+        return process.env.API_KEY;
+    }
+
+    // Fallback: localStorage
+    try {
+        const saved = localStorage.getItem('gemini_api_key');
+        if (saved) return saved;
+    } catch (e) {
+        console.error('Failed to load API key from localStorage:', e);
+    }
+
+    return '';
+};
+
+const saveApiKey = async (key: string): Promise<void> => {
+    const store = await getStore();
+
+    if (store) {
+        try {
+            await store.set('gemini_api_key', key);
+            return;
+        } catch (e) {
+            console.error('Failed to save API key to store:', e);
+        }
+    }
+
+    // Fallback: localStorage
+    try {
+        localStorage.setItem('gemini_api_key', key);
+    } catch (e) {
+        console.error('Failed to save API key to localStorage:', e);
+    }
+};
+
 // Generate unique ID for history items
 const generateHistoryId = (): string => {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-// Load history from Tauri Store or localStorage fallback
+// Load history from Tauri Store, IndexedDB, or localStorage fallback
 const loadHistory = async (): Promise<HistoryItem[]> => {
     const store = await getStore();
 
@@ -170,31 +274,23 @@ const loadHistory = async (): Promise<HistoryItem[]> => {
             if (history && history.length > 0) {
                 return history;
             }
-            // Migration: Check localStorage for existing data
-            const lsHistory = localStorage.getItem('gemini_history_v2');
-            if (lsHistory) {
-                const parsed = JSON.parse(lsHistory) as { text: string; date: string }[];
-                const migrated: HistoryItem[] = parsed.map(item => ({
-                    ...item,
-                    id: generateHistoryId()
-                }));
-                if (migrated.length > 0) {
-                    await store.set('transcription_history', migrated);
-                    console.log(`Migrated ${migrated.length} history items to Tauri Store`);
-                }
-                return migrated;
-            }
-            return [];
         } catch (e) {
             console.error('Failed to load from Tauri Store:', e);
         }
     }
 
-    // Fallback: localStorage (browser environment)
+    // Fallback 1: IndexedDB (mais confiavel no Android)
+    const indexedDBHistory = await loadHistoryFromIndexedDB();
+    if (indexedDBHistory && indexedDBHistory.length > 0) {
+        console.log('Loaded history from IndexedDB');
+        return indexedDBHistory;
+    }
+
+    // Fallback 2: localStorage
     try {
         const saved = localStorage.getItem('gemini_history_v2');
         if (saved) {
-            const parsed = JSON.parse(saved) as { text: string; date: string }[];
+            const parsed = JSON.parse(saved) as HistoryItem[];
             return parsed.map(item => ({
                 ...item,
                 id: item.id || generateHistoryId()
@@ -206,7 +302,7 @@ const loadHistory = async (): Promise<HistoryItem[]> => {
     return [];
 };
 
-// Save history to Tauri Store or localStorage fallback
+// Save history to Tauri Store, IndexedDB, or localStorage fallback
 const saveHistory = async (history: HistoryItem[]): Promise<void> => {
     const store = await getStore();
 
@@ -219,7 +315,10 @@ const saveHistory = async (history: HistoryItem[]): Promise<void> => {
         }
     }
 
-    // Fallback: localStorage (browser environment)
+    // Fallback 1: IndexedDB (mais confiavel no Android)
+    await saveHistoryToIndexedDB(history);
+
+    // Fallback 2: localStorage
     try {
         localStorage.setItem('gemini_history_v2', JSON.stringify(history));
     } catch (e) {
@@ -718,12 +817,25 @@ export default function App() {
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
 
+  // API Key State
+  const [apiKey, setApiKey] = useState<string>('');
+  const [apiKeyInput, setApiKeyInput] = useState<string>('');
+  const [isApiKeyVisible, setIsApiKeyVisible] = useState<boolean>(false);
+
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
   useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
   useEffect(() => localStorage.setItem('gemini_current_work', transcription), [transcription]);
   useEffect(() => localStorage.setItem('gemini_ai_model', aiModel), [aiModel]);
+
+  // Load API Key on mount
+  useEffect(() => {
+    loadApiKey().then(key => {
+      setApiKey(key);
+      setApiKeyInput(key);
+    });
+  }, []);
 
   // History Persistence: Load on mount, save on change
   useEffect(() => {
@@ -1007,70 +1119,129 @@ export default function App() {
     }
   };
 
-  const handleDownloadText = (format: 'txt' | 'md') => {
+  const handleDownloadText = async (format: 'txt' | 'md') => {
+      // Detectar se esta no Tauri
+      if (isTauri()) {
+          try {
+              const { save } = await import('@tauri-apps/plugin-dialog');
+              const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+
+              let filename = `transcription-${Date.now()}`;
+              if (transcription) {
+                  const lines = transcription.split('\n');
+                  if (lines.length > 0) {
+                      const candidate = lines[0].trim();
+                      const safeName = candidate.replace(/[^a-zA-Z0-9 \-_().\u00C0-\u00FF]/g, '').trim();
+                      if (safeName.length > 0 && safeName.length < 255) {
+                          filename = safeName;
+                      }
+                  }
+              }
+
+              const filePath = await save({
+                  defaultPath: `${filename}.${format}`,
+                  filters: [{ name: format.toUpperCase(), extensions: [format] }]
+              });
+
+              if (filePath) {
+                  await writeTextFile(filePath, transcription);
+                  addLog(`Arquivo exportado: ${filePath}`, 'success');
+              }
+              return;
+          } catch (e) {
+              console.error('Tauri export failed:', e);
+              addLog('Exportacao nativa falhou, tentando fallback...', 'warning');
+          }
+      }
+
+      // Fallback para navegador web
       const element = document.createElement("a");
       const file = new Blob([transcription], {type: 'text/plain'});
       element.href = URL.createObjectURL(file);
-      
+
       let filename = `transcription-${Date.now()}`;
       if (transcription) {
-        const lines = transcription.split('\n');
-        // Use first line if available and valid
-        if (lines.length > 0) {
-             const candidate = lines[0].trim();
-             // Sanitize filename (Alphanumeric + Common safe chars + Accents)
-             const safeName = candidate.replace(/[^a-zA-Z0-9 \-_().\u00C0-\u00FF]/g, '').trim();
-             if (safeName.length > 0 && safeName.length < 255) {
-                 filename = safeName;
-             }
-        }
+          const lines = transcription.split('\n');
+          if (lines.length > 0) {
+              const candidate = lines[0].trim();
+              const safeName = candidate.replace(/[^a-zA-Z0-9 \-_().\u00C0-\u00FF]/g, '').trim();
+              if (safeName.length > 0 && safeName.length < 255) {
+                  filename = safeName;
+              }
+          }
       }
-      
+
       element.download = `${filename}.${format}`;
-      document.body.appendChild(element); // Required for this to work in FireFox
+      document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);
-      addLog(`File exported as .${format}`, 'success');
+      addLog(`Arquivo exportado como .${format}`, 'success');
   };
 
   const handleAudioExport = async (format: 'webm' | 'wav') => {
       if (!audioBlob) return;
-      
+
       let blobToExport = audioBlob;
-      
+
       if (format === 'wav') {
-        try {
-           addLog("Converting to WAV...", 'info');
-           const arrayBuffer = await audioBlob.arrayBuffer();
-           const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-           const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-           blobToExport = bufferToWav(audioBuffer);
-        } catch (e) {
-            console.error(e);
-            addLog("WAV conversion failed", 'error');
-            return;
-        }
+          try {
+              addLog("Convertendo para WAV...", 'info');
+              const arrayBuffer = await audioBlob.arrayBuffer();
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+              blobToExport = bufferToWav(audioBuffer);
+          } catch (e) {
+              console.error(e);
+              addLog("Conversao WAV falhou", 'error');
+              return;
+          }
       }
 
+      // Detectar se esta no Tauri
+      if (isTauri()) {
+          try {
+              const { save } = await import('@tauri-apps/plugin-dialog');
+              const { writeFile } = await import('@tauri-apps/plugin-fs');
+
+              const filePath = await save({
+                  defaultPath: `recording-${Date.now()}.${format}`,
+                  filters: [{ name: format.toUpperCase(), extensions: [format] }]
+              });
+
+              if (filePath) {
+                  const bytes = new Uint8Array(await blobToExport.arrayBuffer());
+                  await writeFile(filePath, bytes);
+                  addLog(`Audio exportado: ${filePath}`, 'success');
+              }
+              return;
+          } catch (e) {
+              console.error('Tauri audio export failed:', e);
+              addLog('Exportacao nativa falhou, tentando fallback...', 'warning');
+          }
+      }
+
+      // Fallback para navegador web
       const element = document.createElement("a");
       element.href = URL.createObjectURL(blobToExport);
       element.download = `recording-${Date.now()}.${format}`;
-      document.body.appendChild(element); 
+      document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);
-      addLog(`Audio exported as .${format}`, 'success');
+      addLog(`Audio exportado como .${format}`, 'success');
   };
 
   const processAudio = async () => {
     if (!audioBlob) return;
-    if (!process.env.API_KEY) {
-      addLog("No API Key found.", 'error');
+    const currentApiKey = apiKey || process.env.API_KEY;
+    if (!currentApiKey) {
+      addLog("API Key nao configurada. Va em Settings para adicionar.", 'error');
+      setIsSettingsOpen(true);
       return;
     }
 
     setIsProcessing(true);
-    setActiveTab('stats'); 
-    
+    setActiveTab('stats');
+
     // On Mobile, switch to editor view to see results coming in
     if (window.innerWidth < 768) {
       setMobileView('editor');
@@ -1080,7 +1251,7 @@ export default function App() {
 
     try {
       const base64Audio = await blobToBase64(audioBlob);
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: currentApiKey });
       
       // Get memory for current context
       const currentMemory = contextMemory[activeContext] || "No previous context.";
@@ -2024,7 +2195,49 @@ export default function App() {
                 </div>
                 
                 <div className="p-6 overflow-y-auto space-y-8">
-                    
+
+                    {/* SECTION 0: API KEY CONFIGURATION */}
+                    <div className="space-y-2">
+                        <h3 className="text-xs font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                            <Key className="w-3 h-3" /> Gemini API Key
+                        </h3>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <input
+                                    type={isApiKeyVisible ? "text" : "password"}
+                                    value={apiKeyInput}
+                                    onChange={(e) => setApiKeyInput(e.target.value)}
+                                    placeholder="Cole sua API Key aqui..."
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                                />
+                                <button
+                                    onClick={() => setIsApiKeyVisible(!isApiKeyVisible)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                                >
+                                    {isApiKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                            <button
+                                onClick={async () => {
+                                    if (apiKeyInput.trim()) {
+                                        await saveApiKey(apiKeyInput.trim());
+                                        setApiKey(apiKeyInput.trim());
+                                        addLog('API Key salva com sucesso', 'success');
+                                    }
+                                }}
+                                disabled={!apiKeyInput.trim() || apiKeyInput === apiKey}
+                                className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg text-sm hover:bg-emerald-500/30 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                Salvar
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-white/40">
+                            Obtenha sua API Key em: aistudio.google.com/apikey
+                        </p>
+                    </div>
+
+                    <div className="border-t border-white/10 my-3" />
+
                     {/* SECTION 1: AUDIO ENGINE */}
                     <div className="space-y-4">
                         <h3 className="text-xs font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
