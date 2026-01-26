@@ -21,6 +21,23 @@ dist-ssr
 credentials.json
 service-account.json
 
+# Python sidecar
+sidecar/.venv/
+sidecar/build/
+sidecar/dist/
+sidecar/*.spec
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ML Models (downloaded on demand)
+models/
+voices/
+
+# Tauri sidecar binaries (built artifacts)
+src-tauri/binaries/voice-ai-sidecar-*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

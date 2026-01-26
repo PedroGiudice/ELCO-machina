@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { GoogleGenAI } from "@google/genai";
+import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle } from './src/services/VoiceAIClient';
 import {
   Loader2,
   Trash2,
@@ -823,6 +824,15 @@ export default function App() {
   const [apiKeyInput, setApiKeyInput] = useState<string>('');
   const [isApiKeyVisible, setIsApiKeyVisible] = useState<boolean>(false);
 
+  // Voice AI Sidecar State
+  type TranscriptionMode = 'auto' | 'local' | 'cloud';
+  const [transcriptionMode, setTranscriptionMode] = useState<TranscriptionMode>(() => {
+    return (localStorage.getItem('voice_ai_mode') as TranscriptionMode) || 'auto';
+  });
+  const [sidecarAvailable, setSidecarAvailable] = useState<boolean>(false);
+  const [sidecarStatus, setSidecarStatus] = useState<string>('checking');
+  const voiceAIClient = useRef<VoiceAIClient | null>(null);
+
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
@@ -854,6 +864,38 @@ export default function App() {
   
   // Context Active State Persistence
   useEffect(() => localStorage.setItem('gemini_active_context', activeContext), [activeContext]);
+
+  // Voice AI Sidecar: Persist mode and check availability
+  useEffect(() => localStorage.setItem('voice_ai_mode', transcriptionMode), [transcriptionMode]);
+
+  useEffect(() => {
+    // Initialize Voice AI Client and check availability
+    voiceAIClient.current = new VoiceAIClient('http://localhost:8765', 60000);
+
+    const checkSidecar = async () => {
+      try {
+        setSidecarStatus('checking');
+        const health = await voiceAIClient.current?.health();
+        if (health?.status === 'healthy') {
+          setSidecarAvailable(true);
+          setSidecarStatus(`Local STT (Whisper ${health.models.whisper.model || 'medium'})`);
+          addLog('Voice AI Sidecar conectado - Transcricao local ativada', 'success');
+        } else {
+          setSidecarAvailable(false);
+          setSidecarStatus('Sidecar offline - usando Gemini');
+        }
+      } catch {
+        setSidecarAvailable(false);
+        setSidecarStatus('Sidecar offline - usando Gemini');
+      }
+    };
+
+    checkSidecar();
+
+    // Recheck periodically (every 30 seconds)
+    const interval = setInterval(checkSidecar, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Check for updates on startup
   useEffect(() => {
@@ -1281,8 +1323,13 @@ export default function App() {
 
   const processAudio = async () => {
     if (!audioBlob) return;
+
+    // Determine if we should use local STT
+    const useLocalSTT = (transcriptionMode === 'local' || (transcriptionMode === 'auto' && sidecarAvailable)) && sidecarAvailable;
+
+    // Only require API key if using cloud mode or if refining with Gemini
     const currentApiKey = apiKey || process.env.API_KEY;
-    if (!currentApiKey) {
+    if (!useLocalSTT && !currentApiKey) {
       addLog("API Key nao configurada. Va em Settings para adicionar.", 'error');
       setIsSettingsOpen(true);
       return;
@@ -1299,9 +1346,118 @@ export default function App() {
     const startTime = performance.now();
 
     try {
+      // --- LOCAL STT MODE (Whisper via Sidecar) ---
+      if (useLocalSTT && voiceAIClient.current) {
+        addLog('Transcrevendo localmente com Whisper...', 'info');
+
+        // Convert blob to base64
+        const base64Audio = await VoiceAIClient.blobToBase64(audioBlob);
+        const format = VoiceAIClient.getFormatFromMimeType(audioBlob.type);
+
+        // Map OutputStyle to SidecarOutputStyle
+        const sidecarStyleMap: Record<string, SidecarOutputStyle> = {
+          'Verbatim': 'verbatim',
+          'Elegant Prose': 'elegant_prose',
+          'Formal': 'formal',
+          'Normal': 'verbatim',
+          'Concise': 'summary',
+          'Summary': 'summary',
+          'Bullet Points': 'bullet_points',
+        };
+        const sidecarStyle = sidecarStyleMap[outputStyle] || 'verbatim';
+
+        // Should we refine with Gemini?
+        const shouldRefine = currentApiKey && !['Verbatim', 'Normal'].includes(outputStyle);
+
+        try {
+          const result = await voiceAIClient.current.transcribe({
+            audio: base64Audio,
+            format,
+            language: outputLanguage === 'Portuguese' ? 'pt' : outputLanguage === 'Spanish' ? 'es' : 'en',
+            refine: shouldRefine,
+            style: sidecarStyle,
+          });
+
+          // Use refined text if available, otherwise raw
+          let finalText = result.refined_text || result.text;
+
+          // Apply filename rule
+          const currentMemory = contextMemory[activeContext] || "No previous context.";
+          if (currentApiKey && shouldRefine && result.refined_text) {
+            // Text already refined by sidecar
+            finalText = result.refined_text;
+          }
+
+          // Add filename suggestion if not present
+          if (!finalText.includes('\n\n')) {
+            // Generate a simple filename from first words
+            const firstWords = finalText.split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '');
+            finalText = `${firstWords || 'transcription'}\n\n${finalText}`;
+          }
+
+          setTranscription(finalText);
+
+          // Update Context Memory
+          const updatedMemory = (currentMemory + "\n" + finalText).slice(-5000);
+          setContextMemory(prev => ({
+            ...prev,
+            [activeContext]: updatedMemory
+          }));
+
+          saveContextToDB({
+            name: activeContext,
+            memory: updatedMemory,
+            lastUpdated: Date.now()
+          }).catch(e => console.error("Auto-save failed", e));
+
+          // Calculate Stats
+          const endTime = performance.now();
+          const cleanedText = finalText.trim();
+          const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
+          const charCount = cleanedText.length;
+          const wpm = 200;
+          const readingTimeVal = Math.ceil(wordCount / wpm);
+
+          const newStats: ProcessingStats = {
+            processingTime: endTime - startTime,
+            audioDuration: result.duration,
+            inputSize: audioBlob.size,
+            wordCount,
+            charCount,
+            readingTime: `${readingTimeVal} min read`,
+            appliedStyle: outputStyle
+          };
+
+          setLastStats(newStats);
+
+          // Add to history
+          setHistory(prev => [{
+            text: cleanedText,
+            date: new Date().toISOString(),
+            id: generateHistoryId()
+          }, ...prev].slice(0, MAX_HISTORY_ITEMS));
+
+          const mode = result.refine_success ? 'Local + Gemini refinement' : 'Local (Whisper)';
+          addLog(`Transcricao completa via ${mode}`, 'success');
+          setIsProcessing(false);
+          return;
+
+        } catch (sidecarError: any) {
+          // Fallback to cloud if sidecar fails
+          addLog(`Sidecar falhou: ${sidecarError.message}. Tentando Gemini...`, 'warning');
+          if (!currentApiKey) {
+            addLog("Fallback para Gemini requer API Key.", 'error');
+            setIsProcessing(false);
+            return;
+          }
+          // Continue to cloud mode below
+        }
+      }
+
+      // --- CLOUD MODE (Gemini Direct) ---
       const base64Audio = await blobToBase64(audioBlob);
-      const ai = new GoogleGenAI({ apiKey: currentApiKey });
-      
+      const ai = new GoogleGenAI({ apiKey: currentApiKey! });
+
       // Get memory for current context
       const currentMemory = contextMemory[activeContext] || "No previous context.";
 
@@ -2395,6 +2551,35 @@ export default function App() {
                                      </button>
                                  ))}
                              </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] opacity-60 mb-1.5 block">Transcription Engine</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {[
+                                    { id: 'auto' as TranscriptionMode, label: 'Auto', desc: sidecarAvailable ? 'Local' : 'Cloud' },
+                                    { id: 'local' as TranscriptionMode, label: 'Local', desc: 'Whisper' },
+                                    { id: 'cloud' as TranscriptionMode, label: 'Cloud', desc: 'Gemini' },
+                                ].map((mode) => (
+                                    <button
+                                       key={mode.id}
+                                       onClick={() => setTranscriptionMode(mode.id)}
+                                       disabled={mode.id === 'local' && !sidecarAvailable}
+                                       className={`flex flex-col items-start p-3 rounded-sm border transition-all text-left ${
+                                           transcriptionMode === mode.id
+                                           ? 'bg-white/10 border-white/30'
+                                           : 'bg-white/5 border-white/5 opacity-60 hover:opacity-100'
+                                       } ${mode.id === 'local' && !sidecarAvailable ? 'cursor-not-allowed opacity-30' : ''}`}
+                                       style={transcriptionMode === mode.id ? { borderColor: themeColor } : {}}
+                                    >
+                                        <span className="text-xs font-bold">{mode.label}</span>
+                                        <span className="text-[9px] opacity-50">{mode.desc}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[9px] opacity-40 mt-2">
+                                Status: {sidecarStatus}
+                            </p>
                         </div>
                     </div>
 
