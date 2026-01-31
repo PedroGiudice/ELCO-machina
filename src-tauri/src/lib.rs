@@ -15,6 +15,7 @@ mod sidecar {
     pub struct SidecarManager {
         pub child: Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>,
         pub should_run: Arc<Mutex<bool>>,
+        pub remote_url: Arc<Mutex<Option<String>>>,
     }
 
     impl SidecarManager {
@@ -22,8 +23,28 @@ mod sidecar {
             Self {
                 child: Arc::new(Mutex::new(None)),
                 should_run: Arc::new(Mutex::new(true)),
+                remote_url: Arc::new(Mutex::new(None)),
             }
         }
+    }
+
+    /// Comando Tauri: definir URL do servidor Whisper remoto
+    #[tauri::command]
+    pub async fn set_whisper_url(
+        state: tauri::State<'_, SidecarManager>,
+        url: Option<String>,
+    ) -> Result<(), String> {
+        let mut remote_url = state.remote_url.lock().await;
+        *remote_url = url.filter(|s| !s.is_empty());
+        log::info!("[sidecar] Remote URL set to: {:?}", *remote_url);
+        Ok(())
+    }
+
+    /// Comando Tauri: verificar se esta usando servidor remoto
+    #[tauri::command]
+    pub async fn is_remote_whisper(state: tauri::State<'_, SidecarManager>) -> Result<bool, String> {
+        let remote_url = state.remote_url.lock().await;
+        Ok(remote_url.is_some())
     }
 
     /// Comando Tauri: iniciar sidecar manualmente
@@ -97,7 +118,7 @@ mod sidecar {
     }
 
     /// Health check via HTTP para verificar se sidecar esta respondendo
-    pub async fn check_sidecar_health() -> bool {
+    pub async fn check_sidecar_health_with_url(url: &str) -> bool {
         let client = match reqwest::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()
@@ -107,11 +128,16 @@ mod sidecar {
         };
 
         client
-            .get("http://127.0.0.1:8765/health")
+            .get(format!("{}/health", url))
             .send()
             .await
             .map(|r| r.status().is_success())
             .unwrap_or(false)
+    }
+
+    /// Health check para sidecar local
+    pub async fn check_sidecar_health() -> bool {
+        check_sidecar_health_with_url("http://127.0.0.1:8765").await
     }
 
     /// Inicia o sidecar e retorna se foi bem sucedido
@@ -192,6 +218,15 @@ mod sidecar {
                 break;
             }
 
+            // Se usando servidor remoto, nao monitorar sidecar local
+            let remote_url = manager.remote_url.lock().await;
+            if remote_url.is_some() {
+                log::debug!("[sidecar] Remote URL configured, skipping local monitor");
+                consecutive_failures = 0;
+                continue;
+            }
+            drop(remote_url);
+
             let is_healthy = check_sidecar_health().await;
 
             if is_healthy {
@@ -245,6 +280,20 @@ mod sidecar {
     pub async fn sidecar_status() -> Result<bool, String> {
         Ok(false)
     }
+
+    /// Comando Tauri: definir URL do servidor Whisper remoto (stub para mobile)
+    #[tauri::command]
+    pub async fn set_whisper_url(_url: Option<String>) -> Result<(), String> {
+        // Mobile sempre usa servidor remoto, nao precisa gerenciar estado aqui
+        Ok(())
+    }
+
+    /// Comando Tauri: verificar se esta usando servidor remoto (stub para mobile)
+    #[tauri::command]
+    pub async fn is_remote_whisper() -> Result<bool, String> {
+        // Mobile sempre usa servidor remoto
+        Ok(true)
+    }
 }
 
 // ============================================================
@@ -265,6 +314,7 @@ pub fn run() {
     let manager_arc = Arc::new(sidecar::SidecarManager {
         child: manager.child.clone(),
         should_run: manager.should_run.clone(),
+        remote_url: manager.remote_url.clone(),
     });
 
     #[cfg(desktop)]
@@ -283,7 +333,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             sidecar::start_sidecar,
             sidecar::stop_sidecar,
-            sidecar::sidecar_status
+            sidecar::sidecar_status,
+            sidecar::set_whisper_url,
+            sidecar::is_remote_whisper
         ]);
 
     // Registrar estado do sidecar apenas no desktop

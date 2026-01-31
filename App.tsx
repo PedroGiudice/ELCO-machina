@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { GoogleGenAI } from "@google/genai";
-import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, ensureSidecarRunning } from './src/services/VoiceAIClient';
+import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, ensureSidecarRunning, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
 import {
   Loader2,
   Trash2,
@@ -833,6 +833,13 @@ export default function App() {
   const [sidecarStatus, setSidecarStatus] = useState<string>('checking');
   const voiceAIClient = useRef<VoiceAIClient | null>(null);
 
+  // Whisper Server URL (remoto ou vazio para local)
+  const [whisperServerUrl, setWhisperServerUrl] = useState<string>(() => {
+    return localStorage.getItem('whisper_server_url') || '';
+  });
+  const [whisperTestStatus, setWhisperTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
+
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
@@ -868,9 +875,17 @@ export default function App() {
   // Voice AI Sidecar: Persist mode and check availability
   useEffect(() => localStorage.setItem('voice_ai_mode', transcriptionMode), [transcriptionMode]);
 
+  // Whisper Server URL: Persist and apply on change
   useEffect(() => {
-    // Initialize Voice AI Client and check availability
-    voiceAIClient.current = new VoiceAIClient('http://localhost:8765', 60000);
+    localStorage.setItem('whisper_server_url', whisperServerUrl);
+    setVoiceAIUrl(whisperServerUrl || null);
+  }, [whisperServerUrl]);
+
+  useEffect(() => {
+    // Initialize Voice AI Client with configured URL
+    const url = whisperServerUrl || 'http://localhost:8765';
+    setVoiceAIUrl(whisperServerUrl || null);
+    voiceAIClient.current = getVoiceAIClient();
 
     const checkSidecar = async () => {
       try {
@@ -1049,8 +1064,53 @@ export default function App() {
 
 
   const addLog = useCallback((msg: string, type: 'info' | 'success' | 'error' = 'info') => {
-    setLogs(prev => [...prev.slice(-4), { msg, type }]); 
+    setLogs(prev => [...prev.slice(-4), { msg, type }]);
   }, []);
+
+  // Testar conexao com servidor Whisper remoto
+  const testWhisperServer = async () => {
+    const url = whisperServerUrl.trim();
+    if (!url) {
+      setWhisperTestStatus('error');
+      setWhisperTestMessage('URL vazia - usando sidecar local');
+      return;
+    }
+
+    setWhisperTestStatus('testing');
+    setWhisperTestMessage('Testando conexao...');
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`${url}/health`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.status === 'healthy') {
+        setWhisperTestStatus('success');
+        setWhisperTestMessage(`Conectado: Whisper ${data.models?.whisper?.model || 'medium'}`);
+        // Aplicar nova URL e reconectar
+        setVoiceAIUrl(url);
+        voiceAIClient.current = getVoiceAIClient();
+        setSidecarAvailable(true);
+        setSidecarStatus(`Remoto (Whisper ${data.models?.whisper?.model || 'medium'})`);
+      } else {
+        throw new Error('Servidor degradado');
+      }
+    } catch (error) {
+      setWhisperTestStatus('error');
+      setWhisperTestMessage(error instanceof Error ? error.message : 'Erro de conexao');
+    }
+  };
 
   const handleAddContext = async () => {
     const name = prompt("Name your new Context Pool (e.g. 'Project Alpha', 'React Docs'):");
@@ -2614,6 +2674,40 @@ export default function App() {
                             </div>
                             <p className="text-[9px] opacity-40 mt-2">
                                 Status: {sidecarStatus}
+                            </p>
+                        </div>
+
+                        {/* Whisper Server URL */}
+                        <div>
+                            <label className="text-[10px] opacity-60 mb-1.5 block">Whisper Server</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={whisperServerUrl}
+                                    onChange={(e) => setWhisperServerUrl(e.target.value)}
+                                    placeholder="http://100.114.203.28:8765"
+                                    className="flex-1 px-3 py-2 text-xs bg-white/5 border border-white/10 rounded-sm focus:outline-none focus:border-white/30"
+                                />
+                                <button
+                                    onClick={testWhisperServer}
+                                    disabled={whisperTestStatus === 'testing'}
+                                    className="px-3 py-2 text-xs bg-white/10 border border-white/10 rounded-sm hover:bg-white/20 transition-colors disabled:opacity-50"
+                                >
+                                    {whisperTestStatus === 'testing' ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                        'Testar'
+                                    )}
+                                </button>
+                            </div>
+                            <p className={`text-[9px] mt-1.5 ${
+                                whisperTestStatus === 'success' ? 'text-green-400' :
+                                whisperTestStatus === 'error' ? 'text-red-400' :
+                                'opacity-40'
+                            }`}>
+                                {whisperTestStatus === 'idle'
+                                    ? 'Deixe vazio para usar sidecar local'
+                                    : whisperTestMessage}
                             </p>
                         </div>
                     </div>

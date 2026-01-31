@@ -283,6 +283,7 @@ Tauri Store
 struct SidecarManager {
     child: Arc<Mutex<Option<CommandChild>>>,  // Processo do sidecar
     should_run: Arc<Mutex<bool>>,             // Flag para parar loop
+    remote_url: Arc<Mutex<Option<String>>>,   // URL servidor remoto
 }
 ```
 
@@ -293,6 +294,8 @@ struct SidecarManager {
 | `start_sidecar` | Inicia sidecar manualmente |
 | `stop_sidecar` | Para sidecar e flag should_run=false |
 | `sidecar_status` | Retorna true se processo existe |
+| `set_whisper_url` | Define URL do servidor remoto (para monitor) |
+| `is_remote_whisper` | Retorna true se usando servidor remoto |
 
 ### Fluxo de Monitoramento
 
@@ -317,6 +320,83 @@ async fn monitor_sidecar(app, manager) {
         sleep(5s).await;
     }
 }
+```
+
+---
+
+## Servidor Whisper Centralizado
+
+O app suporta **servidor Whisper remoto** para cenarios onde o sidecar local nao esta disponivel (Android) ou para centralizar processamento.
+
+### Arquitetura de Rede
+
+```
+[Desktop Linux] ──┐
+                  ├──► [VM Oracle :8765] ──► Whisper ──► Texto
+[Android APK]  ──┘         via Tailscale                  │
+                                                          ▼
+                                                    [Gemini] ──► Refinamento
+```
+
+### Modos de Operacao
+
+| Modo | Sidecar Local | Servidor Remoto | Fallback |
+|------|---------------|-----------------|----------|
+| Desktop (padrao) | Auto-start | Opcional | Gemini |
+| Desktop (remoto) | Desativado | URL configurada | Gemini |
+| Android | N/A | Obrigatorio | Gemini |
+
+### Configuracao do Servidor
+
+1. **Na VM (servidor):**
+```bash
+# Copiar arquivo de servico
+sudo cp sidecar/voice-ai.service /etc/systemd/system/
+
+# Habilitar e iniciar
+sudo systemctl enable voice-ai
+sudo systemctl start voice-ai
+
+# Verificar status
+sudo systemctl status voice-ai
+curl http://127.0.0.1:8765/health
+```
+
+2. **No Cliente (app):**
+   - Settings > Whisper Server
+   - URL: `http://100.114.203.28:8765` (via Tailscale)
+   - Clicar "Testar" para validar conexao
+
+### Variaveis de Ambiente do Sidecar
+
+| Variavel | Padrao | Descricao |
+|----------|--------|-----------|
+| `VOICE_AI_HOST` | `127.0.0.1` | Bind address (usar `0.0.0.0` para acesso externo) |
+| `VOICE_AI_PORT` | `8765` | Porta HTTP |
+
+### Seguranca
+
+- **Rede:** Acesso restrito via Tailscale VPN (100.x.x.x)
+- **Firewall:** Porta 8765 **nao** exposta na internet publica
+- **CORS:** Configurado para aceitar requisicoes de qualquer origem (apps Tauri)
+
+### Fluxo com Servidor Remoto
+
+```
+[App]
+  │
+  ├─ localStorage: whisper_server_url = "http://100.114.203.28:8765"
+  │
+  ├─ VoiceAIClient: setVoiceAIUrl(url)
+  │
+  ├─ Rust: set_whisper_url(url) → para monitor loop local
+  │
+  └─ Frontend: POST http://100.114.203.28:8765/transcribe
+                     │
+                     ▼
+               [Servidor Remoto]
+                     │
+                     └─ Whisper (medium) → Texto
 ```
 
 ---

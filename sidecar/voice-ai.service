@@ -1,0 +1,24 @@
+[Unit]
+Description=Voice AI Whisper Server
+Documentation=https://github.com/ELCO-machina
+After=network.target
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+WorkingDirectory=/home/opc/ELCO-machina/sidecar
+Environment=VOICE_AI_HOST=0.0.0.0
+Environment=VOICE_AI_PORT=8765
+ExecStart=/home/opc/ELCO-machina/sidecar/.venv/bin/python -m voice_ai.main
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

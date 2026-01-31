@@ -323,12 +323,40 @@ export async function getSidecarStatus(): Promise<boolean> {
 // Instancia singleton para uso global
 let clientInstance: VoiceAIClient | null = null;
 
+// URL configurada pelo usuario (servidor remoto)
+let configuredUrl: string | null = null;
+
+/**
+ * Define a URL do servidor Whisper (remoto ou local)
+ * @param url URL do servidor (ex: http://100.114.203.28:8765) ou null para usar localhost
+ */
+export function setVoiceAIUrl(url: string | null): void {
+  configuredUrl = url && url.trim() !== "" ? url.trim() : null;
+  // Força recriação do cliente com nova URL
+  clientInstance = null;
+}
+
+/**
+ * Retorna a URL configurada atualmente
+ */
+export function getVoiceAIUrl(): string | null {
+  return configuredUrl;
+}
+
+/**
+ * Verifica se está usando servidor remoto
+ */
+export function isRemoteServer(): boolean {
+  return configuredUrl !== null;
+}
+
 /**
  * Retorna instancia singleton do cliente
  */
 export function getVoiceAIClient(): VoiceAIClient {
   if (!clientInstance) {
-    clientInstance = new VoiceAIClient();
+    const url = configuredUrl || "http://localhost:8765";
+    clientInstance = new VoiceAIClient(url);
   }
   return clientInstance;
 }
