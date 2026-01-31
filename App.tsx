@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { GoogleGenAI } from "@google/genai";
-import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle } from './src/services/VoiceAIClient';
+import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, ensureSidecarRunning } from './src/services/VoiceAIClient';
 import {
   Loader2,
   Trash2,
@@ -890,7 +890,42 @@ export default function App() {
       }
     };
 
-    checkSidecar();
+    // Aguardar auto-start do Rust, depois verificar
+    // Se falhar, tenta iniciar manualmente via fallback
+    const initSidecar = async () => {
+      setSidecarStatus('iniciando...');
+
+      // Dar tempo para o auto-start do Rust
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Verificar se esta disponivel
+      const health = await voiceAIClient.current?.health();
+      if (health?.status === 'healthy') {
+        setSidecarAvailable(true);
+        setSidecarStatus(`Local STT (Whisper ${health.models.whisper.model || 'medium'})`);
+        addLog('Voice AI Sidecar iniciado automaticamente', 'success');
+        return;
+      }
+
+      // Fallback: tentar iniciar via comando Tauri
+      addLog('Auto-start falhou, tentando fallback...', 'info');
+      const success = await ensureSidecarRunning();
+      if (success) {
+        const healthRetry = await voiceAIClient.current?.health();
+        if (healthRetry?.status === 'healthy') {
+          setSidecarAvailable(true);
+          setSidecarStatus(`Local STT (Whisper ${healthRetry.models.whisper.model || 'medium'})`);
+          addLog('Voice AI Sidecar iniciado via fallback', 'success');
+          return;
+        }
+      }
+
+      setSidecarAvailable(false);
+      setSidecarStatus('Sidecar offline - usando Gemini');
+      addLog('Sidecar indisponivel, transcricao via Gemini', 'info');
+    };
+
+    initSidecar();
 
     // Recheck periodically (every 30 seconds)
     const interval = setInterval(checkSidecar, 30000);

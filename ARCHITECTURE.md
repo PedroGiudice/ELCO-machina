@@ -1,21 +1,21 @@
 # ARCHITECTURE.md
 
-Documento técnico de referência para **Pro ATT Machine** (anteriormente gemini-prompt-architect).
+Documento tecnico de referencia para **Pro ATT Machine** (anteriormente gemini-prompt-architect).
 
 ---
 
-## Visão Geral
+## Visao Geral
 
-Aplicação desktop/mobile nativa (via Tauri 2.0) que transcreve áudio em alta fidelidade usando Gemini 2.5 Flash, convertendo gravações em prompts formatados com múltiplos estilos de output.
+Aplicacao desktop/mobile nativa (via Tauri 2.0) que transcreve audio em alta fidelidade usando **Faster-Whisper** (local) com refinamento opcional via **Gemini**, convertendo gravacoes em prompts formatados com multiplos estilos de output.
 
-**Plataformas:** Linux, Android (Windows/macOS possíveis)
+**Plataformas:** Linux, Android (Windows/macOS possiveis)
 **App ID:** `com.proatt.machine`
 
 ---
 
-## Stack Técnica
+## Stack Tecnica
 
-| Camada | Tecnologia | Versão |
+| Camada | Tecnologia | Versao |
 |--------|------------|--------|
 | Runtime | Tauri | 2.9.5 |
 | Backend | Rust | 1.77+ |
@@ -23,19 +23,107 @@ Aplicação desktop/mobile nativa (via Tauri 2.0) que transcreve áudio em alta 
 | Build | Vite | 6.2.0 |
 | Linguagem | TypeScript | 5.8.2 |
 | Styling | Tailwind CSS | CDN |
-| AI | @google/genai | 1.31.0 |
+| AI Cloud | @google/genai | 1.31.0 |
+| AI Local | FastAPI | 0.115.0 |
+| STT Engine | Faster-Whisper | 1.0.3 |
 | Icons | Lucide React | 0.556.0 |
 
 ### Plugins Tauri Instalados
 
 | Plugin | Uso |
 |--------|-----|
-| dialog | Seleção/salvamento de arquivos |
+| dialog | Selecao/salvamento de arquivos |
 | fs | Acesso ao filesystem |
-| store | Persistência key-value |
-| notification | Notificações nativas |
+| store | Persistencia key-value |
+| notification | Notificacoes nativas |
 | clipboard-manager | Clipboard read/write |
-| shell | Abrir URLs externas |
+| shell | Execucao de sidecar e URLs externas |
+| process | Controle do ciclo de vida do app |
+| updater | Auto-update do aplicativo |
+| mic-recorder | Gravacao nativa de audio |
+
+---
+
+## Arquitetura Voice AI Sidecar
+
+O app utiliza um **sidecar Python** para transcricao local de alta performance, evitando latencia de rede e custos de API.
+
+### Por que um Sidecar?
+
+| Aspecto | Rust (Tauri) | Python (Sidecar) |
+|---------|--------------|------------------|
+| Modelos ML | Complexo | Nativo (PyTorch, ONNX) |
+| Faster-Whisper | Nao disponivel | Suporte completo |
+| Hot reload | Recompilacao | Imediato |
+| Tamanho | Leve | ~150MB (com modelo) |
+
+### Comunicacao
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Tauri App (Rust)                                        │
+│  ├─ SidecarManager                                      │
+│  │   ├─ Auto-start no setup()                          │
+│  │   ├─ Health check a cada 5s                         │
+│  │   └─ Auto-restart se sidecar morrer                 │
+│  └─ Commands: start_sidecar, stop_sidecar, sidecar_status│
+└─────────────────────────────────────────────────────────┘
+         │
+         │ HTTP localhost:8765
+         ▼
+┌─────────────────────────────────────────────────────────┐
+│ Sidecar (voice-ai-sidecar)                              │
+│  ├─ FastAPI + uvicorn                                   │
+│  ├─ Faster-Whisper (modelo medium)                      │
+│  └─ Endpoints:                                          │
+│      ├─ GET  /health       → Status e modelos          │
+│      └─ POST /transcribe   → Transcricao de audio      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Ciclo de Vida do Sidecar
+
+1. **App inicia** → `lib.rs::setup()` dispara `monitor_sidecar()`
+2. **Monitor spawna sidecar** → Aguarda 3s para FastAPI inicializar
+3. **Health check loop** → A cada 5s verifica `GET /health`
+4. **Falha detectada** → Apos 2 falhas consecutivas, reinicia sidecar
+5. **App fecha** → `on_window_event(CloseRequested)` mata processo
+
+### Endpoints do Sidecar
+
+#### GET /health
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "models": {
+    "whisper": { "status": "loaded", "model": "medium" },
+    "xtts": { "status": "not_implemented", "model": null }
+  }
+}
+```
+
+#### POST /transcribe
+```json
+// Request
+{
+  "audio": "base64...",
+  "format": "webm",
+  "language": "pt",
+  "refine": true,
+  "style": "elegant_prose"
+}
+
+// Response
+{
+  "text": "Transcricao bruta do Whisper",
+  "refined_text": "Texto refinado pelo Gemini (se refine=true)",
+  "language": "pt",
+  "confidence": 0.95,
+  "duration": 12.5,
+  "segments": [...]
+}
+```
 
 ---
 
@@ -43,22 +131,34 @@ Aplicação desktop/mobile nativa (via Tauri 2.0) que transcreve áudio em alta 
 
 ```
 /
-├── App.tsx              # Componente principal (~2000 linhas)
-├── index.tsx            # Entry point React
-├── index.html           # Template HTML + CDN imports
-├── vite.config.ts       # Config Vite (porta 3000, env vars)
-├── tsconfig.json        # Config TypeScript
-├── package.json         # Dependências
-├── .env.local           # GEMINI_API_KEY (não commitado)
-├── src-tauri/           # Backend Tauri (Rust)
+├── App.tsx                  # Componente principal (~2000 linhas)
+├── index.tsx                # Entry point React
+├── index.html               # Template HTML + CDN imports
+├── vite.config.ts           # Config Vite (porta 3000, env vars)
+├── package.json             # Dependencias frontend
+├── .env.local               # GEMINI_API_KEY (nao commitado)
+├── src/
+│   └── services/
+│       └── VoiceAIClient.ts # Cliente HTTP para sidecar
+├── src-tauri/               # Backend Tauri (Rust)
 │   ├── src/
-│   │   ├── main.rs      # Entry point
-│   │   └── lib.rs       # Plugins e commands
-│   ├── Cargo.toml       # Dependências Rust
-│   ├── tauri.conf.json  # Config Tauri
-│   ├── capabilities/    # Permissões granulares
+│   │   ├── main.rs          # Entry point
+│   │   └── lib.rs           # SidecarManager + commands
+│   ├── Cargo.toml           # Dependencias Rust
+│   ├── tauri.conf.json      # Config Tauri
+│   ├── binaries/            # Sidecar compilado
+│   │   └── voice-ai-sidecar-x86_64-unknown-linux-gnu
+│   ├── capabilities/        # Permissoes granulares
 │   └── gen/
-│       └── android/     # Projeto Android gerado
+│       └── android/         # Projeto Android gerado
+├── sidecar/                 # Voice AI Sidecar (Python)
+│   ├── voice_ai/
+│   │   ├── main.py          # Entry point FastAPI
+│   │   ├── transcriber.py   # Wrapper Faster-Whisper
+│   │   └── refiner.py       # Integracao Gemini
+│   ├── requirements.txt     # Dependencias Python
+│   ├── build-sidecar.sh     # Build com PyInstaller
+│   └── run-dev.sh           # Execucao em dev
 └── .claude/
     └── settings.local.json
 ```
@@ -67,16 +167,18 @@ Aplicação desktop/mobile nativa (via Tauri 2.0) que transcreve áudio em alta 
 
 ## Arquitetura do App.tsx
 
-O componente é **monolítico por design** (SPA simples). Três módulos lógicos:
+O componente e **monolitico por design** (SPA simples). Quatro modulos logicos:
 
-### 1. Audio Engine (Web Audio API)
+### 1. Audio Engine (Web Audio API + Tauri Plugin)
 
 ```
 MediaRecorder → AudioChunks → Blob → IndexedDB
-                    ↓
-            AudioContext.analyser
-                    ↓
-         RMS | Peak | Pitch | SNR
+      ↓
+Tauri mic-recorder (Android)
+      ↓
+AudioContext.analyser
+      ↓
+RMS | Peak | Pitch | SNR
 ```
 
 **Constraints:**
@@ -86,26 +188,50 @@ MediaRecorder → AudioChunks → Blob → IndexedDB
 
 **Export:** WAV (PCM 16-bit), WebM
 
-### 2. Gemini Integration
+### 2. Voice AI Client (Transcricao)
 
 ```
-AudioBlob → Base64 → Gemini API → Formatted Output
-                         ↓
-              System Prompt (style-specific)
-                         ↓
-              Context Memory (multi-turn)
+AudioBlob
+    ↓
+Base64 encode
+    ↓
+VoiceAIClient.transcribe()
+    ↓
+┌──────────────────────────────────────┐
+│ Sidecar disponivel?                  │
+│   SIM → POST /transcribe             │
+│         ├─ Faster-Whisper (STT)      │
+│         └─ Gemini (refinamento)      │
+│   NAO → Fallback: Gemini direto      │
+└──────────────────────────────────────┘
+    ↓
+Texto formatado
+```
+
+### 3. Gemini Integration (Refinamento + Fallback)
+
+```
+Texto bruto (do Whisper ou audio)
+    ↓
+System Prompt (style-specific)
+    ↓
+Context Memory (multi-turn)
+    ↓
+Gemini API
+    ↓
+Texto refinado
 ```
 
 **Estilos de Output:**
 | Modo | Uso |
 |------|-----|
-| Verbatim | Transcrição literal |
-| Elegant Prose | Estilo literário |
+| Verbatim | Transcricao literal |
+| Elegant Prose | Estilo literario |
 | Prompt Engineering | Formato Claude/Gemini |
-| Code | Geração de código |
-| Technical Docs | Documentação técnica |
+| Code | Geracao de codigo |
+| Technical Docs | Documentacao tecnica |
 
-### 3. Persistência
+### 4. Persistencia
 
 ```
 IndexedDB (GeminiArchitectDB v2)
@@ -113,34 +239,84 @@ IndexedDB (GeminiArchitectDB v2)
 └── contexts     → Context memory pools
 
 localStorage
-├── API key
+├── API key (criptografada via Tauri Store)
 ├── Modelo selecionado
-└── Transcrições recentes
-```
+├── Modo transcricao (auto/local/cloud)
+└── Transcricoes recentes
 
-**Helpers:**
-```typescript
-initDB()                 // Inicializa IndexedDB
-saveAudioToDB(blob)      // Persiste audio
-loadAudioFromDB()        // Recupera audio
-saveContextToDB(item)    // Salva context pool
-loadAllContextsFromDB()  // Lista contextos
+Tauri Store
+├── history.json → Historico de transcricoes
+└── api-key.json → Chave Gemini (segura)
 ```
 
 ---
 
-## Fluxo de Dados
+## Fluxo de Dados (Completo)
 
 ```
 [Microfone] → MediaRecorder → Chunks → Blob
                                          ↓
                               [IndexedDB: workspace]
                                          ↓
-                              [Gemini API] ← Context Memory
+                              [VoiceAIClient]
                                          ↓
-                              [Output Formatado]
-                                         ↓
-                              [localStorage: transcrições]
+                    ┌────────────────────┴────────────────────┐
+                    ▼                                         ▼
+            [Sidecar: Whisper]                        [Fallback: Gemini]
+                    ↓                                         ↓
+            Texto transcrito                          Texto transcrito
+                    ↓
+            [Refinamento Gemini] (opcional)
+                    ↓
+            [Output Formatado]
+                    ↓
+            [localStorage + History]
+```
+
+---
+
+## Gerenciamento do Sidecar (lib.rs)
+
+### Estado Compartilhado
+
+```rust
+struct SidecarManager {
+    child: Arc<Mutex<Option<CommandChild>>>,  // Processo do sidecar
+    should_run: Arc<Mutex<bool>>,             // Flag para parar loop
+}
+```
+
+### Comandos Tauri Expostos
+
+| Comando | Descricao |
+|---------|-----------|
+| `start_sidecar` | Inicia sidecar manualmente |
+| `stop_sidecar` | Para sidecar e flag should_run=false |
+| `sidecar_status` | Retorna true se processo existe |
+
+### Fluxo de Monitoramento
+
+```rust
+async fn monitor_sidecar(app, manager) {
+    // 1. Spawn inicial
+    spawn_sidecar(&app, &manager).await;
+
+    // 2. Loop de health check
+    loop {
+        if !should_run { break; }
+
+        if !check_sidecar_health().await {
+            consecutive_failures += 1;
+            if consecutive_failures >= 2 {
+                spawn_sidecar(&app, &manager).await;
+            }
+        } else {
+            consecutive_failures = 0;
+        }
+
+        sleep(5s).await;
+    }
+}
 ```
 
 ---
@@ -154,8 +330,8 @@ loadAllContextsFromDB()  // Lista contextos
 │ - Workspace   │ - Context Scope  │ - Output     │
 │ - Audio       │ - Audio Input    │ - Waveform   │
 │ - Stats       │ - Style Select   │ - Controls   │
-│ - History     │ - Actions        │              │
-│ - Settings    │                  │              │
+│ - History     │ - Mode (Local/   │              │
+│ - Settings    │   Cloud/Auto)    │              │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -166,91 +342,41 @@ loadAllContextsFromDB()  // Lista contextos
 
 ---
 
-## Decisões de Design
+## Decisoes de Design
 
-1. **Monolítico** - Projeto pequeno, não justifica component splitting prematuro
-2. **CDN Tailwind** - Simplicidade sobre bundle optimization (AI Studio deploy)
-3. **IndexedDB** - Persistência de blobs grandes (audio) sem backend
-4. **Sem backend** - Client-side only, API key no ambiente
-
----
-
-## Pontos de Extensão
-
-Para escalar o projeto, considerar:
-
-1. **Componentização** - Extrair Audio Engine, Gemini Client, Persistence como módulos
-2. **State Management** - Zustand ou Jotai se estado ficar complexo
-3. **Testing** - Vitest para unit tests do Audio Engine
-4. **Linting** - ESLint + Prettier para consistência
+1. **Sidecar Python** - ML funciona melhor em Python; Rust gerencia ciclo de vida
+2. **Monolitico frontend** - Projeto pequeno, nao justifica component splitting prematuro
+3. **CDN Tailwind** - Simplicidade sobre bundle optimization
+4. **Auto-restart** - Sidecar pode crashar; monitoramento garante disponibilidade
+5. **Fallback Gemini** - Se sidecar falhar, app continua funcional via cloud
 
 ---
 
-## Ambiente
+## Como Executar
+
+### Desenvolvimento (2 terminais)
 
 ```bash
-# Desenvolvimento
-npm install
-npm run dev          # http://localhost:3000
+# Terminal 1: Sidecar Python
+cd sidecar
+./run-dev.sh
 
-# Produção
-npm run build
-npm run preview
+# Terminal 2: App Tauri
+npm run tauri dev
 ```
 
-**Variável obrigatória:**
-```
-GEMINI_API_KEY=sua_chave_aqui
-```
+### Producao (sidecar automatico)
 
----
+```bash
+# Build do sidecar (uma vez)
+cd sidecar
+./build-sidecar.sh
 
-## Arquitetura Modular (App Base)
+# Build do app (inclui sidecar)
+npm run tauri build
 
-Este app serve como **base** para integrar outros módulos de áudio. Padrões a seguir:
-
-### Estrutura de Módulos (Futura)
-
-```
-src/
-├── modules/
-│   ├── transcriber/     # Módulo atual (Gemini Prompt Architect)
-│   │   ├── index.tsx
-│   │   ├── hooks/
-│   │   └── components/
-│   ├── recorder/        # Futuro: Gravador de áudio
-│   └── editor/          # Futuro: Editor de áudio
-├── shared/
-│   ├── audio-engine/    # Web Audio API compartilhado
-│   ├── persistence/     # IndexedDB/Store helpers
-│   └── ui/              # Componentes UI base
-└── App.tsx              # Router entre módulos
-```
-
-### Padrões de Frontend (Obrigatórios)
-
-1. **Styling:** Tailwind CSS (classes utilitárias)
-2. **Layout:** Sidebar + Action Panel + Main View
-3. **Cores:** Tema escuro com accent color configurável
-4. **Tipografia:** IBM Plex Sans (UI) + JetBrains Mono (code)
-5. **Icons:** Lucide React
-
-### Padrões de Áudio
-
-1. **Captura:** MediaRecorder API
-2. **Análise:** AudioContext + AnalyserNode
-3. **Persistência:** IndexedDB para blobs
-4. **Export:** WAV (PCM 16-bit), WebM
-
-### Integração de Novo Módulo
-
-```typescript
-// 1. Criar módulo em src/modules/[nome]/
-// 2. Exportar componente principal
-export const MyModule: React.FC = () => { ... }
-
-// 3. Adicionar rota no App.tsx
-// 4. Adicionar entrada no sidebar
+# Executar - sidecar inicia automaticamente
+./src-tauri/target/release/pro-att-machine
 ```
 
 ---
@@ -260,13 +386,56 @@ export const MyModule: React.FC = () => { ... }
 | Plataforma | Comando | Output |
 |------------|---------|--------|
 | Linux | `cargo tauri build` | .deb, .rpm |
-| Android | `cargo tauri android build --debug` | .apk |
-| Dev | `bun run tauri dev` | Hot reload |
+| Android | `cargo tauri android build` | .apk |
+| Dev | `npm run tauri dev` | Hot reload |
 
-### Variáveis de Ambiente (Android)
+### Build do Sidecar
 
 ```bash
+cd sidecar
+./build-sidecar.sh
+
+# Output: src-tauri/binaries/voice-ai-sidecar-x86_64-unknown-linux-gnu
+# Tamanho: ~150MB (inclui modelo Whisper)
+```
+
+---
+
+## Variaveis de Ambiente
+
+```bash
+# Obrigatoria para refinamento e fallback
+GEMINI_API_KEY=sua_chave_aqui
+
+# Android (se building para Android)
 export ANDROID_HOME="$HOME/Android/Sdk"
 export NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
+
+---
+
+## Troubleshooting
+
+### Sidecar nao inicia
+
+1. Verificar se binario existe: `ls src-tauri/binaries/`
+2. Verificar permissao: `chmod +x src-tauri/binaries/voice-ai-sidecar-*`
+3. Testar manualmente: `./src-tauri/binaries/voice-ai-sidecar-x86_64-unknown-linux-gnu`
+4. Verificar logs do Tauri (tags `[sidecar]`)
+
+### Porta 8765 ocupada
+
+```bash
+# Verificar processo
+lsof -i :8765
+
+# Matar processo
+kill $(lsof -t -i :8765)
+```
+
+### Modelo Whisper nao carrega
+
+- Primeiro uso: download automatico (~1.5GB para medium)
+- Verificar espaco em disco
+- Verificar conexao de internet no primeiro uso
