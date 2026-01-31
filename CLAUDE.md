@@ -146,7 +146,8 @@ Ver `ARCHITECTURE.md` para detalhes completos.
 
 ### VM de Build (Oracle Cloud)
 
-- **IP Público:** `129.148.53.187`
+- **IP Público:** `137.131.201.119`
+- **IP Tailscale:** `100.114.203.28`
 - **Usuário:** `opc`
 - **Diretório:** `/home/opc/ELCO-machina`
 
@@ -154,13 +155,13 @@ Ver `ARCHITECTURE.md` para detalhes completos.
 
 ```bash
 # Linux DEB
-scp opc@129.148.53.187:"/home/opc/ELCO-machina/src-tauri/target/release/bundle/deb/Pro ATT Machine_0.1.0_amd64.deb" .
+scp opc@137.131.201.119:"/home/opc/ELCO-machina/src-tauri/target/release/bundle/deb/Pro ATT Machine_0.1.0_amd64.deb" .
 
 # Linux RPM
-scp opc@129.148.53.187:"/home/opc/ELCO-machina/src-tauri/target/release/bundle/rpm/Pro ATT Machine-0.1.0-1.x86_64.rpm" .
+scp opc@137.131.201.119:"/home/opc/ELCO-machina/src-tauri/target/release/bundle/rpm/Pro ATT Machine-0.1.0-1.x86_64.rpm" .
 
-# Android APK
-scp opc@129.148.53.187:"/home/opc/ELCO-machina/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk" .
+# Android APK (unsigned)
+scp opc@137.131.201.119:"/home/opc/ELCO-machina/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk" .
 ```
 
 ### Servidor HTTP temporário (alternativa)
@@ -170,4 +171,6 @@ Na VM:
 cd /home/opc/ELCO-machina && python3 -m http.server 8080
 ```
 
-No navegador: `http://129.148.53.187:8080`
+No navegador: `http://137.131.201.119:8080`
+
+**Nota:** O APK é unsigned. Para instalar no Android, habilite "Fontes desconhecidas" nas configurações.
