@@ -37,7 +37,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "rpm"],
+    "targets": ["deb"],
     "externalBin": [
       "binaries/voice-ai-sidecar"
     ],

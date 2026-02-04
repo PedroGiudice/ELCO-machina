@@ -66,6 +66,7 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 | 2026-01-20 | `enableEdgeToEdge()` no Android faz conteúdo ir atrás das barras do sistema | CSS `env(safe-area-inset-*)` não funciona no Android WebView. Remover `enableEdgeToEdge()` do MainActivity.kt |
 | 2026-01-20 | API do Tauri plugin-store mudou de `LazyStore` para `load()` | Usar `import { load } from '@tauri-apps/plugin-store'` e `await load('file.json')` |
 | 2026-02-04 | Declarar build concluído sem verificar se terminou | Builds Tauri demoram ~1-2 min. Se em background, LER o output file antes de declarar sucesso |
+| 2026-02-04 | Build RPM desnecessário desperdiça ~5 min no bundling | Usuário roda Ubuntu. Só precisa do DEB. Não perder tempo esperando RPM. |
 
 <!--
 Formato para adicionar:
