@@ -326,9 +326,6 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_mic_recorder::init())
         .invoke_handler(tauri::generate_handler![
             sidecar::start_sidecar,
@@ -337,6 +334,21 @@ pub fn run() {
             sidecar::set_whisper_url,
             sidecar::is_remote_whisper
         ]);
+
+    // Plugins que só funcionam no desktop
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_shell::init())
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
+    }
+
+    // MCP Bridge plugin (desktop only - expoe porta 9223 para inspecao remota)
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+    }
 
     // Registrar estado do sidecar apenas no desktop
     #[cfg(desktop)]

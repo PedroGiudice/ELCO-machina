@@ -835,7 +835,7 @@ export default function App() {
 
   // Whisper Server URL (remoto ou vazio para local)
   const [whisperServerUrl, setWhisperServerUrl] = useState<string>(() => {
-    return localStorage.getItem('whisper_server_url') || '';
+    return localStorage.getItem('whisper_server_url') || 'http://100.114.203.28:8765';
   });
   const [whisperTestStatus, setWhisperTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
@@ -1205,14 +1205,31 @@ export default function App() {
         setAudioBlob(null);
         addLog("Gravacao iniciada (nativo)", 'info');
         return;
-      } catch (e) {
-        console.warn('Native recording not available, falling back to Web API:', e);
-        // Continuar para fallback Web API
+      } catch (e: unknown) {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Native recording failed:', errorMsg);
+
+        // Se o erro indica ausencia de dispositivo de audio, mostrar mensagem especifica
+        if (errorMsg.includes('NoDevice') || errorMsg.includes('no device') || errorMsg.includes('not available')) {
+          addLog("Nenhum microfone detectado no sistema.", 'error');
+          return;
+        }
+
+        // Tentar fallback Web API apenas se o erro nao foi de dispositivo
+        addLog("Plugin nativo falhou, tentando Web API...", 'info');
       }
     }
 
     // Fallback: Web API (funciona no Android e navegador)
+    // NOTA: No Linux desktop com WebKit2GTK, isso vai falhar com NotAllowedError
+    // porque o WebKit2GTK nao tem handler de permissao configurado no Tauri
     try {
+      // Verificar se mediaDevices esta disponivel
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        addLog("API de midia nao disponivel neste ambiente.", 'error');
+        return;
+      }
+
       const constraints = {
         audio: {
             deviceId: selectedMicId !== 'default' ? { exact: selectedMicId } : undefined,
@@ -1249,10 +1266,20 @@ export default function App() {
       setIsRecording(true);
       setRecordingStartTime(Date.now());
       setAudioBlob(null);
-      addLog("Recording started...", 'info');
-    } catch (err) {
-      console.error(err);
-      addLog("Microphone access denied.", 'error');
+      addLog("Gravacao iniciada (Web API)", 'info');
+    } catch (err: unknown) {
+      console.error('getUserMedia error:', err);
+      const errorName = err instanceof Error ? err.name : 'Unknown';
+      const errorMsg = err instanceof Error ? err.message : String(err);
+
+      if (errorName === 'NotAllowedError') {
+        // Erro especifico do WebKit2GTK no Linux - permissao negada automaticamente
+        addLog("Permissao de microfone negada. No Linux, use o botao de upload de arquivo como alternativa.", 'error');
+      } else if (errorName === 'NotFoundError') {
+        addLog("Nenhum microfone encontrado no sistema.", 'error');
+      } else {
+        addLog(`Erro ao acessar microfone: ${errorMsg}`, 'error');
+      }
     }
   };
 

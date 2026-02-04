@@ -6,31 +6,6 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ## Abertos
 
-### [001] App nao gera texto - Sidecar nao inicia automaticamente
-
-- **Status:** Aberto
-- **Data:** 2026-01-31
-- **Severidade:** Critica
-- **Descricao:** O app depende do sidecar Python (Faster-Whisper) para transcricao, mas o sidecar precisa ser iniciado manualmente em terminal separado. Sem ele, nenhuma transcricao funciona.
-- **Sintoma:** Usuario grava audio, clica em transcrever, nada acontece. UI mostra "Sidecar offline".
-- **Causa raiz:** O Tauri nao inicia o sidecar automaticamente. Requer dois terminais manuais.
-- **Impacto:** App inutilizavel para usuario final sem conhecimento tecnico.
-- **Solucao proposta:** Implementar bundled sidecar ou processo filho gerenciado pelo Tauri.
-
-**Workaround atual:**
-```bash
-# Terminal 1 - Sidecar
-cd ~/ELCO-machina/sidecar
-source .venv/bin/activate
-uvicorn voice_ai.main:app --host 127.0.0.1 --port 8765
-
-# Terminal 2 - Frontend
-cd ~/ELCO-machina
-npm run dev
-```
-
----
-
 ### [002] Primeiro uso requer download de modelo (~1.5GB)
 
 - **Status:** Aberto
@@ -42,19 +17,6 @@ npm run dev
 - **Solucao proposta:**
   1. Adicionar tela de "primeiro uso" que baixa o modelo com barra de progresso
   2. Ou: bundlar o modelo no instalador (aumenta tamanho para ~1.7GB)
-
----
-
-### [003] Documentacao ARCHITECTURE.md desatualizada
-
-- **Status:** Aberto
-- **Data:** 2026-01-31
-- **Severidade:** Baixa
-- **Descricao:** O arquivo ARCHITECTURE.md ainda menciona Gemini como unica opcao de transcricao e nao documenta a arquitetura do sidecar.
-- **Arquivos afetados:**
-  - `ARCHITECTURE.md` - Falta secao sobre sidecar
-  - `CLAUDE.md` - IP da VM desatualizado
-- **Solucao proposta:** Atualizar documentacao para refletir arquitetura atual (Whisper local + Gemini para refinamento).
 
 ---
 
@@ -82,6 +44,26 @@ npm run dev
 
 ---
 
+### [006] Microfone nao funciona no Linux Desktop (WebKit2GTK)
+
+- **Status:** Aberto (Limitacao do Tauri/WebKitGTK)
+- **Data:** 2026-02-04
+- **Severidade:** Alta
+- **Descricao:** `navigator.mediaDevices.getUserMedia()` retorna `NotAllowedError` no Linux Desktop porque o WebKitGTK nao tem handler de permissao configurado no Tauri.
+- **Causa Raiz:** O Tauri nao implementa handler para o sinal `permission-request` do WebKitGTK, resultando em negacao automatica de todas as solicitacoes de permissao de midia.
+- **Workaround Implementado:**
+  1. App tenta usar `tauri-plugin-mic-recorder` (cpal nativo) primeiro
+  2. Se falhar, cai no fallback Web API
+  3. Mensagens de erro mais informativas adicionadas
+- **Status Upstream:**
+  - [GitHub Issue #10898](https://github.com/tauri-apps/tauri/issues/10898)
+  - [GitHub Issue #8851](https://github.com/tauri-apps/tauri/issues/8851)
+  - [WRY Issue #85](https://github.com/tauri-apps/wry/issues/85) - aguardando suporte upstream
+- **Alternativa para usuarios:** Usar botao de upload de arquivo de audio em vez de gravacao direta.
+- **Nota:** Plugin nativo funciona em maquinas Linux com hardware de audio. Esta VM (Oracle Cloud) nao tem placa de som.
+
+---
+
 ## Em Progresso
 
 (Nenhum no momento)
@@ -90,7 +72,32 @@ npm run dev
 
 ## Resolvidos
 
-(Nenhum no momento)
+### [001] App nao gera texto - Sidecar nao inicia automaticamente
+
+- **Status:** Resolvido
+- **Data:** 2026-01-31
+- **Resolvido em:** 2026-01-31
+- **Commit:** `170afb69`
+- **Severidade:** Critica
+- **Descricao:** O app dependia do sidecar Python ser iniciado manualmente.
+- **Solucao implementada:**
+  - `lib.rs`: SidecarManager com auto-start, health monitoring (5s) e auto-restart
+  - `VoiceAIClient.ts`: Fallback caso auto-start do Rust falhe
+  - Sidecar agora inicia automaticamente com o app
+
+---
+
+### [003] Documentacao ARCHITECTURE.md desatualizada
+
+- **Status:** Resolvido
+- **Data:** 2026-01-31
+- **Resolvido em:** 2026-01-31
+- **Commit:** `170afb69`
+- **Severidade:** Baixa
+- **Descricao:** ARCHITECTURE.md nao documentava a arquitetura do sidecar.
+- **Solucao implementada:**
+  - ARCHITECTURE.md reescrito com documentacao completa
+  - Inclui: fluxo de transcricao, SidecarManager, build do sidecar, troubleshooting
 
 ---
 
@@ -136,3 +143,5 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | Data | Issue | Acao |
 |------|-------|------|
 | 2026-01-31 | #001-#005 | Issues iniciais documentadas |
+| 2026-01-31 | #001, #003 | Resolvidos via commit `170afb69` (SidecarManager + docs) |
+| 2026-02-04 | #006 | Documentada limitacao WebKitGTK + melhorias no tratamento de erro |
