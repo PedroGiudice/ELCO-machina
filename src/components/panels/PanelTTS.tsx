@@ -111,7 +111,7 @@ export function PanelTTS({
 
       {!canSpeak && hasText && (
         <p className="text-[10px] text-red-400 text-center">
-          Voice AI server unavailable
+          Servidor de voz inacessivel. Verifique se o sidecar esta ativo.
         </p>
       )}
 
@@ -258,10 +258,16 @@ export function PanelTTS({
             <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
               Voice Cloning (Optional)
             </label>
+            <p className="text-[9px] text-[var(--text-secondary)]">
+              {voiceRefAudio
+                ? 'Usando sua voz personalizada para clonagem.'
+                : 'Usando voz PT-BR padrao. Envie um audio para clonar outra voz.'
+              }
+            </p>
             <label className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group">
               <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] flex items-center gap-2">
                 <Upload className="w-3 h-3" />
-                {voiceRefAudio ? 'Voice reference loaded' : 'Upload voice sample'}
+                {voiceRefAudio ? 'Amostra carregada' : 'Enviar amostra de voz'}
               </span>
               <ChevronRight className="w-3 h-3 text-[var(--text-secondary)]" />
               <input
@@ -276,7 +282,7 @@ export function PanelTTS({
                 onClick={() => onVoiceRefChange(null)}
                 className="text-[10px] text-red-400 hover:text-red-300"
               >
-                Remove voice reference
+                Remover amostra (voltar para voz padrao)
               </button>
             )}
           </section>
