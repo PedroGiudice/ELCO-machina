@@ -13,13 +13,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from voice_ai.routers import transcribe
+from voice_ai.routers import transcribe, synthesize
 from voice_ai.services.stt_service import STTService
+from voice_ai.services.tts_service import TTSService
 
 
 # Estado global do aplicativo
 class AppState:
     stt_service: STTService | None = None
+    tts_service: TTSService | None = None
     models_loaded: bool = False
     startup_error: str | None = None
 
@@ -40,6 +42,15 @@ async def lifespan(app: FastAPI):
         # Inicializa STT Service (Whisper)
         # Modelo sera carregado lazy na primeira requisicao
         state.stt_service = STTService()
+
+        # Inicializa TTS Service (Piper)
+        # Voz sera carregada lazy na primeira requisicao
+        state.tts_service = TTSService()
+        if state.tts_service.is_available:
+            print("[VoiceAI] TTS (Piper) disponivel")
+        else:
+            print("[VoiceAI] TTS (Piper) nao instalado - sintese desabilitada")
+
         state.models_loaded = True
         print("[VoiceAI] Sidecar pronto!")
     except Exception as e:
@@ -52,14 +63,16 @@ async def lifespan(app: FastAPI):
     print("[VoiceAI] Encerrando sidecar...")
     if state.stt_service:
         state.stt_service.unload()
+    if state.tts_service:
+        state.tts_service.unload()
     print("[VoiceAI] Sidecar encerrado.")
 
 
 # Cria aplicacao FastAPI
 app = FastAPI(
     title="Voice AI Sidecar",
-    description="STT local com Faster-Whisper e refinamento opcional via Gemini",
-    version="0.1.0",
+    description="STT (Whisper) e TTS (Piper) local com refinamento opcional via Gemini",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -104,17 +117,31 @@ async def health_check() -> HealthResponse:
             whisper_status = "available"
             whisper_model = state.stt_service.model_size
 
+    # Status do TTS (Piper)
+    piper_status = "not_available"
+    piper_voice = None
+
+    if state.tts_service:
+        if state.tts_service.is_available:
+            if state.tts_service.is_loaded:
+                piper_status = "loaded"
+                piper_voice = state.tts_service._current_voice_id
+            else:
+                piper_status = "available"
+        else:
+            piper_status = "not_installed"
+
     return HealthResponse(
         status="healthy" if state.models_loaded else "degraded",
-        version="0.1.0",
+        version="0.2.0",
         models={
             "whisper": {
                 "status": whisper_status,
                 "model": whisper_model,
             },
-            "xtts": {
-                "status": "not_implemented",
-                "model": None,
+            "piper": {
+                "status": piper_status,
+                "voice": piper_voice,
             },
         },
         error=state.startup_error,
@@ -126,13 +153,18 @@ async def root():
     """Endpoint raiz com informacoes basicas."""
     return {
         "name": "Voice AI Sidecar",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "docs": "/docs",
+        "endpoints": {
+            "stt": "/transcribe",
+            "tts": "/synthesize",
+        },
     }
 
 
 # Registra routers
 app.include_router(transcribe.router, prefix="/transcribe", tags=["STT"])
+app.include_router(synthesize.router, prefix="/synthesize", tags=["TTS"])
 
 
 # Injeta servicos nos routers
@@ -140,6 +172,7 @@ app.include_router(transcribe.router, prefix="/transcribe", tags=["STT"])
 async def inject_services(request, call_next):
     """Injeta servicos no request state para uso nos endpoints."""
     request.state.stt_service = state.stt_service
+    request.state.tts_service = state.tts_service
     response = await call_next(request)
     return response
 
