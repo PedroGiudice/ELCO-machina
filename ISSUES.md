@@ -6,6 +6,37 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ## Abertos
 
+### [009] Erro -3 no Whisper e Fallback "transcription"
+
+- **Status:** Aberto (Critico - Regressao)
+- **Data:** 2026-02-04
+- **Severidade:** Critica
+- **Descricao:** Transcricao falha silenciosamente retornando apenas a string "transcription".
+- **ATENCAO:** Erro inedito. Transcricao funcionava antes. Nenhuma alteracao conhecida foi feita no pipeline STT ou no modelo Whisper. Requer investigacao profunda.
+- **Logs sidecar:** Retorna erro 500: `RuntimeError: Falha ao carregar modelo Whisper: Error -3 while decompressing data: unknown compression method`.
+- **Logs console (webview):** Plugin Store set mostra `null`. Nenhum erro de transcricao visivel (fallback mascara o erro).
+- **Health check sidecar:** Status "healthy", Whisper: "available" (nao "loaded" - modelo nao consegue carregar).
+- **Causa Raiz:** EM INVESTIGACAO. Hipoteses:
+  1. Corrupcao no cache de modelos (`~/.cache/voice_ai/models`) - modelo de 1.5GB pode ter sido parcialmente baixado
+  2. Incompatibilidade da biblioteca zlib/ctranslate2 no bundle PyInstaller apos rebuild do sidecar
+  3. Mudanca no PyInstaller spec ou dependencias que afetou o empacotamento
+  4. Versao do ctranslate2 incompativel com formato do modelo cached
+- **Sintoma na UI:** O texto transcrito aparece apenas como a palavra "transcription" (fallback no frontend quando `result.text` e vazio).
+- **Fluxo do erro:**
+  1. Sidecar retorna HTTP 500 (Whisper nao carrega)
+  2. Frontend catch: "Sidecar falhou, tentando Gemini..."
+  3. Gemini fallback retorna vazio (API key possivelmente null)
+  4. `useAudioProcessing.ts:229` -> `firstWords || 'transcription'` gera o texto "transcription"
+- **Causa Raiz Confirmada:** Artefatos binários do `ctranslate2` e `tokenizers` ausentes no bundle PyInstaller. Os hooks padrão do PyInstaller não coletam automaticamente todas as shared libs necessárias no modo `--onefile`.
+- **Evidência:** Modelo carrega perfeitamente fora do bundle (venv Python direto). Erro ocorre apenas no binário PyInstaller.
+- **Solução Implementada:**
+  1. Criado `sidecar/voice_ai.spec` com `collect_all` para `faster_whisper`, `ctranslate2`, `tokenizers`, `scipy`, `sklearn`
+  2. Atualizado `sidecar/build-sidecar.sh` para usar o spec file em vez de args CLI
+  3. Sidecar reconstruído e testado com sucesso (HTTP 200, Whisper loaded, sem erro -3)
+- **Status:** Resolvido (aguardando rebuild DEB + teste do usuário)
+
+---
+
 ### [002] Primeiro uso requer download de modelo (~1.5GB)
 
 - **Status:** Aberto
@@ -180,3 +211,4 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-02-04 | #006 | Documentada limitacao WebKitGTK + melhorias no tratamento de erro |
 | 2026-02-04 | #007, #008 | Issues TTS: sem botao de acionamento + editor nao editavel |
 | 2026-02-04 | #007, #008 | Resolvidos: botao TTS na toolbar + editor sempre editavel |
+| 2026-02-04 | #009 | Documentado bug crítico de loading do Whisper (Erro -3) |

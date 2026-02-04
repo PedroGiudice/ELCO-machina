@@ -26,6 +26,7 @@ sidecar/.venv/
 sidecar/build/
 sidecar/dist/
 sidecar/*.spec
+!sidecar/voice_ai.spec
 __pycache__/
 *.py[cod]
 *$py.class
