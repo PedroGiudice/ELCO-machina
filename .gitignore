@@ -48,3 +48,4 @@ src-tauri/binaries/voice-ai-sidecar-*
 *.njsproj
 *.sln
 *.sw?
+sidecar/.env

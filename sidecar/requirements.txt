@@ -9,6 +9,9 @@ python-multipart==0.0.9
 # STT - Faster-Whisper (CTranslate2)
 faster-whisper==1.0.3
 
+# TTS - Piper (ONNX)
+piper-tts>=1.2.0
+
 # Audio Processing
 pydub==0.25.1
 soundfile==0.12.1

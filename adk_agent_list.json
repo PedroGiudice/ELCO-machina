@@ -2,7 +2,7 @@
   "agents": [
     {
       "name": "remote_rust_expert",
-      "url": "http://64.181.162.38:8000"
+      "url": "http://137.131.201.119:8000"
     },
     {
       "name": "remote_rust_tunneled",

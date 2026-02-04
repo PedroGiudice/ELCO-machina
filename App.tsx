@@ -29,7 +29,9 @@ import {
   AlertTriangle,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 
 // --- INDEXEDDB HELPER (For Audio & Context Persistence) ---
@@ -736,9 +738,45 @@ const AudioVisualizer = ({ stream }: { stream: MediaStream | null }) => {
 
 // --- REACT COMPONENT ---
 
+// Auth credentials (hardcoded for simplicity)
+const AUTH_USERS: Record<string, string> = {
+  'MCBS': 'Chicago00@',
+  'PGR': 'Chicago00@',
+};
+
 export default function App() {
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('auth_user') !== null;
+  });
+  const [currentUser, setCurrentUser] = useState<string | null>(() => {
+    return localStorage.getItem('auth_user');
+  });
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleLogin = () => {
+    const expectedPassword = AUTH_USERS[loginUsername.toUpperCase()];
+    if (expectedPassword && expectedPassword === loginPassword) {
+      const user = loginUsername.toUpperCase();
+      localStorage.setItem('auth_user', user);
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+      setLoginError(null);
+    } else {
+      setLoginError('Usuario ou senha invalidos');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_user');
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  };
+
   const [activeTab, setActiveTab] = useState<SidebarTab>('workspace');
-  const [mobileView, setMobileView] = useState<MobileView>('tools'); 
+  const [mobileView, setMobileView] = useState<MobileView>('tools');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
@@ -841,12 +879,55 @@ export default function App() {
   const [whisperTestStatus, setWhisperTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
 
+  // TTS State (Text-to-Speech)
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // TTS Settings
+  const [ttsEngine, setTtsEngine] = useState<'piper' | 'chatterbox'>('chatterbox');
+  const [ttsProfile, setTtsProfile] = useState<string>('standard');
+  const [voiceRefAudio, setVoiceRefAudio] = useState<string | null>(null);
+  const [ttsCustomParams, setTtsCustomParams] = useState({
+    exaggeration: 0.5,
+    speed: 1.0,
+    stability: 0.5,
+    steps: 10,
+    sentence_silence: 0.2,
+  });
+
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
   useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
   useEffect(() => localStorage.setItem('gemini_current_work', transcription), [transcription]);
   useEffect(() => localStorage.setItem('gemini_ai_model', aiModel), [aiModel]);
+
+  // Persist TTS Settings
+  useEffect(() => {
+    localStorage.setItem('tts_settings', JSON.stringify({
+      engine: ttsEngine,
+      profile: ttsProfile,
+      customParams: ttsCustomParams,
+      voiceRef: voiceRefAudio,
+    }));
+  }, [ttsEngine, ttsProfile, ttsCustomParams, voiceRefAudio]);
+
+  // Load TTS Settings on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('tts_settings');
+    if (saved) {
+      try {
+        const settings = JSON.parse(saved);
+        if (settings.engine) setTtsEngine(settings.engine);
+        if (settings.profile) setTtsProfile(settings.profile);
+        if (settings.customParams) setTtsCustomParams(settings.customParams);
+        if (settings.voiceRef) setVoiceRefAudio(settings.voiceRef);
+      } catch (e) {
+        console.warn('Failed to load TTS settings:', e);
+      }
+    }
+  }, []);
 
   // Load API Key on mount
   useEffect(() => {
@@ -1839,6 +1920,94 @@ export default function App() {
     }
   };
 
+  // --- TTS: Read Text Aloud ---
+  const handleReadText = async () => {
+    if (!transcription.trim()) {
+      addLog('Nenhum texto para ler', 'error');
+      return;
+    }
+
+    // Stop current playback if any
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current = null;
+    }
+    if (ttsAudioUrl) {
+      URL.revokeObjectURL(ttsAudioUrl);
+      setTtsAudioUrl(null);
+    }
+
+    setIsSpeaking(true);
+    addLog('Sintetizando audio...', 'info');
+
+    try {
+      // Build request body based on TTS settings
+      const requestBody: Record<string, unknown> = {
+        text: transcription,
+        voice: ttsEngine === 'chatterbox' ? 'cloned' : 'pt-br-faber-medium',
+        preprocess: true,
+      };
+
+      if (ttsEngine === 'chatterbox') {
+        if (ttsProfile === 'custom') {
+          requestBody.params = ttsCustomParams;
+        } else {
+          requestBody.profile = ttsProfile;
+        }
+        if (voiceRefAudio) {
+          requestBody.voice_ref = voiceRefAudio;
+        }
+      }
+
+      const response = await fetch(`${whisperServerUrl}/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Erro desconhecido' }));
+        throw new Error(error.detail || `HTTP ${response.status}`);
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      setTtsAudioUrl(audioUrl);
+
+      // Create and play audio
+      const audio = new Audio(audioUrl);
+      ttsAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        addLog('Leitura concluida', 'success');
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        addLog('Erro ao reproduzir audio', 'error');
+      };
+
+      await audio.play();
+      addLog('Reproduzindo...', 'success');
+
+    } catch (err: any) {
+      console.error('TTS Error:', err);
+      addLog(`Erro TTS: ${err.message}`, 'error');
+      setIsSpeaking(false);
+    }
+  };
+
+  const stopReadText = () => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      ttsAudioRef.current = null;
+    }
+    setIsSpeaking(false);
+    addLog('Leitura interrompida', 'info');
+  };
+
   // --- COMPONENT: Icon Sidebar Item ---
   const SidebarIcon = ({ id, icon: Icon, tooltip, onClick }: { id: string, icon: any, tooltip: string, onClick: () => void }) => (
     <button
@@ -1859,6 +2028,67 @@ export default function App() {
       )}
     </button>
   );
+
+  // Login Screen
+  if (!isAuthenticated) {
+    return (
+      <div
+        className="flex items-center justify-center w-full h-screen"
+        style={{ backgroundColor: bgColor, color: textColor, fontFamily: fontFamily }}
+      >
+        <div className="w-full max-w-sm p-8 bg-white/5 border border-white/10 rounded-lg">
+          <div className="text-center mb-8">
+            <div
+              className="w-16 h-16 mx-auto mb-4 rounded-xl flex items-center justify-center shadow-lg"
+              style={{ background: `linear-gradient(135deg, ${themeColor}, ${themeColor}aa)` }}
+            >
+              <Zap className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-xl font-bold">Pro ATT Machine</h1>
+            <p className="text-xs opacity-50 mt-1">v0.2.0</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] opacity-60 mb-1 block">Usuario</label>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                placeholder="MCBS ou PGR"
+                className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-sm focus:outline-none focus:border-white/30"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-[10px] opacity-60 mb-1 block">Senha</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                placeholder="********"
+                className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-sm focus:outline-none focus:border-white/30"
+              />
+            </div>
+
+            {loginError && (
+              <p className="text-xs text-red-400 text-center">{loginError}</p>
+            )}
+
+            <button
+              onClick={handleLogin}
+              className="w-full py-2.5 rounded font-medium text-sm transition-colors"
+              style={{ backgroundColor: themeColor, color: 'white' }}
+            >
+              Entrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -2142,6 +2372,31 @@ export default function App() {
                             <Check className="w-3 h-3 text-emerald-500" />
                             Ready: {(audioBlob.size / 1024).toFixed(1)} KB
                          </div>
+                    )}
+
+                    {/* TTS: Read Text Button */}
+                    {transcription && !isProcessing && (
+                        <button
+                            onClick={isSpeaking ? stopReadText : handleReadText}
+                            disabled={!sidecarAvailable}
+                            className={`w-full h-10 mt-3 rounded-sm font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-95 border ${
+                                isSpeaking
+                                    ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
+                                    : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+                            } ${!sidecarAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        >
+                            {isSpeaking ? (
+                                <>
+                                    <VolumeX className="w-3.5 h-3.5" />
+                                    Stop Reading
+                                </>
+                            ) : (
+                                <>
+                                    <Volume2 className="w-3.5 h-3.5" />
+                                    Read Text
+                                </>
+                            )}
+                        </button>
                     )}
                 </div>
             )}
@@ -2520,9 +2775,24 @@ export default function App() {
                         <Settings className="w-4 h-4" style={{color: themeColor}} />
                         System Configuration
                     </h2>
-                    <button onClick={() => setIsSettingsOpen(false)} className="opacity-50 hover:opacity-100">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {currentUser && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] opacity-50">Logado como</span>
+                                <span className="text-xs font-bold" style={{color: themeColor}}>{currentUser}</span>
+                                <button
+                                    onClick={handleLogout}
+                                    className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded"
+                                >
+                                    <LogOut className="w-3 h-3" />
+                                    Sair
+                                </button>
+                            </div>
+                        )}
+                        <button onClick={() => setIsSettingsOpen(false)} className="opacity-50 hover:opacity-100">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="p-6 overflow-y-auto space-y-8">
@@ -2741,6 +3011,193 @@ export default function App() {
                                     : whisperTestMessage}
                             </p>
                         </div>
+                    </div>
+
+                    <div className="w-full h-px bg-white/5"></div>
+
+                    {/* SECTION 2.5: TTS SETTINGS */}
+                    <div className="space-y-4">
+                        <h3 className="text-xs font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                            <Volume2 className="w-3 h-3" /> Text-to-Speech
+                        </h3>
+
+                        {/* Engine Selection */}
+                        <div>
+                            <label className="text-[10px] opacity-60 mb-1.5 block">TTS Engine</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => setTtsEngine('chatterbox')}
+                                    className={`flex flex-col items-start p-3 rounded-sm border transition-all text-left ${
+                                        ttsEngine === 'chatterbox'
+                                        ? 'bg-white/10 border-white/30'
+                                        : 'bg-white/5 border-white/5 opacity-60 hover:opacity-100'
+                                    }`}
+                                    style={ttsEngine === 'chatterbox' ? { borderColor: themeColor } : {}}
+                                >
+                                    <span className="text-xs font-bold">Chatterbox</span>
+                                    <span className="text-[9px] opacity-50">Natural, clonagem de voz</span>
+                                </button>
+                                <button
+                                    onClick={() => setTtsEngine('piper')}
+                                    className={`flex flex-col items-start p-3 rounded-sm border transition-all text-left ${
+                                        ttsEngine === 'piper'
+                                        ? 'bg-white/10 border-white/30'
+                                        : 'bg-white/5 border-white/5 opacity-60 hover:opacity-100'
+                                    }`}
+                                    style={ttsEngine === 'piper' ? { borderColor: themeColor } : {}}
+                                >
+                                    <span className="text-xs font-bold">Piper</span>
+                                    <span className="text-[9px] opacity-50">Local, rapido</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Chatterbox-specific settings */}
+                        {ttsEngine === 'chatterbox' && (
+                            <>
+                                {/* Profile Selection */}
+                                <div>
+                                    <label className="text-[10px] opacity-60 mb-1.5 block">Profile</label>
+                                    <div className="relative">
+                                        <select
+                                            value={ttsProfile}
+                                            onChange={(e) => setTtsProfile(e.target.value)}
+                                            className="w-full bg-black/20 border border-white/10 rounded-sm py-2 px-3 text-xs focus:outline-none transition-colors appearance-none"
+                                        >
+                                            <option value="standard">Standard</option>
+                                            <option value="legal">Legal (Formal)</option>
+                                            <option value="expressive">Expressive</option>
+                                            <option value="fast_preview">Fast Preview</option>
+                                            <option value="custom">Custom</option>
+                                        </select>
+                                        <ChevronRight className="absolute right-3 top-2.5 w-3 h-3 opacity-50 pointer-events-none rotate-90" />
+                                    </div>
+                                </div>
+
+                                {/* Custom Parameters */}
+                                {ttsProfile === 'custom' && (
+                                    <div className="space-y-3 p-3 bg-black/20 rounded-sm border border-white/5">
+                                        {/* Exaggeration */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Expressividade</span>
+                                                <span className="opacity-40">{ttsCustomParams.exaggeration.toFixed(1)}</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="2" step="0.1"
+                                                value={ttsCustomParams.exaggeration}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, exaggeration: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                            <p className="text-[9px] opacity-30 mt-0.5">0=monotono, 2=dramatico</p>
+                                        </div>
+
+                                        {/* Speed */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Velocidade</span>
+                                                <span className="opacity-40">{ttsCustomParams.speed.toFixed(1)}x</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0.5" max="2" step="0.1"
+                                                value={ttsCustomParams.speed}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, speed: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                        </div>
+
+                                        {/* Stability */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Estabilidade</span>
+                                                <span className="opacity-40">{ttsCustomParams.stability.toFixed(1)}</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="1" step="0.1"
+                                                value={ttsCustomParams.stability}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, stability: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                            <p className="text-[9px] opacity-30 mt-0.5">0=variavel, 1=uniforme</p>
+                                        </div>
+
+                                        {/* Steps */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Qualidade</span>
+                                                <span className="opacity-40">{ttsCustomParams.steps} steps</span>
+                                            </div>
+                                            <input
+                                                type="range" min="4" max="20" step="1"
+                                                value={ttsCustomParams.steps}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, steps: parseInt(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                            <p className="text-[9px] opacity-30 mt-0.5">4=rapido, 20=alta qualidade</p>
+                                        </div>
+
+                                        {/* Sentence Silence */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Pausa entre frases</span>
+                                                <span className="opacity-40">{ttsCustomParams.sentence_silence.toFixed(1)}s</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="1" step="0.1"
+                                                value={ttsCustomParams.sentence_silence}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, sentence_silence: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Voice Cloning */}
+                                <div className="p-3 bg-black/20 rounded-sm border border-white/5">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] opacity-60">Clonagem de Voz</span>
+                                        {voiceRefAudio && (
+                                            <button
+                                                onClick={() => setVoiceRefAudio(null)}
+                                                className="text-[9px] text-red-400 hover:text-red-300"
+                                            >
+                                                Remover
+                                            </button>
+                                        )}
+                                    </div>
+                                    {voiceRefAudio ? (
+                                        <div className="flex items-center gap-2 text-xs text-green-400">
+                                            <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                                            Audio carregado
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <p className="text-[9px] opacity-40 mb-2">
+                                                Importe audio de 5-15s da voz a clonar.
+                                            </p>
+                                            <input
+                                                type="file"
+                                                accept="audio/*"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const buffer = await file.arrayBuffer();
+                                                        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                                                        setVoiceRefAudio(base64);
+                                                    }
+                                                }}
+                                                className="text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded-sm file:border-0 file:text-[10px] file:bg-white/10 file:text-white/60 hover:file:bg-white/20"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <div className="w-full h-px bg-white/5"></div>
