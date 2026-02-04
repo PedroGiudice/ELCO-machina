@@ -7,6 +7,8 @@ Permite sintese de voz com clonagem via GPU serverless.
 import os
 from typing import Optional
 
+from voice_ai.schemas.tts_profiles import TTSParameters
+
 # Modal sera importado lazy para evitar erro se nao instalado
 _modal_available = False
 
@@ -87,9 +89,7 @@ class TTSModalClient:
         self,
         text: str,
         voice_ref_bytes: Optional[bytes] = None,
-        temperature: float = 0.8,
-        top_p: float = 0.95,
-        repetition_penalty: float = 1.2,
+        params: Optional[TTSParameters] = None,
     ) -> bytes:
         """
         Sintetiza audio usando Chatterbox no Modal.
@@ -97,9 +97,7 @@ class TTSModalClient:
         Args:
             text: Texto para sintetizar
             voice_ref_bytes: Audio de referencia para clonagem (minimo 5s)
-            temperature: Controle de variabilidade (0.0 - 1.0)
-            top_p: Nucleus sampling (0.0 - 1.0)
-            repetition_penalty: Penalidade para repeticoes
+            params: Parametros TTS (usa defaults se None)
 
         Returns:
             Bytes do audio WAV gerado
@@ -113,16 +111,28 @@ class TTSModalClient:
                 "Verifique MODAL_ENABLED=true e credenciais."
             )
 
+        # Usa defaults se nao especificado
+        if params is None:
+            params = TTSParameters()
+
         try:
             engine = self._get_engine()
 
-            # Chama metodo remoto
+            # Chama metodo remoto com todos os parametros
             audio_bytes = engine().synthesize.remote(
                 text=text,
                 voice_ref_bytes=voice_ref_bytes,
-                temperature=temperature,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
+                exaggeration=params.exaggeration,
+                speed=params.speed,
+                stability=params.stability,
+                steps=params.steps,
+                sentence_silence=params.sentence_silence,
+                cfg_weight=params.cfg_weight,
+                embedding_scale=params.embedding_scale,
+                temperature=params.temperature,
+                repetition_penalty=params.repetition_penalty,
+                top_p=params.top_p,
+                seed=params.seed,
             )
 
             return audio_bytes
