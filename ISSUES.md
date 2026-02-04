@@ -44,6 +44,28 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ---
 
+### [007] TTS Settings sem botao de acionamento
+
+- **Status:** Aberto
+- **Data:** 2026-02-04
+- **Severidade:** Alta
+- **Descricao:** As configuracoes de TTS (engine, profile, sliders) estao no Settings, mas nao existe botao visivel para acionar a leitura do texto.
+- **Impacto:** Usuario configura TTS mas nao consegue usar.
+- **Solucao proposta:** Adicionar botao "Ler Texto" no editor ou toolbar principal.
+
+---
+
+### [008] Editor de texto nao permite escrita
+
+- **Status:** Aberto
+- **Data:** 2026-02-04
+- **Severidade:** Alta
+- **Descricao:** O editor de texto/preview principal nao permite escrita direta. Usuario nao consegue inputar texto para leitura TTS.
+- **Impacto:** Funcionalidade TTS inutilizavel sem texto de entrada.
+- **Solucao proposta:** Tornar o editor editavel ou adicionar campo de input de texto.
+
+---
+
 ### [006] Microfone nao funciona no Linux Desktop (WebKit2GTK)
 
 - **Status:** Aberto (Limitacao do Tauri/WebKitGTK)
@@ -145,3 +167,4 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-01-31 | #001-#005 | Issues iniciais documentadas |
 | 2026-01-31 | #001, #003 | Resolvidos via commit `170afb69` (SidecarManager + docs) |
 | 2026-02-04 | #006 | Documentada limitacao WebKitGTK + melhorias no tratamento de erro |
+| 2026-02-04 | #007, #008 | Issues TTS: sem botao de acionamento + editor nao editavel |
