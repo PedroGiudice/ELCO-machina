@@ -738,9 +738,45 @@ const AudioVisualizer = ({ stream }: { stream: MediaStream | null }) => {
 
 // --- REACT COMPONENT ---
 
+// Auth credentials (hardcoded for simplicity)
+const AUTH_USERS: Record<string, string> = {
+  'MCBS': 'Chicago00@',
+  'PGR': 'Chicago00@',
+};
+
 export default function App() {
+  // Auth State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('auth_user') !== null;
+  });
+  const [currentUser, setCurrentUser] = useState<string | null>(() => {
+    return localStorage.getItem('auth_user');
+  });
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleLogin = () => {
+    const expectedPassword = AUTH_USERS[loginUsername.toUpperCase()];
+    if (expectedPassword && expectedPassword === loginPassword) {
+      const user = loginUsername.toUpperCase();
+      localStorage.setItem('auth_user', user);
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+      setLoginError(null);
+    } else {
+      setLoginError('Usuario ou senha invalidos');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_user');
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  };
+
   const [activeTab, setActiveTab] = useState<SidebarTab>('workspace');
-  const [mobileView, setMobileView] = useState<MobileView>('tools'); 
+  const [mobileView, setMobileView] = useState<MobileView>('tools');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
@@ -1993,6 +2029,67 @@ export default function App() {
     </button>
   );
 
+  // Login Screen
+  if (!isAuthenticated) {
+    return (
+      <div
+        className="flex items-center justify-center w-full h-screen"
+        style={{ backgroundColor: bgColor, color: textColor, fontFamily: fontFamily }}
+      >
+        <div className="w-full max-w-sm p-8 bg-white/5 border border-white/10 rounded-lg">
+          <div className="text-center mb-8">
+            <div
+              className="w-16 h-16 mx-auto mb-4 rounded-xl flex items-center justify-center shadow-lg"
+              style={{ background: `linear-gradient(135deg, ${themeColor}, ${themeColor}aa)` }}
+            >
+              <Zap className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-xl font-bold">Pro ATT Machine</h1>
+            <p className="text-xs opacity-50 mt-1">v0.2.0</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] opacity-60 mb-1 block">Usuario</label>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                placeholder="MCBS ou PGR"
+                className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-sm focus:outline-none focus:border-white/30"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-[10px] opacity-60 mb-1 block">Senha</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                placeholder="********"
+                className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded text-sm focus:outline-none focus:border-white/30"
+              />
+            </div>
+
+            {loginError && (
+              <p className="text-xs text-red-400 text-center">{loginError}</p>
+            )}
+
+            <button
+              onClick={handleLogin}
+              className="w-full py-2.5 rounded font-medium text-sm transition-colors"
+              style={{ backgroundColor: themeColor, color: 'white' }}
+            >
+              Entrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
         className="flex w-full overflow-hidden select-none flex-col md:flex-row relative transition-colors duration-300"
@@ -2678,9 +2775,24 @@ export default function App() {
                         <Settings className="w-4 h-4" style={{color: themeColor}} />
                         System Configuration
                     </h2>
-                    <button onClick={() => setIsSettingsOpen(false)} className="opacity-50 hover:opacity-100">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {currentUser && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] opacity-50">Logado como</span>
+                                <span className="text-xs font-bold" style={{color: themeColor}}>{currentUser}</span>
+                                <button
+                                    onClick={handleLogout}
+                                    className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded"
+                                >
+                                    <LogOut className="w-3 h-3" />
+                                    Sair
+                                </button>
+                            </div>
+                        )}
+                        <button onClick={() => setIsSettingsOpen(false)} className="opacity-50 hover:opacity-100">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="p-6 overflow-y-auto space-y-8">
