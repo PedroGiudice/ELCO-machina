@@ -2691,6 +2691,20 @@ export default function App() {
                     <IconMarkdown className="w-3 h-3 md:w-3.5 md:h-3.5" />
                     <span className="text-[10px] md:text-xs">MD</span>
                 </button>
+                {/* TTS Read Button */}
+                <button
+                    onClick={isSpeaking ? stopReadText : handleReadText}
+                    disabled={!sidecarAvailable || !transcription}
+                    className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 text-xs font-semibold rounded-sm transition-colors border ${
+                        isSpeaking
+                            ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
+                            : 'bg-white/10 border-white/5 hover:bg-white/20'
+                    } ${(!sidecarAvailable || !transcription) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    title={isSpeaking ? 'Parar leitura' : 'Ler texto em voz alta'}
+                >
+                    {isSpeaking ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                    <span className="hidden md:inline">{isSpeaking ? 'Stop' : 'Read'}</span>
+                </button>
                 <button
                     onClick={() => {navigator.clipboard.writeText(transcription); addLog('Copied to clipboard', 'success')}}
                     className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 bg-white text-black text-xs font-semibold rounded-sm transition-colors hover:bg-gray-200"
@@ -2703,17 +2717,17 @@ export default function App() {
 
         {/* Content */}
         <div className="flex-1 relative overflow-hidden">
-            {transcription || isProcessing ? (
-                <textarea
-                    value={transcription}
-                    onChange={(e) => setTranscription(e.target.value)}
-                    spellCheck={false}
-                    style={{ fontSize: `${fontSize}px` }}
-                    className="w-full h-full bg-transparent border-0 p-4 md:p-8 resize-none focus:ring-0 focus:outline-none font-mono leading-relaxed placeholder:opacity-30"
-                    placeholder={isProcessing ? "Refining text..." : ""}
-                />
-            ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-10 gap-4 select-none">
+            <textarea
+                value={transcription}
+                onChange={(e) => setTranscription(e.target.value)}
+                spellCheck={false}
+                style={{ fontSize: `${fontSize}px` }}
+                className="w-full h-full bg-transparent border-0 p-4 md:p-8 resize-none focus:ring-0 focus:outline-none font-mono leading-relaxed placeholder:opacity-30"
+                placeholder={isProcessing ? "Refinando texto..." : "Digite ou cole texto aqui para leitura..."}
+            />
+            {/* Ícone decorativo como background quando vazio */}
+            {!transcription && !isProcessing && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-10 gap-4 select-none pointer-events-none">
                     {outputStyle === 'Code Generator' ? <Terminal className="w-24 h-24" /> : <Feather className="w-24 h-24" />}
                 </div>
             )}

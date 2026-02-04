@@ -44,25 +44,6 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ---
 
-### [007] TTS Settings sem botao de acionamento
-
-- **Status:** Aberto
-- **Data:** 2026-02-04
-- **Severidade:** Alta
-- **Descricao:** As configuracoes de TTS (engine, profile, sliders) estao no Settings, mas nao existe botao visivel para acionar a leitura do texto.
-- **Impacto:** Usuario configura TTS mas nao consegue usar.
-- **Solucao proposta:** Adicionar botao "Ler Texto" no editor ou toolbar principal.
-
----
-
-### [008] Editor de texto nao permite escrita
-
-- **Status:** Aberto
-- **Data:** 2026-02-04
-- **Severidade:** Alta
-- **Descricao:** O editor de texto/preview principal nao permite escrita direta. Usuario nao consegue inputar texto para leitura TTS.
-- **Impacto:** Funcionalidade TTS inutilizavel sem texto de entrada.
-- **Solucao proposta:** Tornar o editor editavel ou adicionar campo de input de texto.
 
 ---
 
@@ -93,6 +74,36 @@ Registro de problemas, pendencias e melhorias identificadas.
 ---
 
 ## Resolvidos
+
+### [007] TTS Settings sem botao de acionamento
+
+- **Status:** Resolvido
+- **Data:** 2026-02-04
+- **Resolvido em:** 2026-02-04
+- **Severidade:** Alta
+- **Descricao:** As configuracoes de TTS (engine, profile, sliders) estao no Settings, mas nao existe botao visivel para acionar a leitura do texto.
+- **Solucao implementada:**
+  - Adicionado botao "Read/Stop" na toolbar do editor (entre MD e Copy)
+  - Botao alterna entre Volume2 (Read) e VolumeX (Stop) conforme estado
+  - Desabilitado quando sidecar indisponivel ou texto vazio
+  - Estilizacao visual: vermelho quando falando, neutro quando parado
+
+---
+
+### [008] Editor de texto nao permite escrita
+
+- **Status:** Resolvido
+- **Data:** 2026-02-04
+- **Resolvido em:** 2026-02-04
+- **Severidade:** Alta
+- **Descricao:** O editor de texto/preview principal nao permite escrita direta. Usuario nao consegue inputar texto para leitura TTS.
+- **Solucao implementada:**
+  - Textarea agora e sempre renderizado (antes so aparecia quando havia texto)
+  - Adicionado placeholder: "Digite ou cole texto aqui para leitura..."
+  - Icone decorativo (Feather/Terminal) movido para overlay com `pointer-events-none`
+  - Usuario pode digitar/colar texto diretamente no editor
+
+---
 
 ### [001] App nao gera texto - Sidecar nao inicia automaticamente
 
@@ -168,3 +179,4 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-01-31 | #001, #003 | Resolvidos via commit `170afb69` (SidecarManager + docs) |
 | 2026-02-04 | #006 | Documentada limitacao WebKitGTK + melhorias no tratamento de erro |
 | 2026-02-04 | #007, #008 | Issues TTS: sem botao de acionamento + editor nao editavel |
+| 2026-02-04 | #007, #008 | Resolvidos: botao TTS na toolbar + editor sempre editavel |
