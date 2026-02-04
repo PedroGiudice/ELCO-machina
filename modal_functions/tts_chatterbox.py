@@ -111,9 +111,17 @@ class TTSEngine:
         self,
         text: str,
         voice_ref_bytes: bytes | None = None,
-        temperature: float = 0.8,
-        top_p: float = 0.95,
-        repetition_penalty: float = 1.2,
+        exaggeration: float = 0.5,
+        speed: float = 1.0,
+        stability: float = 0.5,
+        steps: int = 10,
+        sentence_silence: float = 0.2,
+        cfg_weight: float = 0.5,
+        embedding_scale: float = 1.0,
+        temperature: float = 0.1,
+        repetition_penalty: float = 1.1,
+        top_p: float = 0.9,
+        seed: int | None = None,
     ) -> bytes:
         """
         Sintetiza audio a partir de texto.
@@ -121,16 +129,29 @@ class TTSEngine:
         Args:
             text: Texto para sintetizar (suporta tags paralinguisticas como [laugh], [chuckle])
             voice_ref_bytes: Bytes do audio de referencia para clonagem (minimo 5s, ideal 10s)
-            temperature: Controle de variabilidade (0.0 - 1.0, default 0.8)
-            top_p: Nucleus sampling (0.0 - 1.0, default 0.95)
-            repetition_penalty: Penalidade para repeticoes (default 1.2)
+            exaggeration: Expressividade (0=monotono, 2=dramatico)
+            speed: Velocidade de fala (0.5=lento, 2=rapido)
+            stability: Consistencia (0=variavel, 1=uniforme)
+            steps: Qualidade (4=rapido, 20=alta qualidade)
+            sentence_silence: Pausa entre frases (segundos)
+            cfg_weight: Fidelidade ao texto (0=criativo, 1=literal)
+            embedding_scale: Intensidade da voz clonada
+            temperature: Variabilidade (0=deterministico, 1=aleatorio)
+            repetition_penalty: Penalidade para repeticoes
+            top_p: Nucleus sampling
+            seed: Seed para reproducao
 
         Returns:
             Bytes do audio WAV gerado
         """
         import torchaudio as ta
+        import torch
 
         audio_prompt_path = None
+
+        # Configura seed se especificado
+        if seed is not None:
+            torch.manual_seed(seed)
 
         # Se tiver audio de referencia, salva em arquivo temporario
         if voice_ref_bytes:
@@ -144,14 +165,22 @@ class TTSEngine:
             # Gera audio
             text_preview = text[:50] + "..." if len(text) > 50 else text
             print(f"[TTSEngine] Sintetizando: {text_preview}")
+            print(f"[TTSEngine] Params: exag={exaggeration}, speed={speed}, steps={steps}")
+
+            # Prepara kwargs para generate
+            gen_kwargs = {
+                "exaggeration": exaggeration,
+                "cfg_weight": cfg_weight,
+            }
 
             if audio_prompt_path:
                 wav = self.model.generate(
                     text,
                     audio_prompt_path=audio_prompt_path,
+                    **gen_kwargs,
                 )
             else:
-                wav = self.model.generate(text)
+                wav = self.model.generate(text, **gen_kwargs)
 
             # Converte tensor para bytes WAV
             buffer = io.BytesIO()
