@@ -5,24 +5,13 @@ import { GoogleGenAI } from "@google/genai";
 import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, ensureSidecarRunning, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
 import {
   Loader2,
-  Trash2,
-  Copy,
   ChevronRight,
-  Check,
-  Plus,
-  Terminal,
-  FolderOpen,
   X,
-  FileAudio,
   Brain,
   Zap,
   Save,
-  Feather,
-  Activity,
   Mic,
   Settings,
-  Minus,
-  Users,
   Cpu,
   Monitor,
   LogOut,
@@ -31,8 +20,13 @@ import {
   Eye,
   EyeOff,
   Volume2,
-  VolumeX
 } from 'lucide-react';
+
+// Novos componentes modulares
+import { AppLayout } from './src/components/layout';
+import { Editor } from './src/components/editor';
+import { PanelATT, PanelTTS, PanelConfig } from './src/components/panels';
+import { useActivePanel } from './src/hooks/useActivePanel';
 
 // --- INDEXEDDB HELPER (For Audio & Context Persistence) ---
 const DB_NAME = 'GeminiArchitectDB';
@@ -345,97 +339,9 @@ const clearAllHistory = async (): Promise<void> => {
 const MAX_HISTORY_ITEMS = 500;
 
 
-// --- CUSTOM ICONS (Technical / Hard Surface Design) ---
-
-// Redesigned: Input/Creation Terminal
-const IconWorkspace = ({ className, active }: { className?: string, active?: boolean }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <rect x="3" y="4" width="18" height="16" rx="2" stroke={active ? "currentColor" : "currentColor"} className="opacity-90"/>
-    <path d="M7 12h2" strokeLinecap="round" strokeWidth="2" className={active ? "text-indigo-400" : "text-zinc-500"} />
-    <path d="M7 8l2 2-2 2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M3 8h18" className="opacity-20" />
-  </svg>
-);
-
-const IconAudio = ({ className, active }: { className?: string, active?: boolean }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M2 12C2 12 5 8 8 8C11 8 11 16 14 16C17 16 22 10 22 10" strokeLinecap="round" strokeLinejoin="round"/>
-    {active && <circle cx="2" cy="12" r="2" className="fill-current opacity-20 animate-ping" />}
-  </svg>
-);
-
-const IconStats = ({ className, active }: { className?: string, active?: boolean }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <circle cx="12" cy="12" r="9" className="opacity-20" />
-    <path d="M12 12L16 8M12 12L8 8M12 12L12 17" strokeLinecap="round" />
-    <circle cx="12" cy="12" r="2" fill="currentColor" />
-  </svg>
-);
-
-const IconHistory = ({ className, active }: { className?: string, active?: boolean }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M12 4V12L16 14" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M3 12C3 16.9706 7.02944 21 12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3" strokeLinecap="round" strokeLinejoin="round" className="opacity-60"/>
-    <path d="M3 12H5" strokeLinecap="round"/>
-  </svg>
-);
-
-const IconEditor = ({ className, active }: { className?: string, active?: boolean }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M14.5 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V7.5L14.5 2Z" className="opacity-50"/>
-    <path d="M14 2V8H20" strokeLinejoin="round"/>
-    <path d="M8 13H16" strokeLinecap="round"/>
-    <path d="M8 17H12" strokeLinecap="round"/>
-    {active && <path d="M16 17H16.01" strokeWidth="3" className="text-indigo-400"/>}
-  </svg>
-);
-
-const IconUpload = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M4 16V17C4 19.2091 5.79086 21 8 21H16C18.2091 21 20 19.2091 20 17V16" strokeLinecap="round"/>
-    <path d="M12 15V3M12 3L8 7M12 3L16 7" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const IconSettings = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M10 8H20M4 8H6" strokeLinecap="round"/>
-    <path d="M14 16H20M4 16H10" strokeLinecap="round"/>
-    <circle cx="8" cy="8" r="2" />
-    <circle cx="12" cy="16" r="2" />
-  </svg>
-);
-
-const IconMagic = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M12 3V5M12 19V21M3 12H5M19 12H21" strokeLinecap="round"/>
-    <path d="M5.63604 5.63604L7.05025 7.05025M16.9497 16.9497L18.364 18.364" strokeLinecap="round"/>
-    <path d="M5.63604 18.364L7.05025 16.9497M16.9497 7.05025L18.364 5.63604" strokeLinecap="round"/>
-    <path d="M12 8L12 16" strokeLinecap="round"/>
-  </svg>
-);
-
-const IconDownload = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M7 10L12 15L17 10" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M12 15V3" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const IconMarkdown = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
-    <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" strokeLinejoin="round"/>
-    <path d="M14 2V8H20" strokeLinejoin="round"/>
-    <path d="M12 18V12" strokeLinecap="round"/>
-    <path d="M9 15L12 12L15 15" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M8 9H16" className="opacity-0" /> 
-  </svg>
-);
+// Icones customizados removidos - agora usa lucide-react nos componentes modulares
 
 // --- TYPES ---
-type SidebarTab = 'workspace' | 'audio' | 'stats' | 'history';
-type MobileView = 'tools' | 'editor';
 type RecordingStyle = 'Dictation' | 'Interview';
 type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
 
@@ -775,10 +681,12 @@ export default function App() {
     setIsAuthenticated(false);
   };
 
-  const [activeTab, setActiveTab] = useState<SidebarTab>('workspace');
-  const [mobileView, setMobileView] = useState<MobileView>('tools');
+  // Estados antigos removidos - agora usa useActivePanel
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+  // Novo hook de painel ativo para o layout modular
+  const { activePanel, setActivePanel, isTransitioning } = useActivePanel('att');
 
   // Audio State
   const [isRecording, setIsRecording] = useState(false);
@@ -1540,12 +1448,7 @@ export default function App() {
     }
 
     setIsProcessing(true);
-    setActiveTab('stats');
-
-    // On Mobile, switch to editor view to see results coming in
-    if (window.innerWidth < 768) {
-      setMobileView('editor');
-    }
+    // Layout modular - nao precisa trocar tabs manualmente
 
     const startTime = performance.now();
 
@@ -2008,27 +1911,6 @@ export default function App() {
     addLog('Leitura interrompida', 'info');
   };
 
-  // --- COMPONENT: Icon Sidebar Item ---
-  const SidebarIcon = ({ id, icon: Icon, tooltip, onClick }: { id: string, icon: any, tooltip: string, onClick: () => void }) => (
-    <button
-      onClick={onClick}
-      className={`relative group w-10 h-10 flex items-center justify-center rounded-md transition-all ${
-        activeTab === id 
-          ? 'bg-zinc-800 text-zinc-100 shadow-md border border-zinc-700' 
-          : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-      }`}
-    >
-      <Icon className="w-6 h-6" active={activeTab === id} />
-      {/* Tooltip - Desktop Only */}
-      <div className="hidden md:block absolute left-14 bg-zinc-800 text-zinc-200 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-zinc-700 shadow-xl">
-        {tooltip}
-      </div>
-      {activeTab === id && (
-        <div className="hidden md:block absolute -left-[18px] top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full" style={{ backgroundColor: themeColor }} />
-      )}
-    </button>
-  );
-
   // Login Screen
   if (!isAuthenticated) {
     return (
@@ -2092,693 +1974,131 @@ export default function App() {
 
   return (
     <div
-        className="flex w-full overflow-hidden select-none flex-col md:flex-row relative transition-colors duration-300"
+        className="flex w-full overflow-hidden select-none flex-col relative transition-colors duration-300"
         style={{
           backgroundColor: bgColor,
           color: textColor,
           fontFamily: fontFamily,
           height: '100%',
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          paddingLeft: 'env(safe-area-inset-left, 0px)',
-          paddingRight: 'env(safe-area-inset-right, 0px)',
-          boxSizing: 'border-box'
-        }}
+          // CSS Variables para o design system
+          ['--bg-base' as string]: bgColor,
+          ['--bg-elevated' as string]: 'rgba(0,0,0,0.2)',
+          ['--bg-overlay' as string]: 'rgba(255,255,255,0.05)',
+          ['--text-primary' as string]: textColor,
+          ['--text-secondary' as string]: 'rgba(255,255,255,0.5)',
+          ['--border-subtle' as string]: 'rgba(255,255,255,0.1)',
+          ['--accent' as string]: themeColor,
+          ['--accent-dim' as string]: `${themeColor}20`,
+          ['--radius-sm' as string]: '4px',
+          ['--radius-md' as string]: '8px',
+          ['--sat' as string]: 'env(safe-area-inset-top, 0px)',
+          ['--sal' as string]: 'env(safe-area-inset-left, 0px)',
+          ['--sar' as string]: 'env(safe-area-inset-right, 0px)',
+          ['--sab' as string]: 'env(safe-area-inset-bottom, 0px)',
+        } as React.CSSProperties}
     >
-      
-      {/* 1. DESKTOP SIDEBAR (Hidden on Mobile) */}
-      <aside className="hidden md:flex w-[68px] flex-col items-center py-4 bg-black/20 border-r border-white/5 z-30 gap-4 justify-between">
-        <div className="flex flex-col items-center gap-4 w-full">
-            <div className="mb-2">
-                <div 
-                    className="w-9 h-9 rounded-lg flex items-center justify-center shadow-lg"
-                    style={{ background: `linear-gradient(135deg, ${themeColor}, ${themeColor}aa)` }}
-                >
-                    <IconMagic className="w-5 h-5 text-white" />
-                </div>
-            </div>
-            
-            <div className="flex-1 w-full flex flex-col items-center gap-4">
-                <SidebarIcon id="workspace" icon={IconWorkspace} tooltip="Workspace" onClick={() => { setActiveTab('workspace'); setMobileView('tools'); }} />
-                <div className="w-6 h-px bg-white/10 my-1"></div>
-                <SidebarIcon id="audio" icon={IconAudio} tooltip="Signal Analysis" onClick={() => { setActiveTab('audio'); setMobileView('tools'); }} />
-                <SidebarIcon id="stats" icon={IconStats} tooltip="Process Metrics" onClick={() => { setActiveTab('stats'); setMobileView('tools'); }} />
-                <SidebarIcon id="history" icon={IconHistory} tooltip="History" onClick={() => { setActiveTab('history'); setMobileView('tools'); }} />
-            </div>
-        </div>
-
-        <div className="mb-2">
-             <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="relative group w-10 h-10 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all"
-            >
-                <Settings className="w-6 h-6" />
-                <div className="hidden md:block absolute left-14 bg-zinc-800 text-zinc-200 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 border border-zinc-700 shadow-xl">
-                    Settings
-                </div>
-            </button>
-        </div>
-      </aside>
-
-      {/* 2. ACTION PANEL (The Tool View) */}
-      {/* On Mobile: Visible only if mobileView === 'tools' */}
-      <div className={`${mobileView === 'tools' ? 'flex' : 'hidden'} md:flex w-full md:w-[320px] bg-black/10 border-r border-white/5 flex-col z-20 h-full`}>
-        
-        {/* Header */}
-        <div className="h-12 border-b border-white/5 flex items-center px-5 justify-between bg-black/20 shrink-0">
-            <span className="text-xs font-semibold opacity-60 uppercase tracking-wider flex items-center gap-2">
-                {activeTab === 'workspace' && <><IconWorkspace className="w-4 h-4"/> Action Center</>}
-                {activeTab === 'audio' && <><IconAudio className="w-4 h-4"/> Signal Analysis</>}
-                {activeTab === 'stats' && <><IconStats className="w-4 h-4"/> System Metrics</>}
-                {activeTab === 'history' && <><IconHistory className="w-4 h-4"/> History</>}
-            </span>
-            
-            {/* Mobile Settings Trigger */}
-            <button onClick={() => setIsSettingsOpen(true)} className="md:hidden opacity-50 hover:opacity-100">
-                <Settings className="w-4 h-4" />
-            </button>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            
-            {/* WORKSPACE (Merged Input + Settings) */}
-            {activeTab === 'workspace' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-left-2 duration-200 pb-20 md:pb-0">
-                    
-                    {/* CONTEXT POOL SELECTOR */}
-                    <section className="space-y-3">
-                         <div className="flex items-center justify-between">
-                             <label className="text-[11px] font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                                <span className="flex items-center gap-2"><FolderOpen className="w-3 h-3" /> Context Scope</span>
-                            </label>
-                            <button onClick={openMemoryEditor} className="text-[9px] flex items-center gap-1 hover:opacity-80 transition-colors" style={{color: themeColor}}>
-                                <Brain className="w-3 h-3" />
-                                Memory
-                            </button>
-                         </div>
-                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-                          {contextPools.map(ctx => (
-                            <button
-                              key={ctx}
-                              onClick={() => setActiveContext(ctx)}
-                              className={`flex-shrink-0 px-3 py-1.5 rounded-sm text-[10px] font-medium transition-all border ${
-                                activeContext === ctx 
-                                ? 'bg-opacity-10 border-opacity-100' 
-                                : 'bg-white/5 border-white/10 opacity-50 hover:opacity-100'
-                              }`}
-                              style={activeContext === ctx ? { borderColor: themeColor, color: themeColor, backgroundColor: `${themeColor}20` } : {}}
-                            >
-                              {ctx}
-                            </button>
-                          ))}
-                          <button
-                            onClick={handleAddContext}
-                            className="flex-shrink-0 w-7 flex items-center justify-center rounded-sm bg-white/5 border border-white/10 opacity-50 hover:opacity-100"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                    </section>
-
-                    <div className="w-full h-px bg-white/10"></div>
-                    
-                    {/* Capture Section */}
-                    <section className="space-y-3">
-                        <label className="text-[11px] font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                            <Mic className="w-3 h-3" /> Audio Input
-                        </label>
-                        
-                         {/* Recording Style */}
-                        <div className="flex gap-2 bg-white/5 p-1 rounded-sm border border-white/10">
-                            {['Dictation', 'Interview'].map((style) => (
-                                <button
-                                    key={style}
-                                    onClick={() => setRecordingStyle(style as RecordingStyle)}
-                                    className={`flex-1 py-1.5 text-[10px] rounded-sm transition-all flex items-center justify-center gap-1.5 ${
-                                        recordingStyle === style 
-                                        ? 'bg-white/10 text-white font-medium' 
-                                        : 'text-zinc-500 hover:text-zinc-300'
-                                    }`}
-                                >
-                                   {style === 'Dictation' ? <Mic className="w-3 h-3"/> : <Users className="w-3 h-3"/>}
-                                   {style}
-                                </button>
-                            ))}
-                        </div>
-                        
-                        <div className="bg-white/5 rounded-md border border-white/10 p-3 shadow-sm mt-2">
-                            <div className="flex items-center gap-2 mb-3">
-                                {!isRecording ? (
-                                    <button 
-                                        onClick={startRecording}
-                                        className="flex-1 h-10 md:h-9 bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/20 rounded-sm text-xs font-medium flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-95"
-                                    >
-                                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                        Record
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={stopRecording}
-                                        className="flex-1 h-10 md:h-9 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-sm text-xs font-medium flex items-center justify-center gap-2 transition-all active:scale-95"
-                                    >
-                                        <div className="w-3 h-3 bg-red-500 rounded-sm"></div>
-                                        Stop
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Integrated Visualizer */}
-                            <div className="h-12 bg-black/40 rounded-sm border border-white/5 flex items-center justify-center overflow-hidden relative">
-                                <AudioVisualizer stream={audioStream} />
-                                {isRecording && (
-                                     <div className="absolute top-1 right-2 flex items-center gap-1.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-                                        <span className="text-[9px] text-red-400 font-mono tracking-tighter">LIVE</span>
-                                     </div>
-                                )}
-                            </div>
-                            
-                            <div className="mt-2 text-[9px] text-zinc-500 flex justify-between">
-                                <span>Using: {selectedMicId === 'default' ? 'Default Mic' : availableMics.find(m => m.deviceId === selectedMicId)?.label.slice(0, 15) + '...'}</span>
-                                <span className="opacity-50">AGC {autoGainControl ? 'ON' : 'OFF'}</span>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Upload Section */}
-                    <section className="space-y-3">
-                        <label className="text-[11px] font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                            <IconUpload className="w-3 h-3" /> Import File
-                        </label>
-                         <label className="flex items-center justify-between w-full h-11 md:h-10 px-3 bg-white/5 border border-white/10 border-dashed rounded-sm cursor-pointer hover:bg-white/10 transition-colors group">
-                            <span className="text-xs opacity-50 group-hover:opacity-80 truncate max-w-[180px]">
-                                {audioBlob && 'name' in audioBlob ? (audioBlob as File).name : "Select MP3, WAV..."}
-                            </span>
-                            <ChevronRight className="w-3 h-3 opacity-50" />
-                            <input type="file" className="hidden" accept="audio/*" onChange={handleFileUpload} />
-                        </label>
-                        {uploadError && <p className="text-[10px] text-red-400 pl-1">{uploadError}</p>}
-                    </section>
-
-                    <div className="w-full h-px bg-white/10"></div>
-
-                    {/* Configuration Section */}
-                    <section className="space-y-4">
-                        <label className="text-[11px] font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
-                            <IconSettings className="w-3 h-3" /> Output Settings
-                        </label>
-                        
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-[10px] opacity-40 mb-1.5 block">Target Language</label>
-                                <div className="relative">
-                                    <select 
-                                        value={outputLanguage}
-                                        onChange={(e) => setOutputLanguage(e.target.value as any)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-sm py-3 md:py-2 px-3 text-xs focus:outline-none transition-colors appearance-none"
-                                    >
-                                        <option value="English">English</option>
-                                        <option value="Portuguese">Portuguese</option>
-                                        <option value="Spanish">Spanish</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] opacity-40 mb-1.5 block">Prompt Style</label>
-                                <div className="relative">
-                                    <select 
-                                        value={outputStyle}
-                                        onChange={(e) => setOutputStyle(e.target.value as OutputStyle)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-sm py-3 md:py-2 px-3 text-xs focus:outline-none transition-colors appearance-none"
-                                    >
-                                        <option value="Whisper Only">Whisper Only (No Gemini)</option>
-                                        <option value="Verbatim">Verbatim (Exact Transcription)</option>
-                                        <option value="Elegant Prose">Elegant Prose</option>
-                                        <option value="Ana Suy">Ana Suy (Poetic/Psychoanalytic)</option>
-                                        <option value="Poetic / Verses">Poetic / Verses</option>
-                                        <option value="Normal">Normal</option>
-                                        <option value="Verbose">Verbose</option>
-                                        <option value="Concise">Concise</option>
-                                        <option value="Formal">Formal</option>
-                                        <option value="Prompt (Claude)">Prompt (Claude)</option>
-                                        <option value="Prompt (Gemini)">Prompt (Gemini)</option>
-                                        <option value="Bullet Points">Bullet Points</option>
-                                        <option value="Summary">Summary</option>
-                                        <option value="Tech Docs">Tech Docs</option>
-                                        <option value="Email">Email</option>
-                                        <option value="Tweet Thread">Tweet Thread</option>
-                                        <option value="Code Generator">Code Generator</option>
-                                        <option value="Custom">Custom Instruction</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Custom Style Input */}
-                            {outputStyle === 'Custom' && (
-                                <div className="animate-in fade-in zoom-in-95 duration-200">
-                                    <label className="text-[10px] opacity-40 mb-1.5 block flex justify-between">
-                                        <span>Instructions</span>
-                                        <span className={`${customStylePrompt.length > 150 ? 'text-red-400' : 'opacity-50'}`}>{customStylePrompt.length}/150</span>
-                                    </label>
-                                    <textarea
-                                        value={customStylePrompt}
-                                        onChange={(e) => setCustomStylePrompt(e.target.value.slice(0, 150))}
-                                        placeholder="E.g. Explain like I'm five, prioritize verbs..."
-                                        className="w-full h-20 bg-white/5 border border-white/10 rounded-sm p-3 text-xs focus:outline-none resize-none placeholder:opacity-30"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </section>
-
-                    {/* Action */}
-                    <button
-                        onClick={processAudio}
-                        disabled={!audioBlob || isProcessing}
-                        className={`w-full h-12 md:h-10 mt-2 rounded-sm font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg`}
-                        style={{
-                            backgroundColor: !audioBlob || isProcessing ? '#3f3f46' : themeColor,
-                            opacity: !audioBlob || isProcessing ? 0.5 : 1
-                        }}
-                    >
-                        {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Zap className="w-3.5 h-3.5 fill-current"/>}
-                        {isProcessing ? "Processing..." : (outputStyle === 'Verbatim' || outputStyle === 'Whisper Only') ? "Transcribe" : outputStyle === 'Code Generator' ? "Generate Code" : "Refine Text"}
-                    </button>
-
-                     {audioBlob && !isProcessing && (
-                         <div className="flex items-center gap-2 justify-center text-[10px] opacity-50 mt-2">
-                            <Check className="w-3 h-3 text-emerald-500" />
-                            Ready: {(audioBlob.size / 1024).toFixed(1)} KB
-                         </div>
-                    )}
-
-                    {/* TTS: Read Text Button */}
-                    {transcription && !isProcessing && (
-                        <button
-                            onClick={isSpeaking ? stopReadText : handleReadText}
-                            disabled={!sidecarAvailable}
-                            className={`w-full h-10 mt-3 rounded-sm font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-95 border ${
-                                isSpeaking
-                                    ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
-                                    : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
-                            } ${!sidecarAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
-                        >
-                            {isSpeaking ? (
-                                <>
-                                    <VolumeX className="w-3.5 h-3.5" />
-                                    Stop Reading
-                                </>
-                            ) : (
-                                <>
-                                    <Volume2 className="w-3.5 h-3.5" />
-                                    Read Text
-                                </>
-                            )}
-                        </button>
-                    )}
-                </div>
-            )}
-
-            {/* AUDIO ANALYSIS PANEL */}
-            {activeTab === 'audio' && (
-                <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-200">
-                    {!audioMetrics ? (
-                         <div className="h-full flex flex-col items-center justify-center opacity-40 min-h-[300px]">
-                            <IconAudio className="w-8 h-8 mb-2" />
-                            <p className="text-xs">No audio analyzed.</p>
-                        </div>
-                    ) : (
-                        <>
-                             {/* Audio Export Section */}
-                            <div className="bg-white/5 p-4 rounded-sm border border-white/10 flex flex-col gap-3">
-                                 <h3 className="text-[10px] uppercase opacity-50 font-bold tracking-wider flex items-center gap-2">
-                                    <FileAudio className="w-3 h-3"/> Export Recording
-                                </h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button 
-                                        onClick={() => handleAudioExport('wav')}
-                                        className="flex flex-col items-center justify-center p-3 bg-black/20 border border-white/5 rounded-sm hover:bg-white/5 transition-all group"
-                                    >
-                                        <span className="text-xs font-bold opacity-80">WAV</span>
-                                        <span className="text-[9px] opacity-50">High Quality</span>
-                                    </button>
-                                     <button 
-                                        onClick={() => handleAudioExport('webm')}
-                                        className="flex flex-col items-center justify-center p-3 bg-black/20 border border-white/5 rounded-sm hover:bg-white/5 transition-all group"
-                                    >
-                                        <span className="text-xs font-bold opacity-80">WEBM</span>
-                                        <span className="text-[9px] opacity-50">Compressed</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Clarity Score - NEW FEATURE */}
-                            <div className="bg-white/5 p-4 rounded-sm border border-white/10">
-                                <h3 className="text-[10px] uppercase opacity-50 font-bold mb-3 tracking-wider flex items-center gap-2">
-                                    <Activity className="w-3 h-3 text-emerald-400"/> Clarity & Intelligibility
-                                </h3>
-                                <div className="space-y-2">
-                                    <div className="flex items-end justify-between">
-                                        <span className="text-xs opacity-50">Speech Clarity Score</span>
-                                        <span className={`text-xl font-mono font-bold ${audioMetrics.clarityScore > 75 ? 'text-emerald-400' : audioMetrics.clarityScore > 40 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                            {audioMetrics.clarityScore.toFixed(0)}<span className="text-sm opacity-50">%</span>
-                                        </span>
-                                    </div>
-                                    <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                        <div 
-                                            className={`h-full rounded-full transition-all duration-1000 ${audioMetrics.clarityScore > 75 ? 'bg-emerald-500' : audioMetrics.clarityScore > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} 
-                                            style={{ width: `${audioMetrics.clarityScore}%` }}
-                                        />
-                                    </div>
-                                    <p className="text-[9px] opacity-50 pt-1">
-                                        {audioMetrics.clarityScore > 80 ? "Crystal clear audio. High accuracy expected." : 
-                                         audioMetrics.clarityScore > 50 ? "Good quality. Minor background noise detected." : 
-                                         "Low clarity. Transcription accuracy may be reduced."}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="bg-white/5 p-4 rounded-sm border border-white/10">
-                                <h3 className="text-[10px] uppercase opacity-50 font-bold mb-3 tracking-wider flex items-center gap-2">
-                                    Signal
-                                </h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <p className="text-xs opacity-50 mb-1">Silence</p>
-                                        <p className="text-base font-mono opacity-90">{audioMetrics.silenceRatio.toFixed(1)}%</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs opacity-50 mb-1">Est. Pitch</p>
-                                        <p className="text-base font-mono opacity-90 flex items-center gap-1">
-                                           {audioMetrics.avgPitchHz > 0 ? audioMetrics.avgPitchHz.toFixed(0) : '--'} <span className="text-[10px] opacity-50">Hz</span>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                             <div className="bg-white/5 p-4 rounded-sm border border-white/10">
-                                <h3 className="text-[10px] uppercase opacity-50 font-bold mb-3 tracking-wider flex items-center gap-2">
-                                    Format
-                                </h3>
-                                <div className="space-y-2 font-mono text-xs">
-                                    <div className="flex justify-between"><span className="opacity-50">Rate</span> <span>{audioMetrics.sampleRate} Hz</span></div>
-                                    <div className="flex justify-between"><span className="opacity-50">Ch</span> <span>{audioMetrics.channels}</span></div>
-                                    <div className="flex justify-between"><span className="opacity-50">Dur</span> <span>{audioMetrics.duration.toFixed(2)}s</span></div>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
-
-            {/* STATS PANEL */}
-            {activeTab === 'stats' && (
-                <div className="space-y-4 animate-in fade-in slide-in-from-left-2 duration-200">
-                    {!lastStats ? (
-                        <div className="h-full flex flex-col items-center justify-center opacity-40 min-h-[300px]">
-                            <IconStats className="w-8 h-8 mb-2" />
-                            <p className="text-xs">No process data.</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="bg-white/5 p-4 rounded-sm border border-white/10">
-                                <h3 className="text-[10px] uppercase opacity-50 font-bold mb-3 tracking-wider">Metrics</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <p className="text-xs opacity-50 mb-1">Words</p>
-                                        <p className="text-base font-mono">{lastStats.wordCount}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs opacity-50 mb-1">Characters</p>
-                                        <p className="text-base font-mono">{lastStats.charCount}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs opacity-50 mb-1">Reading Time</p>
-                                        <p className="text-base font-mono">{lastStats.readingTime}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs opacity-50 mb-1">Latency</p>
-                                        <p className="text-base font-mono">{(lastStats.processingTime / 1000).toFixed(2)}s</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white/5 p-4 rounded-sm border border-white/10">
-                                <h3 className="text-[10px] uppercase opacity-50 font-bold mb-3 tracking-wider">Applied Configuration</h3>
-                                <div className="space-y-2 text-xs">
-                                    <div className="flex justify-between">
-                                        <span className="opacity-50">Style Applied</span>
-                                        <span className="font-medium text-emerald-400">{lastStats.appliedStyle}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="opacity-50">Input Size</span>
-                                        <span className="font-mono opacity-80">{(lastStats.inputSize / 1024).toFixed(1)} KB</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                             <div className="bg-black/20 p-3 rounded-sm border border-white/10 mt-4">
-                                <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-2">
-                                    <span className="text-[10px] font-mono opacity-50">LIVE LOGS</span>
-                                </div>
-                                <div className="font-mono text-[10px] space-y-1.5 max-h-48 overflow-y-auto">
-                                    {logs.map((log, i) => (
-                                        <div key={i} className={`truncate ${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-emerald-400' : 'opacity-40'}`}>
-                                            <span className="opacity-30 mr-2">[{new Date().toLocaleTimeString().split(' ')[0]}]</span>
-                                            {log.msg}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
-            
-            {/* HISTORY PANEL */}
-            {activeTab === 'history' && (
-                <div className="space-y-3 animate-in fade-in slide-in-from-left-2 duration-200">
-                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-mono opacity-40">{history.length} item{history.length !== 1 ? 's' : ''}</span>
-                        {isTauri() && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded">Synced</span>}
-                     </div>
-                     {history.map((item) => (
-                        <div
-                            key={item.id}
-                            className="group bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 p-3 rounded-sm transition-all relative"
-                        >
-                            <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] opacity-50 font-mono">
-                                    {new Date(item.date).toLocaleDateString()} {new Date(item.date).toLocaleTimeString()}
-                                </span>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setHistory(prev => prev.filter(h => h.id !== item.id));
-                                    }}
-                                    className="opacity-0 group-hover:opacity-100 text-red-400/60 hover:text-red-400 transition-opacity p-1 -m-1"
-                                    title="Delete this item"
-                                >
-                                    <Trash2 className="w-3 h-3" />
-                                </button>
-                            </div>
-                            <p
-                                onClick={() => { setTranscription(item.text); setMobileView('editor'); }}
-                                className="text-xs line-clamp-3 font-sans opacity-80 group-hover:opacity-100 cursor-pointer"
-                            >
-                                {item.text}
-                            </p>
-                            <div className="flex gap-2 mt-2 pt-2 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                    onClick={() => { setTranscription(item.text); setMobileView('editor'); }}
-                                    className="text-[9px] px-2 py-1 bg-white/5 hover:bg-white/10 rounded transition-colors"
-                                >
-                                    Load
-                                </button>
-                                <button
-                                    onClick={() => { navigator.clipboard.writeText(item.text); addLog('Copied to clipboard', 'success'); }}
-                                    className="text-[9px] px-2 py-1 bg-white/5 hover:bg-white/10 rounded transition-colors flex items-center gap-1"
-                                >
-                                    <Copy className="w-2.5 h-2.5" /> Copy
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                    {history.length === 0 && (
-                        <div className="text-center py-10">
-                            <IconHistory className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                            <p className="text-xs opacity-40">No history yet.</p>
-                            <p className="text-[10px] opacity-30 mt-1">Transcriptions will appear here.</p>
-                        </div>
-                    )}
-                    {history.length > 0 && (
-                        <button
-                            onClick={async () => {
-                                await clearAllHistory();
-                                setHistory([]);
-                                addLog('History cleared', 'info');
-                            }}
-                            className="w-full text-[10px] opacity-50 hover:text-red-400 py-2 border-t border-white/10 mt-4 flex items-center justify-center gap-1"
-                        >
-                            <Trash2 className="w-3 h-3" /> Clear All History
-                        </button>
-                    )}
-                </div>
-            )}
-
-        </div>
-      </div>
-
-      {/* 3. MAIN EDITOR STAGE */}
-      {/* On Mobile: Visible only if mobileView === 'editor' */}
-      <main className={`${mobileView === 'editor' ? 'flex' : 'hidden'} md:flex flex-1 flex-col min-w-0 h-full`}>
-        {/* Toolbar */}
-        <div className="h-12 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-black/10 backdrop-blur shrink-0">
-            <div className="flex items-center gap-3">
-                 <h1 className="text-xs font-semibold opacity-80 uppercase tracking-wider flex items-center gap-2">
-                    {outputStyle === 'Code Generator' ? <Terminal className="w-4 h-4 text-indigo-400"/> : <Feather className="w-4 h-4 text-emerald-400"/>}
-                    Output
-                 </h1>
-                 
-                 {/* HEADER STATUS INDICATOR (For Cloud/Mobile visibility) */}
-                 {isProcessing && (
-                    <div className="flex items-center gap-2 px-2 py-1 bg-yellow-500/10 rounded-full border border-yellow-500/20">
-                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                        <span className="text-[9px] text-yellow-500 font-mono font-bold uppercase">Processing</span>
-                    </div>
-                 )}
-
-                 {transcription && !isProcessing && (
-                    <span 
-                        className="text-[9px] px-1.5 py-px rounded-sm font-mono opacity-80"
-                        style={{ backgroundColor: `${themeColor}20`, color: themeColor, borderColor: `${themeColor}40`, borderWidth: 1 }}
-                    >
-                        {activeContext.toUpperCase()}
-                    </span>
-                 )}
-            </div>
-            
-            <div className="flex items-center gap-1 md:gap-2">
-                <div className="hidden md:flex items-center bg-white/5 rounded-sm mr-2">
-                    <button onClick={() => setFontSize(Math.max(10, fontSize - 1))} className="p-1.5 hover:bg-white/10 text-xs"><Minus className="w-3 h-3"/></button>
-                    <span className="text-[10px] px-2 font-mono w-8 text-center">{fontSize}</span>
-                    <button onClick={() => setFontSize(Math.min(32, fontSize + 1))} className="p-1.5 hover:bg-white/10 text-xs"><Plus className="w-3 h-3"/></button>
-                </div>
-
-                <button
-                    onClick={() => setTranscription('')}
-                    className="p-1.5 hover:bg-white/10 rounded-sm opacity-50 hover:opacity-100 hover:text-red-400 transition-colors"
-                    title="Clear"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </button>
-                <div className="w-px h-4 bg-white/10 mx-1"></div>
-                <button
-                    onClick={() => handleDownloadText('txt')}
-                    className="flex items-center gap-1 px-2 md:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-sm transition-colors border border-white/5"
-                    title="Export TXT"
-                >
-                    <IconDownload className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                    <span className="text-[10px] md:text-xs">TXT</span>
-                </button>
-                <button
-                    onClick={() => handleDownloadText('md')}
-                    className="flex items-center gap-1 px-2 md:px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-sm transition-colors border border-white/5"
-                    title="Export Markdown"
-                >
-                    <IconMarkdown className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                    <span className="text-[10px] md:text-xs">MD</span>
-                </button>
-                {/* TTS Read Button */}
-                <button
-                    onClick={isSpeaking ? stopReadText : handleReadText}
-                    disabled={!sidecarAvailable || !transcription}
-                    className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 text-xs font-semibold rounded-sm transition-colors border ${
-                        isSpeaking
-                            ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
-                            : 'bg-white/10 border-white/5 hover:bg-white/20'
-                    } ${(!sidecarAvailable || !transcription) ? 'opacity-40 cursor-not-allowed' : ''}`}
-                    title={isSpeaking ? 'Parar leitura' : 'Ler texto em voz alta'}
-                >
-                    {isSpeaking ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                    <span className="hidden md:inline">{isSpeaking ? 'Stop' : 'Read'}</span>
-                </button>
-                <button
-                    onClick={() => {navigator.clipboard.writeText(transcription); addLog('Copied to clipboard', 'success')}}
-                    className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 bg-white text-black text-xs font-semibold rounded-sm transition-colors hover:bg-gray-200"
-                    title="Copy to clipboard"
-                >
-                    <Copy className="w-3 h-3" /> <span className="hidden md:inline">Copy</span>
-                </button>
-            </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 relative overflow-hidden">
-            <textarea
-                value={transcription}
-                onChange={(e) => setTranscription(e.target.value)}
-                spellCheck={false}
-                style={{ fontSize: `${fontSize}px` }}
-                className="w-full h-full bg-transparent border-0 p-4 md:p-8 resize-none focus:ring-0 focus:outline-none font-mono leading-relaxed placeholder:opacity-30"
-                placeholder={isProcessing ? "Refinando texto..." : "Digite ou cole texto aqui para leitura..."}
-            />
-            {/* Ícone decorativo como background quando vazio */}
-            {!transcription && !isProcessing && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-10 gap-4 select-none pointer-events-none">
-                    {outputStyle === 'Code Generator' ? <Terminal className="w-24 h-24" /> : <Feather className="w-24 h-24" />}
-                </div>
-            )}
-        </div>
-        
-        {/* Status Footer */}
-        <div className="h-7 border-t border-white/5 flex items-center px-4 justify-between bg-black/20 text-[9px] opacity-60 font-mono shrink-0 mb-[60px] md:mb-0">
-             <div className="flex items-center gap-4">
-                <span>Ln {transcription.split('\n').length}, Col {transcription.length}</span>
-                <span>UTF-8</span>
-                <span className="hidden md:inline">{fontFamily}</span>
-                <span className="hidden md:inline ml-2 opacity-50">Model: {aiModel.replace('gemini-', '')}</span>
-             </div>
-             <div className="flex items-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-yellow-500 animate-pulse' : 'bg-zinc-700'}`}></div>
-                <span>{isProcessing ? 'REFINING' : 'READY'}</span>
-             </div>
-        </div>
-      </main>
-
-      {/* 4. MOBILE BOTTOM NAVIGATION (Hidden on Desktop) */}
-      <nav
-        className="md:hidden fixed bottom-0 left-0 w-full bg-black border-t border-white/10 flex items-center justify-around z-50"
-        style={{
-          height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)'
-        }}
-      >
-          <button onClick={() => { setActiveTab('workspace'); setMobileView('tools'); }} className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'workspace' && mobileView === 'tools' ? 'opacity-100' : 'opacity-40'}`} style={activeTab === 'workspace' && mobileView === 'tools' ? { color: themeColor } : {}}>
-              <IconWorkspace className="w-6 h-6" active={activeTab === 'workspace' && mobileView === 'tools'}/>
-              <span className="text-[9px]">Input</span>
-          </button>
-          
-          <button onClick={() => { setActiveTab('audio'); setMobileView('tools'); }} className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'audio' && mobileView === 'tools' ? 'opacity-100' : 'opacity-40'}`} style={activeTab === 'audio' && mobileView === 'tools' ? { color: themeColor } : {}}>
-              <IconAudio className="w-6 h-6" active={activeTab === 'audio' && mobileView === 'tools'}/>
-              <span className="text-[9px]">Audio</span>
-          </button>
-
-          <div className="w-px h-8 bg-white/10 mx-1"></div>
-
-          {/* Special Toggle for Editor View */}
-          <button onClick={() => setMobileView('editor')} className={`flex flex-col items-center gap-1 p-2 ${mobileView === 'editor' ? 'opacity-100' : 'opacity-40'}`} style={mobileView === 'editor' ? { color: themeColor } : {}}>
-              <IconEditor className="w-6 h-6" active={mobileView === 'editor'}/>
-              <span className="text-[9px]">Editor</span>
-          </button>
-          
-          <button onClick={() => { setActiveTab('stats'); setMobileView('tools'); }} className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'stats' && mobileView === 'tools' ? 'opacity-100' : 'opacity-40'}`} style={activeTab === 'stats' && mobileView === 'tools' ? { color: themeColor } : {}}>
-              <IconStats className="w-6 h-6" active={activeTab === 'stats' && mobileView === 'tools'}/>
-              <span className="text-[9px]">Stats</span>
-          </button>
-      </nav>
+      <AppLayout
+        activePanel={activePanel}
+        onPanelChange={setActivePanel}
+        isProcessing={isProcessing}
+        editor={
+          <Editor
+            value={transcription}
+            onChange={setTranscription}
+            isProcessing={isProcessing}
+            isSpeaking={isSpeaking}
+            fontSize={fontSize}
+            onFontSizeChange={setFontSize}
+            onClear={() => { setTranscription(''); saveAudioToDB(null); setAudioBlob(null); }}
+            onCopy={() => { navigator.clipboard.writeText(transcription); addLog('Copied', 'success'); }}
+            onExportTxt={() => handleDownloadText('txt')}
+            onExportMd={() => handleDownloadText('md')}
+            onReadText={handleReadText}
+            onStopReading={stopReadText}
+            canRead={sidecarAvailable && !!transcription}
+            outputStyle={outputStyle}
+            activeContext={activeContext}
+            aiModel={aiModel}
+          />
+        }
+        panelATT={
+          <PanelATT
+            isRecording={isRecording}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+            audioBlob={audioBlob}
+            onFileUpload={handleFileUpload}
+            uploadError={uploadError}
+            recordingStyle={recordingStyle}
+            onRecordingStyleChange={setRecordingStyle}
+            contextPools={contextPools}
+            activeContext={activeContext}
+            onContextChange={setActiveContext}
+            onAddContext={handleAddContext}
+            onOpenMemory={openMemoryEditor}
+            outputLanguage={outputLanguage}
+            onLanguageChange={setOutputLanguage}
+            outputStyle={outputStyle}
+            onStyleChange={setOutputStyle}
+            customStylePrompt={customStylePrompt}
+            onCustomStyleChange={setCustomStylePrompt}
+            isProcessing={isProcessing}
+            onProcess={processAudio}
+            audioVisualizer={<AudioVisualizer stream={audioStream} />}
+            selectedMicLabel={selectedMicId === 'default' ? 'Default Mic' : availableMics.find(m => m.deviceId === selectedMicId)?.label?.slice(0, 15)}
+            autoGainControl={autoGainControl}
+          />
+        }
+        panelTTS={
+          <PanelTTS
+            isSpeaking={isSpeaking}
+            canSpeak={sidecarAvailable}
+            hasText={!!transcription}
+            onReadText={handleReadText}
+            onStopReading={stopReadText}
+            ttsEngine={ttsEngine}
+            onEngineChange={setTtsEngine}
+            ttsProfile={ttsProfile}
+            onProfileChange={setTtsProfile}
+            ttsCustomParams={ttsCustomParams}
+            onCustomParamsChange={setTtsCustomParams}
+            voiceRefAudio={voiceRefAudio}
+            onVoiceRefChange={setVoiceRefAudio}
+          />
+        }
+        panelConfig={
+          <PanelConfig
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            apiKey={apiKey}
+            apiKeyInput={apiKeyInput}
+            onApiKeyInputChange={setApiKeyInput}
+            onSaveApiKey={async () => { await saveApiKey(apiKeyInput.trim()); setApiKey(apiKeyInput.trim()); addLog('API Key saved', 'success'); }}
+            isApiKeyVisible={isApiKeyVisible}
+            onToggleApiKeyVisibility={() => setIsApiKeyVisible(!isApiKeyVisible)}
+            availableMics={availableMics}
+            selectedMicId={selectedMicId}
+            onMicChange={setSelectedMicId}
+            noiseSuppression={noiseSuppression}
+            onNoiseSuppressionChange={setNoiseSuppression}
+            echoCancellation={echoCancellation}
+            onEchoCancellationChange={setEchoCancellation}
+            autoGainControl={autoGainControl}
+            onAutoGainControlChange={setAutoGainControl}
+            aiModel={aiModel}
+            onAiModelChange={setAiModel}
+            transcriptionMode={transcriptionMode}
+            onTranscriptionModeChange={setTranscriptionMode}
+            sidecarAvailable={sidecarAvailable}
+            sidecarStatus={sidecarStatus}
+            whisperServerUrl={whisperServerUrl}
+            onWhisperServerUrlChange={setWhisperServerUrl}
+            onTestWhisperServer={testWhisperServer}
+            whisperTestStatus={whisperTestStatus}
+            whisperTestMessage={whisperTestMessage}
+          />
+        }
+      />
 
        {/* SETTINGS MODAL */}
        {isSettingsOpen && (
