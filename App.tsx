@@ -1872,7 +1872,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: transcription,
-          voice: 'pt-br-faber-medium',
+          voice: 'cloned',  // Usa Chatterbox via Modal (mais natural)
           preprocess: true,
         }),
       });
