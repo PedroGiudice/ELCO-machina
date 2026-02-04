@@ -17,6 +17,12 @@ from voice_ai.utils.text_preprocessor import (
     estimate_duration,
     split_into_chunks,
 )
+from voice_ai.schemas.tts_profiles import (
+    TTSParameters,
+    get_profile,
+    BUILTIN_PROFILES,
+    PARAM_DESCRIPTIONS,
+)
 
 router = APIRouter()
 
@@ -36,6 +42,10 @@ class SynthesizeRequest(BaseModel):
         default=None,
         description="Audio de referencia em base64 (minimo 5s, ideal 10s)"
     )
+
+    # Campos para configuracao TTS (Chatterbox)
+    profile: Optional[str] = Field(default="standard", description="Profile pre-definido")
+    params: Optional[TTSParameters] = Field(default=None, description="Parametros custom (sobrescreve profile)")
 
 
 class SynthesizeInfo(BaseModel):
@@ -146,6 +156,12 @@ async def _synthesize_with_modal(
         )
 
     try:
+        # Resolve parametros: custom > profile > default
+        if body.params:
+            params = body.params
+        else:
+            params = get_profile(body.profile or "standard")
+
         # Decodifica audio de referencia se fornecido
         voice_ref_bytes = None
         if body.voice_ref:
@@ -157,10 +173,11 @@ async def _synthesize_with_modal(
                     detail="voice_ref invalido. Deve ser audio em base64.",
                 )
 
-        # Chama Modal (sincrono - Modal lida com async internamente)
+        # Chama Modal com parametros
         audio_bytes = modal_client.synthesize(
             text=text,
             voice_ref_bytes=voice_ref_bytes,
+            params=params,
         )
 
         return Response(
@@ -169,6 +186,7 @@ async def _synthesize_with_modal(
             headers={
                 "Content-Disposition": f'attachment; filename="speech.{body.format}"',
                 "X-TTS-Engine": "modal-chatterbox",
+                "X-TTS-Profile": body.profile or "standard",
             },
         )
 
@@ -276,3 +294,16 @@ async def modal_status(request: Request) -> ModalStatus:
             status="error",
             error=str(e),
         )
+
+
+@router.get("/profiles")
+async def list_profiles() -> dict:
+    """Lista profiles TTS disponiveis e descricoes dos parametros."""
+    return {
+        "builtin": {
+            name: profile.model_dump()
+            for name, profile in BUILTIN_PROFILES.items()
+        },
+        "default": "standard",
+        "descriptions": PARAM_DESCRIPTIONS,
+    }
