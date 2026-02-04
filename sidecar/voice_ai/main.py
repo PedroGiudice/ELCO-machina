@@ -16,12 +16,14 @@ from pydantic import BaseModel
 from voice_ai.routers import transcribe, synthesize
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
+from voice_ai.services.tts_modal_client import TTSModalClient
 
 
 # Estado global do aplicativo
 class AppState:
     stt_service: STTService | None = None
     tts_service: TTSService | None = None
+    modal_client: TTSModalClient | None = None
     models_loaded: bool = False
     startup_error: str | None = None
 
@@ -49,7 +51,16 @@ async def lifespan(app: FastAPI):
         if state.tts_service.is_available:
             print("[VoiceAI] TTS (Piper) disponivel")
         else:
-            print("[VoiceAI] TTS (Piper) nao instalado - sintese desabilitada")
+            print("[VoiceAI] TTS (Piper) nao instalado - sintese local desabilitada")
+
+        # Inicializa Modal Client (Chatterbox - clonagem de voz)
+        state.modal_client = TTSModalClient()
+        if state.modal_client.is_available:
+            print("[VoiceAI] TTS (Modal/Chatterbox) disponivel")
+        elif state.modal_client.is_enabled:
+            print("[VoiceAI] TTS (Modal) habilitado mas credenciais ausentes")
+        else:
+            print("[VoiceAI] TTS (Modal) desabilitado (MODAL_ENABLED=false)")
 
         state.models_loaded = True
         print("[VoiceAI] Sidecar pronto!")
@@ -131,6 +142,14 @@ async def health_check() -> HealthResponse:
         else:
             piper_status = "not_installed"
 
+    # Status do Modal (Chatterbox)
+    modal_status = "disabled"
+    if state.modal_client:
+        if state.modal_client.is_available:
+            modal_status = "available"
+        elif state.modal_client.is_enabled:
+            modal_status = "credentials_missing"
+
     return HealthResponse(
         status="healthy" if state.models_loaded else "degraded",
         version="0.2.0",
@@ -142,6 +161,10 @@ async def health_check() -> HealthResponse:
             "piper": {
                 "status": piper_status,
                 "voice": piper_voice,
+            },
+            "modal": {
+                "status": modal_status,
+                "engine": "chatterbox",
             },
         },
         error=state.startup_error,
@@ -173,6 +196,7 @@ async def inject_services(request, call_next):
     """Injeta servicos no request state para uso nos endpoints."""
     request.state.stt_service = state.stt_service
     request.state.tts_service = state.tts_service
+    request.state.modal_client = state.modal_client
     response = await call_next(request)
     return response
 

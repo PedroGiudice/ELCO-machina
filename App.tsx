@@ -29,7 +29,9 @@ import {
   AlertTriangle,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 
 // --- INDEXEDDB HELPER (For Audio & Context Persistence) ---
@@ -840,6 +842,11 @@ export default function App() {
   });
   const [whisperTestStatus, setWhisperTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
+
+  // TTS State (Text-to-Speech)
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
@@ -1839,6 +1846,80 @@ export default function App() {
     }
   };
 
+  // --- TTS: Read Text Aloud ---
+  const handleReadText = async () => {
+    if (!transcription.trim()) {
+      addLog('Nenhum texto para ler', 'error');
+      return;
+    }
+
+    // Stop current playback if any
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current = null;
+    }
+    if (ttsAudioUrl) {
+      URL.revokeObjectURL(ttsAudioUrl);
+      setTtsAudioUrl(null);
+    }
+
+    setIsSpeaking(true);
+    addLog('Sintetizando audio...', 'info');
+
+    try {
+      const response = await fetch(`${whisperServerUrl}/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: transcription,
+          voice: 'pt-br-faber-medium',
+          preprocess: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Erro desconhecido' }));
+        throw new Error(error.detail || `HTTP ${response.status}`);
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      setTtsAudioUrl(audioUrl);
+
+      // Create and play audio
+      const audio = new Audio(audioUrl);
+      ttsAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        addLog('Leitura concluida', 'success');
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        addLog('Erro ao reproduzir audio', 'error');
+      };
+
+      await audio.play();
+      addLog('Reproduzindo...', 'success');
+
+    } catch (err: any) {
+      console.error('TTS Error:', err);
+      addLog(`Erro TTS: ${err.message}`, 'error');
+      setIsSpeaking(false);
+    }
+  };
+
+  const stopReadText = () => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      ttsAudioRef.current = null;
+    }
+    setIsSpeaking(false);
+    addLog('Leitura interrompida', 'info');
+  };
+
   // --- COMPONENT: Icon Sidebar Item ---
   const SidebarIcon = ({ id, icon: Icon, tooltip, onClick }: { id: string, icon: any, tooltip: string, onClick: () => void }) => (
     <button
@@ -2142,6 +2223,31 @@ export default function App() {
                             <Check className="w-3 h-3 text-emerald-500" />
                             Ready: {(audioBlob.size / 1024).toFixed(1)} KB
                          </div>
+                    )}
+
+                    {/* TTS: Read Text Button */}
+                    {transcription && !isProcessing && (
+                        <button
+                            onClick={isSpeaking ? stopReadText : handleReadText}
+                            disabled={!sidecarAvailable}
+                            className={`w-full h-10 mt-3 rounded-sm font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-95 border ${
+                                isSpeaking
+                                    ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
+                                    : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+                            } ${!sidecarAvailable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        >
+                            {isSpeaking ? (
+                                <>
+                                    <VolumeX className="w-3.5 h-3.5" />
+                                    Stop Reading
+                                </>
+                            ) : (
+                                <>
+                                    <Volume2 className="w-3.5 h-3.5" />
+                                    Read Text
+                                </>
+                            )}
+                        </button>
                     )}
                 </div>
             )}

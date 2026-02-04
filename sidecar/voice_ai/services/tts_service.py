@@ -128,24 +128,39 @@ class TTSService:
             True se baixou com sucesso
         """
         import urllib.request
-        import json
 
-        base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
-        lang = model_name.split("-")[0]  # pt_BR
+        # Estrutura do HuggingFace Piper Voices:
+        # https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/{speaker}/{quality}/{model_name}.onnx
+        base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0"
+
+        # Extrai componentes do model_name (ex: pt_BR-faber-medium)
+        # Formato: {lang}_{region}-{speaker}-{quality}
+        parts = model_name.split("-")
+        if len(parts) != 3:
+            print(f"[TTSService] Formato de modelo invalido: {model_name}")
+            return False
+
+        lang_region = parts[0]  # pt_BR
+        speaker = parts[1]  # faber
+        quality = parts[2]  # medium
+
+        # Converte pt_BR para pt/pt_BR
+        lang = lang_region.split("_")[0]  # pt
 
         try:
             # Baixa arquivo ONNX
-            onnx_url = f"{base_url}/{lang}/{model_name}/{model_name}.onnx"
+            onnx_url = f"{base_url}/{lang}/{lang_region}/{speaker}/{quality}/{model_name}.onnx"
             onnx_path = self.models_dir / f"{model_name}.onnx"
             print(f"[TTSService] Baixando {onnx_url}...")
             urllib.request.urlretrieve(onnx_url, onnx_path)
 
             # Baixa arquivo de configuracao
-            config_url = f"{base_url}/{lang}/{model_name}/{model_name}.onnx.json"
+            config_url = f"{base_url}/{lang}/{lang_region}/{speaker}/{quality}/{model_name}.onnx.json"
             config_path = self.models_dir / f"{model_name}.onnx.json"
             print(f"[TTSService] Baixando {config_url}...")
             urllib.request.urlretrieve(config_url, config_path)
 
+            print(f"[TTSService] Modelo {model_name} baixado com sucesso!")
             return True
 
         except Exception as e:
@@ -187,18 +202,15 @@ class TTSService:
         speed = max(0.5, min(2.0, speed))
 
         try:
-            # Buffer para audio raw
-            audio_buffer = io.BytesIO()
+            from piper.config import SynthesisConfig
 
-            # Sintetiza
-            # Piper retorna generator de audio int16
-            synthesize_args = {"length_scale": 1.0 / speed}
+            # Configura sintese com velocidade
+            syn_config = SynthesisConfig(length_scale=1.0 / speed)
 
+            # Sintetiza - piper.synthesize() retorna generator de AudioChunk
             audio_data = b""
-            for audio_chunk in self._voice.synthesize_stream_raw(
-                text, **synthesize_args
-            ):
-                audio_data += audio_chunk
+            for audio_chunk in self._voice.synthesize(text, syn_config):
+                audio_data += audio_chunk.audio_int16_bytes
 
             if output_format == "raw":
                 return audio_data

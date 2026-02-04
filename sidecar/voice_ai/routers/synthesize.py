@@ -1,10 +1,12 @@
 """
 Synthesize Router - Endpoint /synthesize
 
-Endpoint para sintese de texto em audio usando Piper TTS.
+Endpoint para sintese de texto em audio usando Piper TTS (local)
+ou Chatterbox via Modal (clonagem de voz).
 """
 
-from typing import Literal
+import base64
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -23,11 +25,17 @@ class SynthesizeRequest(BaseModel):
     """Request para sintese de audio."""
 
     text: str = Field(..., min_length=1, max_length=10000, description="Texto para sintetizar")
-    voice: str = Field(default="pt-br-faber-medium", description="ID da voz")
-    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Velocidade (0.5-2.0)")
+    voice: str = Field(default="pt-br-faber-medium", description="ID da voz ou 'cloned' para Modal")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Velocidade (0.5-2.0, so Piper)")
     format: Literal["wav", "mp3"] = Field(default="wav", description="Formato de saida")
     preprocess: bool = Field(default=True, description="Preprocessar Markdown")
     read_code: bool = Field(default=False, description="Ler blocos de codigo")
+
+    # Campos para clonagem de voz (Modal/Chatterbox)
+    voice_ref: Optional[str] = Field(
+        default=None,
+        description="Audio de referencia em base64 (minimo 5s, ideal 10s)"
+    )
 
 
 class SynthesizeInfo(BaseModel):
@@ -40,10 +48,23 @@ class SynthesizeInfo(BaseModel):
     voice: str
 
 
+class ModalStatus(BaseModel):
+    """Status do servico Modal."""
+
+    enabled: bool
+    available: bool
+    status: str
+    error: Optional[str] = None
+
+
 @router.post("")
 async def synthesize(request: Request, body: SynthesizeRequest) -> Response:
     """
     Sintetiza texto em audio.
+
+    Modos:
+    - voice="pt-br-*": Usa Piper TTS local (rapido, sem clonagem)
+    - voice="cloned": Usa Chatterbox via Modal (GPU, com clonagem)
 
     Args:
         body: Texto e configuracoes
@@ -51,27 +72,39 @@ async def synthesize(request: Request, body: SynthesizeRequest) -> Response:
     Returns:
         Audio WAV ou MP3
     """
+    # Preprocessa texto se solicitado
+    text = body.text
+    if body.preprocess:
+        text = preprocess_for_tts(text, read_code=body.read_code)
+
+    if not text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Texto vazio apos preprocessamento.",
+        )
+
+    # Decide qual servico usar
+    if body.voice == "cloned":
+        return await _synthesize_with_modal(request, text, body)
+    else:
+        return await _synthesize_with_piper(request, text, body)
+
+
+async def _synthesize_with_piper(
+    request: Request,
+    text: str,
+    body: SynthesizeRequest
+) -> Response:
+    """Sintetiza usando Piper TTS local."""
     tts_service = request.state.tts_service
 
     if not tts_service or not tts_service.is_available:
         raise HTTPException(
             status_code=503,
-            detail="TTS nao disponivel. Verifique se piper-tts esta instalado.",
+            detail="TTS local (Piper) nao disponivel. Verifique se piper-tts esta instalado.",
         )
 
     try:
-        # Preprocessa texto se solicitado
-        text = body.text
-        if body.preprocess:
-            text = preprocess_for_tts(text, read_code=body.read_code)
-
-        if not text.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Texto vazio apos preprocessamento.",
-            )
-
-        # Sintetiza
         audio_bytes = tts_service.synthesize(
             text=text,
             voice_id=body.voice,
@@ -79,25 +112,70 @@ async def synthesize(request: Request, body: SynthesizeRequest) -> Response:
             output_format="wav",
         )
 
-        # TODO: Converter para MP3 se solicitado
-        # Por enquanto, sempre retorna WAV
         content_type = "audio/wav"
-        if body.format == "mp3":
-            # Placeholder - implementar conversao com ffmpeg
-            content_type = "audio/wav"
+        # TODO: Converter para MP3 se solicitado
 
         return Response(
             content=audio_bytes,
             media_type=content_type,
             headers={
                 "Content-Disposition": f'attachment; filename="speech.{body.format}"',
+                "X-TTS-Engine": "piper",
             },
         )
 
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na sintese: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro na sintese Piper: {e}")
+
+
+async def _synthesize_with_modal(
+    request: Request,
+    text: str,
+    body: SynthesizeRequest
+) -> Response:
+    """Sintetiza usando Chatterbox via Modal (GPU)."""
+    modal_client = request.state.modal_client
+
+    if not modal_client or not modal_client.is_available:
+        raise HTTPException(
+            status_code=503,
+            detail="TTS com clonagem (Modal) nao disponivel. "
+                   "Verifique MODAL_ENABLED=true e credenciais.",
+        )
+
+    try:
+        # Decodifica audio de referencia se fornecido
+        voice_ref_bytes = None
+        if body.voice_ref:
+            try:
+                voice_ref_bytes = base64.b64decode(body.voice_ref)
+            except Exception:
+                raise HTTPException(
+                    status_code=400,
+                    detail="voice_ref invalido. Deve ser audio em base64.",
+                )
+
+        # Chama Modal (sincrono - Modal lida com async internamente)
+        audio_bytes = modal_client.synthesize(
+            text=text,
+            voice_ref_bytes=voice_ref_bytes,
+        )
+
+        return Response(
+            content=audio_bytes,
+            media_type="audio/wav",
+            headers={
+                "Content-Disposition": f'attachment; filename="speech.{body.format}"',
+                "X-TTS-Engine": "modal-chatterbox",
+            },
+        )
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na sintese Modal: {e}")
 
 
 @router.post("/info")
@@ -107,12 +185,10 @@ async def synthesize_info(request: Request, body: SynthesizeRequest) -> Synthesi
 
     Util para estimar duracao e validar texto.
     """
-    # Preprocessa texto
     text = body.text
     if body.preprocess:
         text = preprocess_for_tts(text, read_code=body.read_code)
 
-    # Calcula info
     chunks = split_into_chunks(text)
     duration = estimate_duration(text)
 
@@ -127,14 +203,76 @@ async def synthesize_info(request: Request, body: SynthesizeRequest) -> Synthesi
 
 @router.get("/voices")
 async def list_voices(request: Request) -> dict:
-    """Lista vozes disponiveis."""
+    """Lista vozes disponiveis (locais e Modal)."""
     tts_service = request.state.tts_service
+    modal_client = request.state.modal_client
 
-    if not tts_service:
-        return {"voices": {}, "default": None, "available": False}
+    local_voices = {}
+    local_available = False
+    local_default = None
+
+    if tts_service:
+        local_voices = tts_service.get_voices()
+        local_available = tts_service.is_available
+        local_default = tts_service.DEFAULT_VOICE
+
+    modal_available = modal_client.is_available if modal_client else False
 
     return {
-        "voices": tts_service.get_voices(),
-        "default": tts_service.DEFAULT_VOICE,
-        "available": tts_service.is_available,
+        "local": {
+            "voices": local_voices,
+            "default": local_default,
+            "available": local_available,
+        },
+        "cloned": {
+            "available": modal_available,
+            "description": "Clonagem de voz via Modal/Chatterbox (requer voice_ref)",
+        },
+        # Retrocompatibilidade
+        "voices": local_voices,
+        "default": local_default,
+        "available": local_available,
     }
+
+
+@router.get("/modal/status")
+async def modal_status(request: Request) -> ModalStatus:
+    """Retorna status do servico Modal."""
+    modal_client = request.state.modal_client
+
+    if not modal_client:
+        return ModalStatus(
+            enabled=False,
+            available=False,
+            status="not_configured",
+        )
+
+    if not modal_client.is_enabled:
+        return ModalStatus(
+            enabled=False,
+            available=False,
+            status="disabled",
+        )
+
+    if not modal_client.is_available:
+        return ModalStatus(
+            enabled=True,
+            available=False,
+            status="credentials_missing",
+        )
+
+    # Tenta health check
+    try:
+        health = modal_client.health()
+        return ModalStatus(
+            enabled=True,
+            available=True,
+            status=health.get("status", "unknown"),
+        )
+    except Exception as e:
+        return ModalStatus(
+            enabled=True,
+            available=False,
+            status="error",
+            error=str(e),
+        )
