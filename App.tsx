@@ -848,12 +848,50 @@ export default function App() {
   const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // TTS Settings
+  const [ttsEngine, setTtsEngine] = useState<'piper' | 'chatterbox'>('chatterbox');
+  const [ttsProfile, setTtsProfile] = useState<string>('standard');
+  const [voiceRefAudio, setVoiceRefAudio] = useState<string | null>(null);
+  const [ttsCustomParams, setTtsCustomParams] = useState({
+    exaggeration: 0.5,
+    speed: 1.0,
+    stability: 0.5,
+    steps: 10,
+    sentence_silence: 0.2,
+  });
+
   // Persist Effects
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
   useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
   useEffect(() => localStorage.setItem('gemini_current_work', transcription), [transcription]);
   useEffect(() => localStorage.setItem('gemini_ai_model', aiModel), [aiModel]);
+
+  // Persist TTS Settings
+  useEffect(() => {
+    localStorage.setItem('tts_settings', JSON.stringify({
+      engine: ttsEngine,
+      profile: ttsProfile,
+      customParams: ttsCustomParams,
+      voiceRef: voiceRefAudio,
+    }));
+  }, [ttsEngine, ttsProfile, ttsCustomParams, voiceRefAudio]);
+
+  // Load TTS Settings on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('tts_settings');
+    if (saved) {
+      try {
+        const settings = JSON.parse(saved);
+        if (settings.engine) setTtsEngine(settings.engine);
+        if (settings.profile) setTtsProfile(settings.profile);
+        if (settings.customParams) setTtsCustomParams(settings.customParams);
+        if (settings.voiceRef) setVoiceRefAudio(settings.voiceRef);
+      } catch (e) {
+        console.warn('Failed to load TTS settings:', e);
+      }
+    }
+  }, []);
 
   // Load API Key on mount
   useEffect(() => {
@@ -1867,14 +1905,28 @@ export default function App() {
     addLog('Sintetizando audio...', 'info');
 
     try {
+      // Build request body based on TTS settings
+      const requestBody: Record<string, unknown> = {
+        text: transcription,
+        voice: ttsEngine === 'chatterbox' ? 'cloned' : 'pt-br-faber-medium',
+        preprocess: true,
+      };
+
+      if (ttsEngine === 'chatterbox') {
+        if (ttsProfile === 'custom') {
+          requestBody.params = ttsCustomParams;
+        } else {
+          requestBody.profile = ttsProfile;
+        }
+        if (voiceRefAudio) {
+          requestBody.voice_ref = voiceRefAudio;
+        }
+      }
+
       const response = await fetch(`${whisperServerUrl}/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: transcription,
-          voice: 'cloned',  // Usa Chatterbox via Modal (mais natural)
-          preprocess: true,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -2847,6 +2899,193 @@ export default function App() {
                                     : whisperTestMessage}
                             </p>
                         </div>
+                    </div>
+
+                    <div className="w-full h-px bg-white/5"></div>
+
+                    {/* SECTION 2.5: TTS SETTINGS */}
+                    <div className="space-y-4">
+                        <h3 className="text-xs font-bold opacity-50 uppercase tracking-wider flex items-center gap-2">
+                            <Volume2 className="w-3 h-3" /> Text-to-Speech
+                        </h3>
+
+                        {/* Engine Selection */}
+                        <div>
+                            <label className="text-[10px] opacity-60 mb-1.5 block">TTS Engine</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => setTtsEngine('chatterbox')}
+                                    className={`flex flex-col items-start p-3 rounded-sm border transition-all text-left ${
+                                        ttsEngine === 'chatterbox'
+                                        ? 'bg-white/10 border-white/30'
+                                        : 'bg-white/5 border-white/5 opacity-60 hover:opacity-100'
+                                    }`}
+                                    style={ttsEngine === 'chatterbox' ? { borderColor: themeColor } : {}}
+                                >
+                                    <span className="text-xs font-bold">Chatterbox</span>
+                                    <span className="text-[9px] opacity-50">Natural, clonagem de voz</span>
+                                </button>
+                                <button
+                                    onClick={() => setTtsEngine('piper')}
+                                    className={`flex flex-col items-start p-3 rounded-sm border transition-all text-left ${
+                                        ttsEngine === 'piper'
+                                        ? 'bg-white/10 border-white/30'
+                                        : 'bg-white/5 border-white/5 opacity-60 hover:opacity-100'
+                                    }`}
+                                    style={ttsEngine === 'piper' ? { borderColor: themeColor } : {}}
+                                >
+                                    <span className="text-xs font-bold">Piper</span>
+                                    <span className="text-[9px] opacity-50">Local, rapido</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Chatterbox-specific settings */}
+                        {ttsEngine === 'chatterbox' && (
+                            <>
+                                {/* Profile Selection */}
+                                <div>
+                                    <label className="text-[10px] opacity-60 mb-1.5 block">Profile</label>
+                                    <div className="relative">
+                                        <select
+                                            value={ttsProfile}
+                                            onChange={(e) => setTtsProfile(e.target.value)}
+                                            className="w-full bg-black/20 border border-white/10 rounded-sm py-2 px-3 text-xs focus:outline-none transition-colors appearance-none"
+                                        >
+                                            <option value="standard">Standard</option>
+                                            <option value="legal">Legal (Formal)</option>
+                                            <option value="expressive">Expressive</option>
+                                            <option value="fast_preview">Fast Preview</option>
+                                            <option value="custom">Custom</option>
+                                        </select>
+                                        <ChevronRight className="absolute right-3 top-2.5 w-3 h-3 opacity-50 pointer-events-none rotate-90" />
+                                    </div>
+                                </div>
+
+                                {/* Custom Parameters */}
+                                {ttsProfile === 'custom' && (
+                                    <div className="space-y-3 p-3 bg-black/20 rounded-sm border border-white/5">
+                                        {/* Exaggeration */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Expressividade</span>
+                                                <span className="opacity-40">{ttsCustomParams.exaggeration.toFixed(1)}</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="2" step="0.1"
+                                                value={ttsCustomParams.exaggeration}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, exaggeration: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                            <p className="text-[9px] opacity-30 mt-0.5">0=monotono, 2=dramatico</p>
+                                        </div>
+
+                                        {/* Speed */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Velocidade</span>
+                                                <span className="opacity-40">{ttsCustomParams.speed.toFixed(1)}x</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0.5" max="2" step="0.1"
+                                                value={ttsCustomParams.speed}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, speed: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                        </div>
+
+                                        {/* Stability */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Estabilidade</span>
+                                                <span className="opacity-40">{ttsCustomParams.stability.toFixed(1)}</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="1" step="0.1"
+                                                value={ttsCustomParams.stability}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, stability: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                            <p className="text-[9px] opacity-30 mt-0.5">0=variavel, 1=uniforme</p>
+                                        </div>
+
+                                        {/* Steps */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Qualidade</span>
+                                                <span className="opacity-40">{ttsCustomParams.steps} steps</span>
+                                            </div>
+                                            <input
+                                                type="range" min="4" max="20" step="1"
+                                                value={ttsCustomParams.steps}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, steps: parseInt(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                            <p className="text-[9px] opacity-30 mt-0.5">4=rapido, 20=alta qualidade</p>
+                                        </div>
+
+                                        {/* Sentence Silence */}
+                                        <div>
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="opacity-60">Pausa entre frases</span>
+                                                <span className="opacity-40">{ttsCustomParams.sentence_silence.toFixed(1)}s</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="1" step="0.1"
+                                                value={ttsCustomParams.sentence_silence}
+                                                onChange={(e) => setTtsCustomParams(p => ({...p, sentence_silence: parseFloat(e.target.value)}))}
+                                                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                                style={{ accentColor: themeColor }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Voice Cloning */}
+                                <div className="p-3 bg-black/20 rounded-sm border border-white/5">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] opacity-60">Clonagem de Voz</span>
+                                        {voiceRefAudio && (
+                                            <button
+                                                onClick={() => setVoiceRefAudio(null)}
+                                                className="text-[9px] text-red-400 hover:text-red-300"
+                                            >
+                                                Remover
+                                            </button>
+                                        )}
+                                    </div>
+                                    {voiceRefAudio ? (
+                                        <div className="flex items-center gap-2 text-xs text-green-400">
+                                            <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                                            Audio carregado
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <p className="text-[9px] opacity-40 mb-2">
+                                                Importe audio de 5-15s da voz a clonar.
+                                            </p>
+                                            <input
+                                                type="file"
+                                                accept="audio/*"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const buffer = await file.arrayBuffer();
+                                                        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                                                        setVoiceRefAudio(base64);
+                                                    }
+                                                }}
+                                                className="text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded-sm file:border-0 file:text-[10px] file:bg-white/10 file:text-white/60 hover:file:bg-white/20"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <div className="w-full h-px bg-white/5"></div>
