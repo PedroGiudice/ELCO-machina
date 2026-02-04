@@ -437,17 +437,18 @@ type MobileView = 'tools' | 'editor';
 type RecordingStyle = 'Dictation' | 'Interview';
 type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
 
-type OutputStyle = 
+type OutputStyle =
+  | 'Whisper Only'
   | 'Verbatim'
   | 'Elegant Prose'
   | 'Ana Suy'
   | 'Poetic / Verses'
-  | 'Normal' 
-  | 'Verbose' 
-  | 'Concise' 
-  | 'Formal' 
-  | 'Prompt (Claude)' 
-  | 'Prompt (Gemini)' 
+  | 'Normal'
+  | 'Verbose'
+  | 'Concise'
+  | 'Formal'
+  | 'Prompt (Claude)'
+  | 'Prompt (Gemini)'
   | 'Bullet Points'
   | 'Summary'
   | 'Tech Docs'
@@ -1478,6 +1479,7 @@ export default function App() {
 
         // Map OutputStyle to SidecarOutputStyle
         const sidecarStyleMap: Record<string, SidecarOutputStyle> = {
+          'Whisper Only': 'verbatim',
           'Verbatim': 'verbatim',
           'Elegant Prose': 'elegant_prose',
           'Formal': 'formal',
@@ -1489,7 +1491,8 @@ export default function App() {
         const sidecarStyle = sidecarStyleMap[outputStyle] || 'verbatim';
 
         // Should we refine with Gemini?
-        const shouldRefine = currentApiKey && !['Verbatim', 'Normal'].includes(outputStyle);
+        // Whisper Only, Verbatim, and Normal bypass Gemini completely
+        const shouldRefine = currentApiKey && !['Whisper Only', 'Verbatim', 'Normal'].includes(outputStyle);
 
         try {
           const result = await voiceAIClient.current.transcribe({
@@ -1593,7 +1596,7 @@ export default function App() {
           'Bullet Points'
       ].includes(outputStyle);
 
-      const isVerbatimMode = outputStyle === 'Verbatim';
+      const isVerbatimMode = outputStyle === 'Verbatim' || outputStyle === 'Whisper Only';
 
       const isPortuguese = outputLanguage === 'Portuguese';
 
@@ -2080,6 +2083,7 @@ export default function App() {
                                         onChange={(e) => setOutputStyle(e.target.value as OutputStyle)}
                                         className="w-full bg-white/5 border border-white/10 rounded-sm py-3 md:py-2 px-3 text-xs focus:outline-none transition-colors appearance-none"
                                     >
+                                        <option value="Whisper Only">Whisper Only (No Gemini)</option>
                                         <option value="Verbatim">Verbatim (Exact Transcription)</option>
                                         <option value="Elegant Prose">Elegant Prose</option>
                                         <option value="Ana Suy">Ana Suy (Poetic/Psychoanalytic)</option>
@@ -2130,7 +2134,7 @@ export default function App() {
                         }}
                     >
                         {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Zap className="w-3.5 h-3.5 fill-current"/>}
-                        {isProcessing ? "Processing..." : outputStyle === 'Verbatim' ? "Transcribe" : outputStyle === 'Code Generator' ? "Generate Code" : "Refine Text"}
+                        {isProcessing ? "Processing..." : (outputStyle === 'Verbatim' || outputStyle === 'Whisper Only') ? "Transcribe" : outputStyle === 'Code Generator' ? "Generate Code" : "Refine Text"}
                     </button>
 
                      {audioBlob && !isProcessing && (

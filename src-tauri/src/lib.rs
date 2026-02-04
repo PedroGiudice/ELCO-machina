@@ -347,7 +347,9 @@ pub fn run() {
     // MCP Bridge plugin (desktop only - expoe porta 9223 para inspecao remota)
     #[cfg(desktop)]
     {
+        log::info!("Inicializando MCP Bridge plugin...");
         builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+        log::info!("MCP Bridge plugin adicionado ao builder");
     }
 
     // Registrar estado do sidecar apenas no desktop

@@ -12,6 +12,10 @@
     "fs:default",
     "fs:allow-app-read",
     "fs:allow-app-write",
+    "fs:allow-app-read-recursive",
+    "fs:allow-app-write-recursive",
+    "fs:allow-appdata-read",
+    "fs:allow-appdata-write",
     "fs:allow-download-read",
     "fs:allow-download-write",
     "fs:allow-audio-read",
@@ -54,6 +58,7 @@
     },
     "updater:default",
     "process:default",
-    "mic-recorder:default"
+    "mic-recorder:default",
+    "mcp-bridge:default"
   ]
 }

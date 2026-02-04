@@ -23,13 +23,19 @@ git add . && git commit -m "descrição"
 # Nunca commitar direto na main
 ```
 
-### 2. Package Manager
+### 2. Package Manager (BUN)
+
+**SEMPRE usar BUN**, nunca npm.
 
 ```bash
-npm install          # Instalar deps
-npm run dev          # Dev server (porta 3000)
-npm run build        # Build produção
+bun install          # Instalar deps
+bun run dev          # Dev server (porta 3000)
+bun run build        # Build produção
+bun run tauri dev    # Dev mode Tauri
+bun run tauri build  # Build produção Tauri (~1-2 min)
 ```
+
+**ATENÇÃO:** `bun run tauri build` demora 1-2 minutos. Se rodar em background, SEMPRE verificar o output file para confirmar que terminou antes de declarar conclusão.
 
 ### 3. Ambiente
 
@@ -59,6 +65,7 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 |------|------|-------|
 | 2026-01-20 | `enableEdgeToEdge()` no Android faz conteúdo ir atrás das barras do sistema | CSS `env(safe-area-inset-*)` não funciona no Android WebView. Remover `enableEdgeToEdge()` do MainActivity.kt |
 | 2026-01-20 | API do Tauri plugin-store mudou de `LazyStore` para `load()` | Usar `import { load } from '@tauri-apps/plugin-store'` e `await load('file.json')` |
+| 2026-02-04 | Declarar build concluído sem verificar se terminou | Builds Tauri demoram ~1-2 min. Se em background, LER o output file antes de declarar sucesso |
 
 <!--
 Formato para adicionar:

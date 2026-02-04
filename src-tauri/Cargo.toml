@@ -33,7 +33,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-mic-recorder = "2"
-tauri-plugin-mcp-bridge = "0.1"
+tauri-plugin-mcp-bridge = "0.8"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["sync", "time"] }
 
