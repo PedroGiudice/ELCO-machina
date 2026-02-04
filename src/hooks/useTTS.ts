@@ -136,17 +136,24 @@ export function useTTS(
     }
 
     setIsSpeaking(true);
-    log('Sintetizando audio...', 'info');
+
+    // Chatterbox usa GPU remota e pode demorar no cold start
+    const isChatterbox = ttsEngine === 'chatterbox';
+    if (isChatterbox) {
+      log('Sintetizando via Chatterbox (GPU). Primeira chamada pode levar ~20s...', 'info');
+    } else {
+      log('Sintetizando audio...', 'info');
+    }
 
     try {
       // Build request body based on TTS settings
       const requestBody: Record<string, unknown> = {
         text: text,
-        voice: ttsEngine === 'chatterbox' ? 'cloned' : 'pt-br-faber-medium',
+        voice: isChatterbox ? 'cloned' : 'pt-br-faber-medium',
         preprocess: true,
       };
 
-      if (ttsEngine === 'chatterbox') {
+      if (isChatterbox) {
         if (ttsProfile === 'custom') {
           requestBody.params = ttsCustomParams;
         } else {
@@ -157,15 +164,29 @@ export function useTTS(
         }
       }
 
+      // Timeout maior para Chatterbox (cold start GPU)
+      const controller = new AbortController();
+      const timeoutMs = isChatterbox ? 180000 : 30000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
       const response = await fetch(`${whisperServerUrl}/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Erro desconhecido' }));
-        throw new Error(error.detail || `HTTP ${response.status}`);
+        const detail = error.detail || `HTTP ${response.status}`;
+
+        // Mensagens mais claras por tipo de erro
+        if (response.status === 503) {
+          throw new Error('Servidor de voz indisponivel. Verifique se o sidecar esta rodando.');
+        }
+        throw new Error(detail);
       }
 
       const audioBlob = await response.blob();
@@ -190,7 +211,20 @@ export function useTTS(
       log('Reproduzindo...', 'success');
 
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      let errorMessage = 'Erro desconhecido';
+
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = isChatterbox
+            ? 'Timeout: GPU demorou demais. Tente novamente (cold start pode ser lento na primeira vez).'
+            : 'Timeout na sintese de audio.';
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          errorMessage = 'Servidor de voz inacessivel. Verifique se o sidecar esta rodando.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
       console.error('TTS Error:', err);
       log(`Erro TTS: ${errorMessage}`, 'error');
       setIsSpeaking(false);
