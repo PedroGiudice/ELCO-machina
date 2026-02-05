@@ -22,39 +22,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   - Gerar novo APK e testar.
   - Se o problema persistir, capturar logs via `adb logcat | grep com.proatt.machine`.
 
-### [011] Transcrição retorna "transcription" (Whisper 0 caracteres)
-
-- **Status:** Aberto (Critico)
-- **Data:** 2026-02-05
-- **Severidade:** Critica
-- **Descricao:** Transcrição via Whisper retorna 0 caracteres. Na UI aparece apenas a palavra literal "transcription" (fallback hardcoded).
-- **Logs sidecar:** `[STT] Transcricao completa: 0 caracteres` - modelo carrega e processa (4.4s de áudio), mas VAD não detecta fala.
-- **Fluxo do erro:**
-  1. Áudio gravado no notebook (AppImage) é enviado via rede para VM (100.114.203.28:8765)
-  2. Sidecar recebe, decodifica e transcreve com Whisper
-  3. Whisper com `vad_filter=True` filtra tudo como silêncio -> 0 segmentos -> texto vazio
-  4. Frontend recebe `result.text = ""` -> `App.tsx:1524`: `firstWords || 'transcription'` -> exibe "transcription"
-- **Hipóteses:**
-  1. Áudio chega como WebM (MediaRecorder) mas `soundfile`/libsndfile não suporta WebM -> decodificação produz array vazio/silencioso
-  2. Plugin nativo (mic-recorder) produz WAV mas com volume muito baixo ou formato incompatível
-  3. VAD muito agressivo (`min_silence_duration_ms=500`) para áudio comprimido via rede
-- **Arquivos envolvidos:**
-  - `sidecar/voice_ai/services/stt_service.py:119` - `_decode_audio()` usa `soundfile` (sem suporte WebM)
-  - `sidecar/voice_ai/services/stt_service.py:199` - `vad_filter=True` filtra silêncio
-  - `App.tsx:1268` - MediaRecorder produz `audio/webm`
-  - `App.tsx:1309` - Plugin nativo produz `audio/wav`
-  - `App.tsx:1524` - Fallback literal `'transcription'`
-- **Solução proposta:** Adicionar `ffmpeg` como fallback em `_decode_audio()` para converter WebM para WAV antes de processar com Whisper.
-
-### [012] Botão só clicável quando scroll está no final
-
-- **Status:** Aberto
-- **Data:** 2026-02-05
-- **Severidade:** Média
-- **Descricao:** O botão de ação (gravar/transcrever) só responde a cliques quando o conteúdo da página está scrollado até o final. Em qualquer outra posição de scroll, o clique não funciona.
-- **Causa provável:** Elemento com `z-index` baixo sendo sobreposto por outro componente posicionado, ou container com `overflow` que impede o evento de clique.
-- **Impacto:** Usuário precisa scrollar até o final para interagir, UX frustrante.
-
 ### [013] Piper TTS congela/crasha o app
 
 - **Status:** Aberto (causa raiz identificada)
@@ -114,21 +81,21 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ### [006] Microfone nao funciona no Linux Desktop (WebKit2GTK)
 
-- **Status:** Aberto (Limitacao do Tauri/WebKitGTK)
+- **Status:** Mitigado (workaround CPAL customizado)
 - **Data:** 2026-02-04
-- **Severidade:** Alta
+- **Severidade:** Baixa (mitigada)
 - **Descricao:** `navigator.mediaDevices.getUserMedia()` retorna `NotAllowedError` no Linux Desktop porque o WebKitGTK nao tem handler de permissao configurado no Tauri.
 - **Causa Raiz:** O Tauri nao implementa handler para o sinal `permission-request` do WebKitGTK, resultando em negacao automatica de todas as solicitacoes de permissao de midia.
-- **Workaround Implementado:**
-  1. App tenta usar `tauri-plugin-mic-recorder` (cpal nativo) primeiro
-  2. Se falhar, cai no fallback Web API
-  3. Mensagens de erro mais informativas adicionadas
+- **Workaround Implementado (v0.2.7+):**
+  1. Gravacao via CPAL customizado (`src-tauri/src/audio.rs`) com selecao de dispositivo
+  2. Comandos Tauri: `enumerate_audio_devices`, `start_audio_recording`, `stop_audio_recording`
+  3. WAV forçado a 16-bit PCM para máxima compatibilidade com o sidecar
+  4. Fallback para `tauri-plugin-mic-recorder` e Web API se CPAL falhar
 - **Status Upstream:**
   - [GitHub Issue #10898](https://github.com/tauri-apps/tauri/issues/10898)
   - [GitHub Issue #8851](https://github.com/tauri-apps/tauri/issues/8851)
   - [WRY Issue #85](https://github.com/tauri-apps/wry/issues/85) - aguardando suporte upstream
-- **Alternativa para usuarios:** Usar botao de upload de arquivo de audio em vez de gravacao direta.
-- **Nota:** Plugin nativo funciona em maquinas Linux com hardware de audio. Esta VM (Oracle Cloud) nao tem placa de som.
+- **Nota:** O workaround CPAL contorna completamente a limitação do WebKitGTK. A Web API continua bloqueada pelo WebKitGTK mas não é mais necessária.
 
 ---
 
@@ -139,6 +106,32 @@ Registro de problemas, pendencias e melhorias identificadas.
 ---
 
 ## Resolvidos
+
+### [011] Transcrição retorna silêncio (WAV EXTENSIBLE + dispositivo errado)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-05
+- **Resolvido em:** 2026-02-05 (v0.2.9)
+- **Severidade:** Crítica
+- **Descrição:** Transcrição via Whisper retornava 0 caracteres. Na UI aparecia a palavra literal "transcription" (fallback hardcoded). O sidecar recebia áudio mas VAD filtrava tudo como silêncio.
+- **Causa raiz (duas camadas):**
+  1. **Dispositivo errado:** `tauri-plugin-mic-recorder` usava sempre `default_input_device()`, ignorando o dispositivo selecionado pelo usuário. O dispositivo padrão (built-in mic da VM) capturava silêncio.
+  2. **Formato WAV incompatível:** `hound` crate gravava WAV com `WAVE_FORMAT_EXTENSIBLE` (format tag 65534) em 32-bit. O `soundfile`/libsndfile do sidecar Python não processava corretamente este formato, resultando em array de zeros.
+- **Solução implementada:**
+  1. Gravação customizada via CPAL (`src-tauri/src/audio.rs`) com seleção de dispositivo por nome
+  2. WAV forçado a 16-bit PCM (format tag 1) - todos os formatos de entrada (i8/i16/i32/f32) convertidos para i16 via `FromSample<T>`
+  3. Frontend usa `invoke('enumerate_audio_devices')` para listar e `invoke('start_audio_recording', { deviceLabel })` para gravar
+- **Versões:** v0.2.7 (CPAL + seleção), v0.2.9 (fix 16-bit PCM)
+
+### [012] Botão só clicável quando scroll está no final
+
+- **Status:** Resolvido
+- **Data:** 2026-02-05
+- **Resolvido em:** 2026-02-05 (v0.2.9)
+- **Severidade:** Média
+- **Descrição:** O botão de ação (gravar/transcrever) só respondia a cliques quando o conteúdo estava scrollado até o final.
+- **Causa raiz:** Barra de navegação inferior (nav bar) sobrepunha o conteúdo scrollável sem padding adequado.
+- **Solução implementada:** Adicionado `pb-20` ao container scrollável em `AppLayout.tsx` para garantir que o conteúdo não fique atrás da nav bar.
 
 ### [014] Modal/Chatterbox TTS desabilitado (503)
 
@@ -280,3 +273,6 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-02-05 | #011-#013 | Novas issues: Whisper 0 caracteres, botao nao clicavel, Piper crash |
 | 2026-02-05 | #014 | Modal/Chatterbox TTS desabilitado - corrigido via Environment= no systemd |
 | 2026-02-05 | #015 | Crash no Android (ProGuard) - corrigido desabilitando minificação |
+| 2026-02-05 | #011 | Resolvido: CPAL customizado + WAV 16-bit PCM (v0.2.7-v0.2.9) |
+| 2026-02-05 | #012 | Resolvido: pb-20 no AppLayout (v0.2.9) |
+| 2026-02-05 | #006 | Mitigado: workaround CPAL contorna limitação WebKitGTK |
