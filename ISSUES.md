@@ -6,6 +6,22 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ## Abertos
 
+### [015] App Android trava constantemente no startup (Crash Loop)
+
+- **Status:** Investigacao / Correcao Aplicada
+- **Data:** 2026-02-05
+- **Severidade:** Critica (Bloqueante)
+- **Descricao:** O app Android fecha imediatamente apos abrir ou durante o uso inicial ("O app parou de funcionar").
+- **Analise de Causa Raiz:**
+  1. **Minificacao (ProGuard/R8):** O `build.gradle.kts` estava com `isMinifyEnabled = true` para builds de release. Isso frequentemente remove classes Java/Kotlin necessarias para plugins Tauri (via JNI) se as regras de keep nao estiverem perfeitamente configuradas. E a causa #1 de crashes "funciona em dev, quebra em release".
+  2. **Inicializacao de Plugin:** `tauri-plugin-mic-recorder` e inicializado no startup. Se suas classes foram removidas pelo R8, ocorre `java.lang.ClassNotFoundException` ou `java.lang.NoSuchMethodError` no lado nativo, derrubando a VM Java e o app.
+- **Acoes Tomadas:**
+  1. **Desabilitada Minificacao:** Alterado `build.gradle.kts` para `isMinifyEnabled = false` em release.
+  2. **Logging Ativado:** Alterado `lib.rs` para permitir inicializacao do plugin de log no Android mesmo em release, facilitando debug via `adb logcat`.
+- **Proximos Passos:**
+  - Gerar novo APK e testar.
+  - Se o problema persistir, capturar logs via `adb logcat | grep com.proatt.machine`.
+
 ### [011] Transcrição retorna "transcription" (Whisper 0 caracteres)
 
 - **Status:** Aberto (Critico)
@@ -30,8 +46,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   - `App.tsx:1524` - Fallback literal `'transcription'`
 - **Solução proposta:** Adicionar `ffmpeg` como fallback em `_decode_audio()` para converter WebM para WAV antes de processar com Whisper.
 
----
-
 ### [012] Botão só clicável quando scroll está no final
 
 - **Status:** Aberto
@@ -40,8 +54,6 @@ Registro de problemas, pendencias e melhorias identificadas.
 - **Descricao:** O botão de ação (gravar/transcrever) só responde a cliques quando o conteúdo da página está scrollado até o final. Em qualquer outra posição de scroll, o clique não funciona.
 - **Causa provável:** Elemento com `z-index` baixo sendo sobreposto por outro componente posicionado, ou container com `overflow` que impede o evento de clique.
 - **Impacto:** Usuário precisa scrollar até o final para interagir, UX frustrante.
-
----
 
 ### [013] Piper TTS congela/crasha o app
 
@@ -63,8 +75,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   ```
 - **Nota:** Piper roda na VM e sintetiza áudio normalmente. O problema é exclusivamente na reprodução no lado do cliente (notebook).
 
----
-
 ### [002] Primeiro uso requer download de modelo (~1.5GB)
 
 - **Status:** Aberto
@@ -77,8 +87,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   1. Adicionar tela de "primeiro uso" que baixa o modelo com barra de progresso
   2. Ou: bundlar o modelo no instalador (aumenta tamanho para ~1.7GB)
 
----
-
 ### [004] Fluxo Whisper->Gemini nao esta claro na UI
 
 - **Status:** Aberto
@@ -89,8 +97,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   - Gemini: transforma/refina o texto (ate no modo verbatim, faz ajustes pontuais)
 - **Impacto:** Usuario pode desabilitar Gemini pensando que e redundante, perdendo qualidade.
 - **Solucao proposta:** Melhorar UI para mostrar os dois estagios e permitir ver texto bruto vs refinado.
-
----
 
 ### [005] Configuracao de API Key Gemini
 
@@ -144,8 +150,6 @@ Registro de problemas, pendencias e melhorias identificadas.
 - **Causa raiz:** Serviço systemd `voice-ai.service` não incluía variáveis de ambiente `MODAL_ENABLED`, `MODAL_TOKEN_ID` e `MODAL_TOKEN_SECRET`. A abordagem inicial via `EnvironmentFile` falhou por restrições do SELinux no Oracle Linux.
 - **Solução implementada:** Credenciais adicionadas diretamente como linhas `Environment=` no service file (`/etc/systemd/system/voice-ai.service`). Após `daemon-reload` e restart, Modal/Chatterbox disponível.
 
----
-
 ### [009] Erro -3 no Whisper (bundle PyInstaller)
 
 - **Status:** Resolvido
@@ -156,8 +160,6 @@ Registro de problemas, pendencias e melhorias identificadas.
 - **Causa raiz:** Artefatos binários de `ctranslate2` e `tokenizers` ausentes no bundle PyInstaller.
 - **Solução implementada:** Spec file com `collect_all` para dependências + sidecar migrado para serviço systemd (venv direto, sem PyInstaller).
 - **Nota:** Issue superada pela migração para arquitetura remota (issue #010). Sidecar agora roda da venv Python diretamente, sem necessidade de PyInstaller.
-
----
 
 ### [010] Voice AI Sidecar nao roda na VM - App nao funciona no notebook
 
@@ -174,8 +176,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   4. Frontend limpo: referências a "sidecar local" removidas
   5. Dependências `reqwest` e `tokio` removidas do Cargo.toml
 
----
-
 ### [007] TTS Settings sem botao de acionamento
 
 - **Status:** Resolvido
@@ -188,8 +188,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   - Botao alterna entre Volume2 (Read) e VolumeX (Stop) conforme estado
   - Desabilitado quando sidecar indisponivel ou texto vazio
   - Estilizacao visual: vermelho quando falando, neutro quando parado
-
----
 
 ### [008] Editor de texto nao permite escrita
 
@@ -204,8 +202,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   - Icone decorativo (Feather/Terminal) movido para overlay com `pointer-events-none`
   - Usuario pode digitar/colar texto diretamente no editor
 
----
-
 ### [001] App nao gera texto - Sidecar nao inicia automaticamente
 
 - **Status:** Resolvido
@@ -218,8 +214,6 @@ Registro de problemas, pendencias e melhorias identificadas.
   - `lib.rs`: SidecarManager com auto-start, health monitoring (5s) e auto-restart
   - `VoiceAIClient.ts`: Fallback caso auto-start do Rust falhe
   - Sidecar agora inicia automaticamente com o app
-
----
 
 ### [003] Documentacao ARCHITECTURE.md desatualizada
 
@@ -285,3 +279,4 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-02-05 | #010 | Sidecar nao roda na VM - app nao funciona no notebook. Contradicao arquitetural: sidecar local vs processamento remoto |
 | 2026-02-05 | #011-#013 | Novas issues: Whisper 0 caracteres, botao nao clicavel, Piper crash |
 | 2026-02-05 | #014 | Modal/Chatterbox TTS desabilitado - corrigido via Environment= no systemd |
+| 2026-02-05 | #015 | Crash no Android (ProGuard) - corrigido desabilitando minificação |

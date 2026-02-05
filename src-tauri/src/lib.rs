@@ -3,6 +3,9 @@
 // ============================================================
 
 #[cfg(desktop)]
+mod audio;
+
+#[cfg(desktop)]
 mod sidecar {
     /// Comando Tauri: iniciar sidecar (stub - servico roda na VM)
     #[tauri::command]
@@ -90,14 +93,37 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_mic_recorder::init())
-        .invoke_handler(tauri::generate_handler![
-            sidecar::start_sidecar,
-            sidecar::stop_sidecar,
-            sidecar::sidecar_status,
-            sidecar::set_whisper_url,
-            sidecar::is_remote_whisper
-        ]);
+        .plugin(tauri_plugin_mic_recorder::init());
+
+    // Desktop: comandos de áudio CPAL + sidecar stubs
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .manage(audio::AudioState::new())
+            .invoke_handler(tauri::generate_handler![
+                sidecar::start_sidecar,
+                sidecar::stop_sidecar,
+                sidecar::sidecar_status,
+                sidecar::set_whisper_url,
+                sidecar::is_remote_whisper,
+                audio::enumerate_audio_devices,
+                audio::start_audio_recording,
+                audio::stop_audio_recording
+            ]);
+    }
+
+    // Mobile: apenas sidecar stubs (áudio via mic-recorder plugin)
+    #[cfg(mobile)]
+    {
+        builder = builder
+            .invoke_handler(tauri::generate_handler![
+                sidecar::start_sidecar,
+                sidecar::stop_sidecar,
+                sidecar::sidecar_status,
+                sidecar::set_whisper_url,
+                sidecar::is_remote_whisper,
+            ]);
+    }
 
     // Plugins que so funcionam no desktop
     #[cfg(desktop)]
@@ -118,8 +144,8 @@ pub fn run() {
 
     builder
         .setup(move |app| {
-            // Plugin de log (apenas em debug)
-            if cfg!(debug_assertions) {
+            // Plugin de log (apenas em debug ou Android para debug)
+            if cfg!(debug_assertions) || cfg!(target_os = "android") {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
