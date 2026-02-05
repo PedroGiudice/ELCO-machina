@@ -27,6 +27,7 @@
         }
       ]
     },
+    "mic-recorder:default",
     "updater:default",
     "process:default",
     "mcp-bridge:default"

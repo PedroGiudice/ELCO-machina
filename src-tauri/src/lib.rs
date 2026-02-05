@@ -93,7 +93,6 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_mic_recorder::init())
         .plugin(tauri_plugin_opener::init());
 
     // Desktop: comandos de áudio CPAL + sidecar stubs
@@ -130,6 +129,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder
+            .plugin(tauri_plugin_mic_recorder::init())
             .plugin(tauri_plugin_shell::init())
             .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_process::init());
