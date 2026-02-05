@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { GoogleGenAI } from "@google/genai";
 import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, ensureSidecarRunning, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
 import {
@@ -873,7 +874,7 @@ export default function App() {
 
   useEffect(() => {
     // Initialize Voice AI Client with configured URL
-    const url = whisperServerUrl || 'http://localhost:8765';
+    const url = whisperServerUrl || 'http://100.114.203.28:8765';
     setVoiceAIUrl(whisperServerUrl || null);
     voiceAIClient.current = getVoiceAIClient();
 
@@ -946,37 +947,56 @@ export default function App() {
         if (update) {
           setUpdateStatus('available');
           setUpdateVersion(update.version);
-          console.log(`Update available: ${update.version}`);
+          console.log(`[Updater] Nova versao disponivel: ${update.version}`);
 
-          // Auto-download
+          const shouldDownload = await ask(
+            `Nova versao ${update.version} disponivel. Deseja baixar e instalar agora?`,
+            { title: 'Atualizacao Disponivel', kind: 'info' }
+          );
+
+          if (!shouldDownload) {
+            console.log('[Updater] Usuario recusou a atualizacao');
+            setUpdateStatus('idle');
+            return;
+          }
+
           setUpdateStatus('downloading');
+          setUpdateProgress(0);
+          let downloaded = 0;
+          console.log('[Updater] Iniciando download...');
+
           await update.downloadAndInstall((event) => {
             if (event.event === 'Progress') {
               const data = event.data as { chunkLength: number; contentLength?: number };
+              downloaded += data.chunkLength;
               if (data.contentLength && data.contentLength > 0) {
-                setUpdateProgress(prev => {
-                  const newProgress = prev + (data.chunkLength / data.contentLength!) * 100;
-                  return Math.min(newProgress, 100);
-                });
+                const pct = Math.min((downloaded / data.contentLength) * 100, 100);
+                setUpdateProgress(pct);
               }
             }
           });
+
+          console.log('[Updater] Download concluido. Pronto para reiniciar.');
           setUpdateStatus('ready');
 
-          // Prompt user to restart
-          if (confirm(`Nova versao ${update.version} instalada! Reiniciar agora?`)) {
+          const shouldRestart = await ask(
+            `Versao ${update.version} instalada com sucesso! Reiniciar agora?`,
+            { title: 'Atualizacao Instalada', kind: 'info' }
+          );
+
+          if (shouldRestart) {
             await relaunch();
           }
         } else {
+          console.log('[Updater] Nenhuma atualizacao disponivel');
           setUpdateStatus('idle');
         }
       } catch (e) {
-        console.log('Update check failed (normal in dev):', e);
+        console.error('[Updater] Erro na atualizacao:', e);
         setUpdateStatus('idle');
       }
     };
 
-    // Check after 3 seconds to not block startup
     const timer = setTimeout(checkForUpdates, 3000);
     return () => clearTimeout(timer);
   }, []);
@@ -1062,7 +1082,7 @@ export default function App() {
     const url = whisperServerUrl.trim();
     if (!url) {
       setWhisperTestStatus('error');
-      setWhisperTestMessage('URL vazia - usando sidecar local');
+      setWhisperTestMessage('URL do servidor Whisper obrigatória');
       return;
     }
 
@@ -1997,6 +2017,40 @@ export default function App() {
           ['--sab' as string]: 'env(safe-area-inset-bottom, 0px)',
         } as React.CSSProperties}
     >
+      {updateStatus === 'downloading' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          padding: '8px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontSize: '13px',
+          color: '#fff',
+        }}>
+          <span>Baixando v{updateVersion}...</span>
+          <div style={{
+            flex: 1,
+            height: '4px',
+            backgroundColor: 'rgba(255,255,255,0.15)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${updateProgress}%`,
+              backgroundColor: themeColor,
+              borderRadius: '2px',
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+          <span>{Math.round(updateProgress)}%</span>
+        </div>
+      )}
       <AppLayout
         activePanel={activePanel}
         onPanelChange={setActivePanel}
@@ -2341,7 +2395,7 @@ export default function App() {
                                 'opacity-40'
                             }`}>
                                 {whisperTestStatus === 'idle'
-                                    ? 'Deixe vazio para usar sidecar local'
+                                    ? 'URL do servidor Whisper na VM'
                                     : whisperTestMessage}
                             </p>
                         </div>

@@ -106,6 +106,23 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ## Resolvidos
 
+### [010] Voice AI Sidecar nao roda na VM - App nao funciona no notebook
+
+- **Status:** Resolvido
+- **Data:** 2026-02-05
+- **Resolvido em:** 2026-02-05
+- **Severidade:** Critica
+- **Descricao:** Sidecar estava empacotado no AppImage como processo local. O app tentava conectar na VM (100.114.203.28:8765) mas nada rodava lá.
+- **Causa raiz:** Contradição arquitetural - sidecar foi implementado como componente local quando deveria rodar exclusivamente na VM (46GB RAM, 12 cores). Whisper medium é inviável em hardware de notebook.
+- **Solucao implementada:**
+  1. Serviço systemd `voice-ai.service` instalado na VM (auto-start no boot)
+  2. `externalBin` removido do `tauri.conf.json` (AppImage 160MB mais leve)
+  3. `SidecarManager` removido do `lib.rs` (stubs mantidos para compatibilidade)
+  4. Frontend limpo: referências a "sidecar local" removidas
+  5. Dependências `reqwest` e `tokio` removidas do Cargo.toml
+
+---
+
 ### [007] TTS Settings sem botao de acionamento
 
 - **Status:** Resolvido
@@ -212,3 +229,4 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-02-04 | #007, #008 | Issues TTS: sem botao de acionamento + editor nao editavel |
 | 2026-02-04 | #007, #008 | Resolvidos: botao TTS na toolbar + editor sempre editavel |
 | 2026-02-04 | #009 | Documentado bug crítico de loading do Whisper (Erro -3) |
+| 2026-02-05 | #010 | Sidecar nao roda na VM - app nao funciona no notebook. Contradicao arquitetural: sidecar local vs processamento remoto |
