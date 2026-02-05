@@ -74,14 +74,11 @@ echo "[Build] Executando PyInstaller..."
 cd "$SCRIPT_DIR"
 
 pyinstaller \
-    --onefile \
-    --name "voice-ai-sidecar" \
     --distpath "$SCRIPT_DIR/dist" \
     --workpath "$SCRIPT_DIR/build" \
-    --specpath "$SCRIPT_DIR" \
     --clean \
     --noconfirm \
-    voice_ai/main.py
+    "$SCRIPT_DIR/voice_ai.spec"
 
 # 6. Copia para diretorio de binarios com target triple
 mkdir -p "$OUTPUT_DIR"

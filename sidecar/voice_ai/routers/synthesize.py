@@ -26,6 +26,45 @@ from voice_ai.schemas.tts_profiles import (
 
 router = APIRouter()
 
+# Cache para referencia PT-BR gerada pelo Piper
+_default_ptbr_ref: bytes | None = None
+
+# Texto para gerar referencia PT-BR (cobre fonemas variados do portugues)
+_PTBR_REF_TEXT = (
+    "A comunicacao clara e objetiva e fundamental em qualquer contexto profissional. "
+    "Quando organizamos nossas ideias de forma logica, conseguimos transmitir "
+    "a mensagem com precisao e eficiencia, evitando mal-entendidos."
+)
+
+
+def _get_default_ptbr_ref(tts_service) -> bytes | None:
+    """
+    Gera (e cacheia) uma referencia PT-BR usando Piper local.
+    Usada como voice_ref default para Chatterbox quando o usuario
+    nao fornece amostra de voz propria.
+    """
+    global _default_ptbr_ref
+
+    if _default_ptbr_ref is not None:
+        return _default_ptbr_ref
+
+    if not tts_service or not tts_service.is_available:
+        return None
+
+    try:
+        ref_bytes = tts_service.synthesize(
+            text=_PTBR_REF_TEXT,
+            voice_id="pt-br-faber-medium",
+            speed=1.0,
+            output_format="wav",
+        )
+        _default_ptbr_ref = ref_bytes
+        print(f"[Synthesize] Referencia PT-BR gerada: {len(ref_bytes)} bytes")
+        return ref_bytes
+    except Exception as e:
+        print(f"[Synthesize] Falha ao gerar referencia PT-BR: {e}")
+        return None
+
 
 class SynthesizeRequest(BaseModel):
     """Request para sintese de audio."""
@@ -172,6 +211,14 @@ async def _synthesize_with_modal(
                     status_code=400,
                     detail="voice_ref invalido. Deve ser audio em base64.",
                 )
+
+        # Se nao tem voice_ref do usuario, usa referencia PT-BR default
+        # Sem referencia, Chatterbox usa voz default inglesa (sotaque americano)
+        if voice_ref_bytes is None:
+            tts_service = request.state.tts_service
+            voice_ref_bytes = _get_default_ptbr_ref(tts_service)
+            if voice_ref_bytes:
+                print("[Synthesize] Usando referencia PT-BR default (Piper)")
 
         # Chama Modal com parametros
         audio_bytes = modal_client.synthesize(
