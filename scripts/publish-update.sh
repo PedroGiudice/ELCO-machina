@@ -18,7 +18,7 @@
 set -euo pipefail
 
 PROJECT_DIR="/home/opc/ELCO-machina"
-UPDATES_DIR="/var/www/updates"
+UPDATES_DIR="/var/www/updates/proatt"
 BUNDLE_DIR="$PROJECT_DIR/src-tauri/target/release/bundle"
 TAILSCALE_IP="100.114.203.28"
 PORT="8090"
@@ -53,7 +53,7 @@ PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # URL do AppImage (com %20 para espacos)
 FILENAME="Pro%20ATT%20Machine_${VERSION}_amd64.AppImage"
-URL="http://${TAILSCALE_IP}:${PORT}/${FILENAME}"
+URL="http://${TAILSCALE_IP}:${PORT}/proatt/${FILENAME}"
 
 # Corrigir compatibilidade cross-distro (OL10 -> Ubuntu)
 # libgcrypt.so.20 do OL10 precisa de libgpg-error.so.0 do OL10
@@ -114,10 +114,10 @@ fi
 
 # Verificar servidor
 echo "[INFO] Verificando servidor..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/latest.json")
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/proatt/latest.json")
 if [ "$HTTP_CODE" = "200" ]; then
-    SERVED_VERSION=$(curl -s "http://localhost:${PORT}/latest.json" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
-    echo "[CONCLUIDO] Versao $SERVED_VERSION publicada em http://${TAILSCALE_IP}:${PORT}/latest.json"
+    SERVED_VERSION=$(curl -s "http://localhost:${PORT}/proatt/latest.json" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+    echo "[CONCLUIDO] Versao $SERVED_VERSION publicada em http://${TAILSCALE_IP}:${PORT}/proatt/latest.json"
 else
     echo "[FALHA] Servidor retornou HTTP $HTTP_CODE"
     exit 1
