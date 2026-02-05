@@ -34,31 +34,6 @@
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "shell:default",
-    "shell:allow-open",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "args": true,
-          "name": "binaries/voice-ai-sidecar",
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "args": true,
-          "name": "binaries/voice-ai-sidecar",
-          "sidecar": true
-        }
-      ]
-    },
-    "updater:default",
-    "process:default",
-    "mic-recorder:default",
-    "mcp-bridge:default"
+    "mic-recorder:default"
   ]
 }

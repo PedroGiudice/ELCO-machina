@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { ask } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { GoogleGenAI } from "@google/genai";
 import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
 import {
@@ -974,10 +975,24 @@ export default function App() {
 
   // Load Microphones on mount
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-        const mics = devices.filter(d => d.kind === 'audioinput');
-        setAvailableMics(mics);
-    });
+    if (isTauri()) {
+        invoke<{ id: string, label: string }[]>('enumerate_audio_devices')
+            .then(devices => {
+                const mics = devices.map(d => ({
+                    kind: 'audioinput',
+                    deviceId: d.id,
+                    label: d.label,
+                    groupId: 'native'
+                }));
+                setAvailableMics(mics as unknown as MediaDeviceInfo[]);
+            })
+            .catch(console.error);
+    } else {
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            const mics = devices.filter(d => d.kind === 'audioinput');
+            setAvailableMics(mics);
+        });
+    }
   }, []);
 
   // --- MIGRATION & LOADING LOGIC ---
@@ -1178,16 +1193,18 @@ export default function App() {
     // Tentar plugin nativo primeiro (funciona no Linux desktop onde WebKit2GTK nao tem permissoes)
     if (isTauri()) {
       try {
-        const { startRecording: startNativeRecording } = await import('tauri-plugin-mic-recorder-api');
-        await startNativeRecording();
+        // Use custom native command
+        const deviceLabel = selectedMicId !== 'default' ? selectedMicId : null;
+        await invoke('start_audio_recording', { deviceLabel });
+        
         setIsNativeRecording(true);
         setIsRecording(true);
         setRecordingStartTime(Date.now());
         setAudioBlob(null);
-        addLog("Gravacao iniciada (nativo)", 'info');
+        addLog("Gravacao iniciada (nativo personalizado)", 'info');
 
         // Abrir MediaStream paralelo para o waveform visualizer
-        // A gravacao real eh feita pelo plugin nativo (CPAL)
+        // A gravacao real eh feita pelo backend Rust (CPAL)
         try {
           const vizStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           setAudioStream(vizStream);
@@ -1199,15 +1216,15 @@ export default function App() {
       } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);
         console.warn('Native recording failed:', errorMsg);
+        addLog(`Erro ao iniciar gravacao nativa: ${errorMsg}`, 'error');
 
         // Se o erro indica ausencia de dispositivo de audio, mostrar mensagem especifica
         if (errorMsg.includes('NoDevice') || errorMsg.includes('no device') || errorMsg.includes('not available')) {
-          addLog("Nenhum microfone detectado no sistema.", 'error');
           return;
         }
 
         // Tentar fallback Web API apenas se o erro nao foi de dispositivo
-        addLog("Plugin nativo falhou, tentando Web API...", 'info');
+        addLog("Tentando fallback Web API...", 'info');
       }
     }
 
@@ -1278,11 +1295,10 @@ export default function App() {
     // Se usando gravacao nativa
     if (isNativeRecording) {
       try {
-        const { stopRecording: stopNativeRecording } = await import('tauri-plugin-mic-recorder-api');
         const { readFile } = await import('@tauri-apps/plugin-fs');
 
         // stopRecording retorna o caminho do arquivo WAV
-        const filePath = await stopNativeRecording();
+        const filePath = await invoke<string>('stop_audio_recording');
         addLog(`Audio salvo em: ${filePath}`, 'info');
 
         // Ler o arquivo WAV e converter para Blob

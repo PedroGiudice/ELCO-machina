@@ -69,7 +69,7 @@ export function AppLayout({
               animate="animate"
               exit="exit"
               transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="flex-1 overflow-y-auto"
+              className="flex-1 overflow-y-auto pb-20"
             >
               {currentPanel}
             </motion.div>

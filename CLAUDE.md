@@ -72,6 +72,7 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 | 2026-02-05 | Publicar update com mesma versão do app instalado (0.2.0 -> 0.2.0) | Auto-update só detecta versão SUPERIOR à instalada. Antes de build+publish, SEMPRE bumpar versão em `tauri.conf.json` e `package.json`. |
 | 2026-02-05 | Tratar voice-ai-sidecar como componente local (empacotar no AppImage) | O sidecar RODA NA VM (46GB RAM, 12 cores), NUNCA no notebook do usuário. O objetivo da VM é justamente evitar dependência do hardware local. Whisper medium (1.5GB RAM, CPU intensivo) não deve rodar no notebook. A arquitetura é: app no notebook envia áudio via rede -> VM processa com Whisper -> devolve transcrição. NUNCA sugerir empacotar sidecar no AppImage ou rodar localmente. |
 | 2026-02-05 | Declarar tarefa finalizada sem fazer build | NUNCA alegar conclusão sem rodar `bun run tauri build` e confirmar sucesso. Mesmo que a alteração pareça só backend/docs, o build valida tudo. Sem build = sem conclusão. |
+| 2026-02-05 | Publicar build sem bumpar versão (0.2.6 repetida em vez de 0.2.7) | SEMPRE verificar a versão atual em `tauri.conf.json` e `package.json` E a última publicada em `latest.json` ANTES de buildar. Bumpar para a próxima sequencial. Manter histórico de versões na MEMORY.md. |
 
 <!--
 Formato para adicionar:
