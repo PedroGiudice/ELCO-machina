@@ -26,9 +26,10 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM0QjIxRDRDMkE2MDMxMzQKUldRME1XQXFUQjJ5eE9aL25iUm4zeUhJdHBORjlDNnlxVDJFNW9Dc290MlpSTzRmNGtzSW14TTgK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIwODM4N0VBNUQyQzY3N0MKUldSOFp5eGQ2b2VEc0IvUnRCcVlWdUVBMkZaYnd2S3VnY3FMb1VJbjZZYm5ZaDVVUGJvcWhWYmsK",
+      "dangerousInsecureTransportProtocol": true,
       "endpoints": [
-        "https://github.com/PedroGiudice/ELCO-machina/releases/latest/download/latest.json"
+        "http://100.114.203.28:8090/latest.json"
       ],
       "windows": {
         "installMode": "passive"
@@ -37,7 +38,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb"],
+    "targets": ["deb", "appimage"],
     "externalBin": [
       "binaries/voice-ai-sidecar"
     ],
