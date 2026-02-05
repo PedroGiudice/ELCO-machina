@@ -71,7 +71,8 @@ cd "$PROJECT_DIR"
 
 # Re-assinar o AppImage corrigido
 echo "[INFO] Re-assinando AppImage..."
-source ~/.bashrc
+TAURI_SIGNING_PRIVATE_KEY="${TAURI_SIGNING_PRIVATE_KEY:-$(cat ~/.tauri/proatt.key 2>/dev/null)}"
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-x}"
 bun run tauri signer sign "$FIXED_APPIMAGE" -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" >/dev/null 2>&1
 APPIMAGE="$FIXED_APPIMAGE"
 APPIMAGE_SIG="$FIXED_APPIMAGE.sig"
