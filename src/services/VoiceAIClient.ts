@@ -239,81 +239,32 @@ export class VoiceAIClient {
 }
 
 // ============================================================
-// Metodos para controle do sidecar via Tauri
+// Metodos para controle do servidor remoto
 // ============================================================
 
 /**
- * Verifica se estamos rodando dentro do Tauri
- */
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
-}
-
-/**
- * Invoca comando Tauri de forma segura
- */
-async function invokeCommand<T>(cmd: string): Promise<T | null> {
-  if (!isTauri()) return null;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<T>(cmd);
-  } catch (e) {
-    console.error(`[VoiceAIClient] Failed to invoke ${cmd}:`, e);
-    return null;
-  }
-}
-
-/**
- * Garante que o sidecar esteja rodando
- * Usa auto-start do Rust, mas fornece fallback caso falhe
+ * Garante que o servidor remoto esteja disponivel
  *
- * @returns true se sidecar esta disponivel
+ * @returns true se servidor esta disponivel
  */
 export async function ensureSidecarRunning(): Promise<boolean> {
   const client = getVoiceAIClient();
-
-  // Primeiro verifica se ja esta disponivel
-  if (await client.isAvailable()) {
-    return true;
-  }
-
-  // Tenta iniciar via Tauri command
-  if (isTauri()) {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<string>("start_sidecar");
-      console.log("[VoiceAIClient] start_sidecar result:", result);
-    } catch (e) {
-      console.error("[VoiceAIClient] Failed to invoke start_sidecar:", e);
-    }
-  }
-
-  // Aguardar ate 15s para sidecar ficar disponivel
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 500));
-    if (await client.isAvailable()) {
-      console.log("[VoiceAIClient] Sidecar available after", (i + 1) * 500, "ms");
-      return true;
-    }
-  }
-
-  console.error("[VoiceAIClient] Sidecar not available after 15s");
-  return false;
+  return await client.isAvailable();
 }
 
 /**
- * Para o sidecar (via Tauri)
+ * Para o sidecar - no-op para servidor remoto
  */
 export async function stopSidecar(): Promise<void> {
-  await invokeCommand("stop_sidecar");
+  // Servidor remoto - nao gerenciado pelo cliente
 }
 
 /**
- * Verifica status do sidecar (via Tauri)
+ * Verifica status do servidor via health check HTTP
  */
 export async function getSidecarStatus(): Promise<boolean> {
-  const result = await invokeCommand<boolean>("sidecar_status");
-  return result ?? false;
+  const client = getVoiceAIClient();
+  return await client.isAvailable();
 }
 
 // ============================================================

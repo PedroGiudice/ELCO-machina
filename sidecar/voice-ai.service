@@ -10,6 +10,8 @@ Group=opc
 WorkingDirectory=/home/opc/ELCO-machina/sidecar
 Environment=VOICE_AI_HOST=0.0.0.0
 Environment=VOICE_AI_PORT=8765
+# Modal credentials: adicionar via override local
+# sudo systemctl edit voice-ai (cria /etc/systemd/system/voice-ai.service.d/override.conf)
 ExecStart=/bin/bash -c 'source /home/opc/ELCO-machina/sidecar/.venv/bin/activate && python -m voice_ai.main'
 Restart=on-failure
 RestartSec=5

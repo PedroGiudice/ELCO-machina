@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Pro ATT Machine",
-  "version": "0.2.0",
+  "version": "0.2.6",
   "identifier": "com.proatt.machine",
   "build": {
     "frontendDist": "../dist",
@@ -29,7 +29,7 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE5RTY1MDNFRkNGODBEQTAKUldTZ0RmajhQbERtcVhtTmN0aVRUYTVGR0piNmhBVDdaVE5hVmF6MTZjZlVqaG92YXREaXJBL0sK",
       "dangerousInsecureTransportProtocol": true,
       "endpoints": [
-        "http://100.114.203.28:8090/latest.json"
+        "http://100.114.203.28:8090/proatt/latest.json"
       ],
       "windows": {
         "installMode": "passive"
@@ -39,9 +39,6 @@
   "bundle": {
     "active": true,
     "targets": ["deb", "appimage"],
-    "externalBin": [
-      "binaries/voice-ai-sidecar"
-    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
