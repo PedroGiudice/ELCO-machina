@@ -3,6 +3,8 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { GoogleGenAI } from "@google/genai";
 import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
 import {
@@ -178,6 +180,25 @@ type HistoryItem = { text: string; date: string; id: string };
 // Detect Tauri environment
 const isTauri = (): boolean => {
     return typeof window !== 'undefined' && '__TAURI__' in window;
+};
+
+// Detect Android platform
+const isAndroid = (): boolean => {
+    return typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+};
+
+// Android auto-update: URL do servidor de updates
+const ANDROID_UPDATE_URL = 'http://100.114.203.28:8090/proatt/latest-android.json';
+
+// Comparar versoes semver (retorna true se remote > local)
+const isNewerVersion = (remote: string, local: string): boolean => {
+    const r = remote.split('.').map(Number);
+    const l = local.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        if ((r[i] || 0) > (l[i] || 0)) return true;
+        if ((r[i] || 0) < (l[i] || 0)) return false;
+    }
+    return false;
 };
 
 // Dynamic import for Tauri Store (only loads in Tauri environment)
@@ -910,9 +931,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Check for updates on startup
+  // Check for updates on startup (desktop: plugin-updater, Android: manual check)
   useEffect(() => {
-    const checkForUpdates = async () => {
+    const checkForUpdatesDesktop = async () => {
       try {
         setUpdateStatus('checking');
         const update = await check();
@@ -969,7 +990,61 @@ export default function App() {
       }
     };
 
-    const timer = setTimeout(checkForUpdates, 3000);
+    const checkForUpdatesAndroid = async () => {
+      try {
+        setUpdateStatus('checking');
+        const localVersion = await getVersion();
+        console.log(`[Updater-Android] Versao local: ${localVersion}`);
+
+        const resp = await fetch(ANDROID_UPDATE_URL);
+        if (!resp.ok) {
+          console.log(`[Updater-Android] Servidor retornou ${resp.status}`);
+          setUpdateStatus('idle');
+          return;
+        }
+
+        const data = await resp.json();
+        const remoteVersion = data.version as string;
+        console.log(`[Updater-Android] Versao remota: ${remoteVersion}`);
+
+        if (isNewerVersion(remoteVersion, localVersion)) {
+          setUpdateStatus('available');
+          setUpdateVersion(remoteVersion);
+          console.log(`[Updater-Android] Nova versao disponivel: ${remoteVersion}`);
+
+          const shouldUpdate = await ask(
+            `Nova versao ${remoteVersion} disponivel (voce tem ${localVersion}). Deseja baixar e instalar?`,
+            { title: 'Atualizacao Disponivel', kind: 'info' }
+          );
+
+          if (!shouldUpdate) {
+            console.log('[Updater-Android] Usuario recusou');
+            setUpdateStatus('idle');
+            return;
+          }
+
+          // Abre URL do APK no navegador do sistema para download + instalacao
+          const apkUrl = data.url as string;
+          console.log(`[Updater-Android] Abrindo URL: ${apkUrl}`);
+          await openUrl(apkUrl);
+          setUpdateStatus('idle');
+        } else {
+          console.log('[Updater-Android] Nenhuma atualizacao disponivel');
+          setUpdateStatus('idle');
+        }
+      } catch (e) {
+        console.error('[Updater-Android] Erro:', e);
+        setUpdateStatus('idle');
+      }
+    };
+
+    const timer = setTimeout(() => {
+      if (isAndroid()) {
+        checkForUpdatesAndroid();
+      } else {
+        checkForUpdatesDesktop();
+      }
+    }, 3000);
     return () => clearTimeout(timer);
   }, []);
 

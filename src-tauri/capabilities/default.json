@@ -34,6 +34,7 @@
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "mic-recorder:default"
+    "mic-recorder:default",
+    "opener:default"
   ]
 }
