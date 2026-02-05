@@ -249,23 +249,7 @@ export class VoiceAIClient {
  */
 export async function ensureSidecarRunning(): Promise<boolean> {
   const client = getVoiceAIClient();
-
-  // Verifica se o servidor remoto esta disponivel
-  if (await client.isAvailable()) {
-    return true;
-  }
-
-  // Aguardar ate 10s para servidor ficar disponivel
-  for (let i = 0; i < 20; i++) {
-    await new Promise((r) => setTimeout(r, 500));
-    if (await client.isAvailable()) {
-      console.log("[VoiceAIClient] Server available after", (i + 1) * 500, "ms");
-      return true;
-    }
-  }
-
-  console.error("[VoiceAIClient] Server not available after 10s");
-  return false;
+  return await client.isAvailable();
 }
 
 /**

@@ -6,34 +6,62 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ## Abertos
 
-### [009] Erro -3 no Whisper e Fallback "transcription"
+### [011] Transcrição retorna "transcription" (Whisper 0 caracteres)
 
-- **Status:** Aberto (Critico - Regressao)
-- **Data:** 2026-02-04
+- **Status:** Aberto (Critico)
+- **Data:** 2026-02-05
 - **Severidade:** Critica
-- **Descricao:** Transcricao falha silenciosamente retornando apenas a string "transcription".
-- **ATENCAO:** Erro inedito. Transcricao funcionava antes. Nenhuma alteracao conhecida foi feita no pipeline STT ou no modelo Whisper. Requer investigacao profunda.
-- **Logs sidecar:** Retorna erro 500: `RuntimeError: Falha ao carregar modelo Whisper: Error -3 while decompressing data: unknown compression method`.
-- **Logs console (webview):** Plugin Store set mostra `null`. Nenhum erro de transcricao visivel (fallback mascara o erro).
-- **Health check sidecar:** Status "healthy", Whisper: "available" (nao "loaded" - modelo nao consegue carregar).
-- **Causa Raiz:** EM INVESTIGACAO. Hipoteses:
-  1. Corrupcao no cache de modelos (`~/.cache/voice_ai/models`) - modelo de 1.5GB pode ter sido parcialmente baixado
-  2. Incompatibilidade da biblioteca zlib/ctranslate2 no bundle PyInstaller apos rebuild do sidecar
-  3. Mudanca no PyInstaller spec ou dependencias que afetou o empacotamento
-  4. Versao do ctranslate2 incompativel com formato do modelo cached
-- **Sintoma na UI:** O texto transcrito aparece apenas como a palavra "transcription" (fallback no frontend quando `result.text` e vazio).
+- **Descricao:** Transcrição via Whisper retorna 0 caracteres. Na UI aparece apenas a palavra literal "transcription" (fallback hardcoded).
+- **Logs sidecar:** `[STT] Transcricao completa: 0 caracteres` - modelo carrega e processa (4.4s de áudio), mas VAD não detecta fala.
 - **Fluxo do erro:**
-  1. Sidecar retorna HTTP 500 (Whisper nao carrega)
-  2. Frontend catch: "Sidecar falhou, tentando Gemini..."
-  3. Gemini fallback retorna vazio (API key possivelmente null)
-  4. `useAudioProcessing.ts:229` -> `firstWords || 'transcription'` gera o texto "transcription"
-- **Causa Raiz Confirmada:** Artefatos binários do `ctranslate2` e `tokenizers` ausentes no bundle PyInstaller. Os hooks padrão do PyInstaller não coletam automaticamente todas as shared libs necessárias no modo `--onefile`.
-- **Evidência:** Modelo carrega perfeitamente fora do bundle (venv Python direto). Erro ocorre apenas no binário PyInstaller.
-- **Solução Implementada:**
-  1. Criado `sidecar/voice_ai.spec` com `collect_all` para `faster_whisper`, `ctranslate2`, `tokenizers`, `scipy`, `sklearn`
-  2. Atualizado `sidecar/build-sidecar.sh` para usar o spec file em vez de args CLI
-  3. Sidecar reconstruído e testado com sucesso (HTTP 200, Whisper loaded, sem erro -3)
-- **Status:** Resolvido (aguardando rebuild DEB + teste do usuário)
+  1. Áudio gravado no notebook (AppImage) é enviado via rede para VM (100.114.203.28:8765)
+  2. Sidecar recebe, decodifica e transcreve com Whisper
+  3. Whisper com `vad_filter=True` filtra tudo como silêncio -> 0 segmentos -> texto vazio
+  4. Frontend recebe `result.text = ""` -> `App.tsx:1524`: `firstWords || 'transcription'` -> exibe "transcription"
+- **Hipóteses:**
+  1. Áudio chega como WebM (MediaRecorder) mas `soundfile`/libsndfile não suporta WebM -> decodificação produz array vazio/silencioso
+  2. Plugin nativo (mic-recorder) produz WAV mas com volume muito baixo ou formato incompatível
+  3. VAD muito agressivo (`min_silence_duration_ms=500`) para áudio comprimido via rede
+- **Arquivos envolvidos:**
+  - `sidecar/voice_ai/services/stt_service.py:119` - `_decode_audio()` usa `soundfile` (sem suporte WebM)
+  - `sidecar/voice_ai/services/stt_service.py:199` - `vad_filter=True` filtra silêncio
+  - `App.tsx:1268` - MediaRecorder produz `audio/webm`
+  - `App.tsx:1309` - Plugin nativo produz `audio/wav`
+  - `App.tsx:1524` - Fallback literal `'transcription'`
+- **Solução proposta:** Adicionar `ffmpeg` como fallback em `_decode_audio()` para converter WebM para WAV antes de processar com Whisper.
+
+---
+
+### [012] Botão só clicável quando scroll está no final
+
+- **Status:** Aberto
+- **Data:** 2026-02-05
+- **Severidade:** Média
+- **Descricao:** O botão de ação (gravar/transcrever) só responde a cliques quando o conteúdo da página está scrollado até o final. Em qualquer outra posição de scroll, o clique não funciona.
+- **Causa provável:** Elemento com `z-index` baixo sendo sobreposto por outro componente posicionado, ou container com `overflow` que impede o evento de clique.
+- **Impacto:** Usuário precisa scrollar até o final para interagir, UX frustrante.
+
+---
+
+### [013] Piper TTS congela/crasha o app
+
+- **Status:** Aberto (causa raiz identificada)
+- **Data:** 2026-02-05
+- **Severidade:** Alta
+- **Descricao:** Ao acionar TTS com engine Piper, o app congela ou crasha completamente.
+- **Causa raiz:** Plugins GStreamer ausentes no notebook (Ubuntu). O WebKitGTK depende do GStreamer para reproduzir áudio no WebView, e os pacotes essenciais não estão instalados.
+- **Erros no terminal:**
+  ```
+  GStreamer element decodebin not found
+  GStreamer element appsrc not found
+  GStreamer element autoaudiosink not found
+  The GStreamer FDK AAC plugin is missing
+  ```
+- **Solução:** Instalar no notebook:
+  ```bash
+  sudo apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-tools
+  ```
+- **Nota:** Piper roda na VM e sintetiza áudio normalmente. O problema é exclusivamente na reprodução no lado do cliente (notebook).
 
 ---
 
@@ -105,6 +133,31 @@ Registro de problemas, pendencias e melhorias identificadas.
 ---
 
 ## Resolvidos
+
+### [014] Modal/Chatterbox TTS desabilitado (503)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-05
+- **Resolvido em:** 2026-02-05
+- **Severidade:** Alta
+- **Descricao:** TTS via Chatterbox/Modal retornava erro 503 (disabled). Health check mostrava `"modal": {"status": "disabled"}`.
+- **Causa raiz:** Serviço systemd `voice-ai.service` não incluía variáveis de ambiente `MODAL_ENABLED`, `MODAL_TOKEN_ID` e `MODAL_TOKEN_SECRET`. A abordagem inicial via `EnvironmentFile` falhou por restrições do SELinux no Oracle Linux.
+- **Solução implementada:** Credenciais adicionadas diretamente como linhas `Environment=` no service file (`/etc/systemd/system/voice-ai.service`). Após `daemon-reload` e restart, Modal/Chatterbox disponível.
+
+---
+
+### [009] Erro -3 no Whisper (bundle PyInstaller)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-04
+- **Resolvido em:** 2026-02-04
+- **Severidade:** Critica
+- **Descricao:** Whisper retornava `Error -3 while decompressing data` no binário PyInstaller.
+- **Causa raiz:** Artefatos binários de `ctranslate2` e `tokenizers` ausentes no bundle PyInstaller.
+- **Solução implementada:** Spec file com `collect_all` para dependências + sidecar migrado para serviço systemd (venv direto, sem PyInstaller).
+- **Nota:** Issue superada pela migração para arquitetura remota (issue #010). Sidecar agora roda da venv Python diretamente, sem necessidade de PyInstaller.
+
+---
 
 ### [010] Voice AI Sidecar nao roda na VM - App nao funciona no notebook
 
@@ -230,3 +283,5 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-02-04 | #007, #008 | Resolvidos: botao TTS na toolbar + editor sempre editavel |
 | 2026-02-04 | #009 | Documentado bug crítico de loading do Whisper (Erro -3) |
 | 2026-02-05 | #010 | Sidecar nao roda na VM - app nao funciona no notebook. Contradicao arquitetural: sidecar local vs processamento remoto |
+| 2026-02-05 | #011-#013 | Novas issues: Whisper 0 caracteres, botao nao clicavel, Piper crash |
+| 2026-02-05 | #014 | Modal/Chatterbox TTS desabilitado - corrigido via Environment= no systemd |

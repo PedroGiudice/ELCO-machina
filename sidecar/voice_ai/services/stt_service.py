@@ -7,6 +7,7 @@ Modelo Medium (1.5GB) oferece melhor custo-beneficio para PT-BR.
 import base64
 import io
 import os
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -116,13 +117,44 @@ class STTService:
             self._is_loaded = False
             print("[STT] Modelo descarregado")
 
+    def _convert_with_ffmpeg(self, input_path: str) -> str:
+        """
+        Converte audio para WAV 16kHz mono usando ffmpeg.
+
+        Args:
+            input_path: Caminho do arquivo de audio original
+
+        Returns:
+            Caminho do arquivo WAV convertido (caller deve deletar)
+        """
+        wav_path = input_path + ".converted.wav"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", input_path,
+                "-ar", "16000",
+                "-ac", "1",
+                "-f", "wav",
+                wav_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg falhou: {result.stderr[:200]}")
+        return wav_path
+
     def _decode_audio(self, audio_base64: str, format: str) -> np.ndarray:
         """
         Decodifica audio de base64 para numpy array.
 
+        Tenta soundfile primeiro. Se o formato nao for suportado (ex: WebM),
+        usa ffmpeg para converter para WAV antes de ler.
+
         Args:
             audio_base64: Audio codificado em base64
-            format: Formato do audio (webm, wav, mp3, ogg)
+            format: Formato do audio (webm, wav, mp3, ogg, m4a)
 
         Returns:
             Numpy array com audio mono, 16kHz
@@ -136,9 +168,22 @@ class STTService:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
 
+        wav_converted = None
         try:
-            # Le audio com soundfile
-            audio_data, sample_rate = sf.read(tmp_path)
+            # Formatos que soundfile nao suporta: usar ffmpeg
+            unsupported_by_sf = {"webm", "m4a", "mp4", "opus", "aac"}
+            if format.lower() in unsupported_by_sf:
+                print(f"[STT] Formato {format} nao suportado por soundfile, convertendo com ffmpeg...")
+                wav_converted = self._convert_with_ffmpeg(tmp_path)
+                audio_data, sample_rate = sf.read(wav_converted)
+            else:
+                try:
+                    audio_data, sample_rate = sf.read(tmp_path)
+                except Exception:
+                    # Fallback: tenta ffmpeg se soundfile falhar
+                    print(f"[STT] soundfile falhou para {format}, tentando ffmpeg...")
+                    wav_converted = self._convert_with_ffmpeg(tmp_path)
+                    audio_data, sample_rate = sf.read(wav_converted)
 
             # Converte para mono se necessario
             if len(audio_data.shape) > 1:
@@ -146,7 +191,6 @@ class STTService:
 
             # Resample para 16kHz se necessario (Whisper requer 16kHz)
             if sample_rate != 16000:
-                # Resample simples usando interpolacao
                 duration = len(audio_data) / sample_rate
                 target_samples = int(duration * 16000)
                 indices = np.linspace(0, len(audio_data) - 1, target_samples)
@@ -160,8 +204,10 @@ class STTService:
             return audio_data
 
         finally:
-            # Remove arquivo temporario
+            # Remove arquivos temporarios
             os.unlink(tmp_path)
+            if wav_converted and os.path.exists(wav_converted):
+                os.unlink(wav_converted)
 
     def transcribe(
         self,
@@ -187,6 +233,17 @@ class STTService:
         print(f"[STT] Decodificando audio ({format})...")
         audio_data = self._decode_audio(audio_base64, format)
         duration = len(audio_data) / 16000
+
+        # Diagnostico de amplitude
+        rms = float(np.sqrt(np.mean(audio_data**2)))
+        peak = float(np.max(np.abs(audio_data)))
+        print(f"[STT] Audio: {duration:.1f}s, RMS={rms:.6f}, peak={peak:.6f}, samples={len(audio_data)}")
+        if rms < 0.001:
+            print(f"[STT] AVISO: Audio parece ser silencio (RMS muito baixo)")
+
+        # Debug: salvar ultimo audio para analise
+        import soundfile as _sf
+        _sf.write("/tmp/last_audio_debug.wav", audio_data, 16000)
 
         print(f"[STT] Transcrevendo {duration:.1f}s de audio...")
 

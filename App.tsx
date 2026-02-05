@@ -3,7 +3,7 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { GoogleGenAI } from "@google/genai";
-import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, ensureSidecarRunning, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
+import { VoiceAIClient, type TranscribeResponse, type OutputStyle as SidecarOutputStyle, setVoiceAIUrl, getVoiceAIUrl, getVoiceAIClient, isRemoteServer } from './src/services/VoiceAIClient';
 import {
   Loader2,
   ChevronRight,
@@ -896,45 +896,16 @@ export default function App() {
       }
     };
 
-    // Aguardar auto-start do Rust, depois verificar
-    // Se falhar, tenta iniciar manualmente via fallback
+    // Servidor remoto: verificar uma vez e definir status
     const initSidecar = async () => {
-      setSidecarStatus('iniciando...');
-
-      // Dar tempo para o auto-start do Rust
-      await new Promise(r => setTimeout(r, 3000));
-
-      // Verificar se esta disponivel
-      const health = await voiceAIClient.current?.health();
-      if (health?.status === 'healthy') {
-        setSidecarAvailable(true);
-        setSidecarStatus(`Local STT (Whisper ${health.models.whisper.model || 'medium'})`);
-        addLog('Voice AI Sidecar iniciado automaticamente', 'success');
-        return;
-      }
-
-      // Fallback: tentar iniciar via comando Tauri
-      addLog('Auto-start falhou, tentando fallback...', 'info');
-      const success = await ensureSidecarRunning();
-      if (success) {
-        const healthRetry = await voiceAIClient.current?.health();
-        if (healthRetry?.status === 'healthy') {
-          setSidecarAvailable(true);
-          setSidecarStatus(`Local STT (Whisper ${healthRetry.models.whisper.model || 'medium'})`);
-          addLog('Voice AI Sidecar iniciado via fallback', 'success');
-          return;
-        }
-      }
-
-      setSidecarAvailable(false);
-      setSidecarStatus('Sidecar offline - usando Gemini');
-      addLog('Sidecar indisponivel, transcricao via Gemini', 'info');
+      setSidecarStatus('conectando...');
+      await checkSidecar();
     };
 
     initSidecar();
 
-    // Recheck periodically (every 30 seconds)
-    const interval = setInterval(checkSidecar, 30000);
+    // Recheck a cada 2 minutos (reduz spam de erros no console quando offline)
+    const interval = setInterval(checkSidecar, 120000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1214,6 +1185,16 @@ export default function App() {
         setRecordingStartTime(Date.now());
         setAudioBlob(null);
         addLog("Gravacao iniciada (nativo)", 'info');
+
+        // Abrir MediaStream paralelo para o waveform visualizer
+        // A gravacao real eh feita pelo plugin nativo (CPAL)
+        try {
+          const vizStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          setAudioStream(vizStream);
+        } catch {
+          // Se getUserMedia falhar (WebKit2GTK sem permissao), waveform nao aparece - ok
+        }
+
         return;
       } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);
@@ -1307,6 +1288,13 @@ export default function App() {
         // Ler o arquivo WAV e converter para Blob
         const audioData = await readFile(filePath);
         const blob = new Blob([audioData], { type: 'audio/wav' });
+
+        // Fechar stream do visualizador (se estava aberto)
+        if (audioStream) {
+          audioStream.getTracks().forEach(track => track.stop());
+          setAudioStream(null);
+        }
+
         setAudioBlob(blob);
         setIsRecording(false);
         setIsNativeRecording(false);
@@ -1517,11 +1505,12 @@ export default function App() {
             finalText = result.refined_text;
           }
 
-          // Add filename suggestion if not present
-          if (!finalText.includes('\n\n')) {
-            // Generate a simple filename from first words
+          // Add filename suggestion if not present (only when there is actual text)
+          if (finalText.trim() && !finalText.includes('\n\n')) {
             const firstWords = finalText.split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '');
-            finalText = `${firstWords || 'transcription'}\n\n${finalText}`;
+            if (firstWords) {
+              finalText = `${firstWords}\n\n${finalText}`;
+            }
           }
 
           setTranscription(finalText);
