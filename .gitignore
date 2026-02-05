@@ -50,3 +50,6 @@ src-tauri/binaries/voice-ai-sidecar-*
 *.sln
 *.sw?
 sidecar/.env
+
+# AppImage build artifacts
+squashfs-root/
