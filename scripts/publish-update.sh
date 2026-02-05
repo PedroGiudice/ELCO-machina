@@ -55,10 +55,38 @@ PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 FILENAME="Pro%20ATT%20Machine_${VERSION}_amd64.AppImage"
 URL="http://${TAILSCALE_IP}:${PORT}/${FILENAME}"
 
+# Corrigir compatibilidade cross-distro (OL10 -> Ubuntu)
+# libgcrypt.so.20 do OL10 precisa de libgpg-error.so.0 do OL10
+echo "[INFO] Corrigindo AppImage para compatibilidade cross-distro..."
+TMPDIR=$(mktemp -d)
+cd "$TMPDIR"
+APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" --appimage-extract >/dev/null 2>&1
+cp /lib64/libgpg-error.so.0 squashfs-root/usr/lib/
+APPIMAGETOOL_DIR=$(mktemp -d)
+cd "$APPIMAGETOOL_DIR"
+APPIMAGE_EXTRACT_AND_RUN=1 ~/.cache/tauri/linuxdeploy-plugin-appimage.AppImage --appimage-extract >/dev/null 2>&1
+FIXED_APPIMAGE="$TMPDIR/Pro ATT Machine_${VERSION}_amd64.AppImage"
+ARCH=x86_64 NO_STRIP=true "$APPIMAGETOOL_DIR/squashfs-root/usr/bin/appimagetool" "$TMPDIR/squashfs-root" "$FIXED_APPIMAGE" >/dev/null 2>&1
+cd "$PROJECT_DIR"
+
+# Re-assinar o AppImage corrigido
+echo "[INFO] Re-assinando AppImage..."
+source ~/.bashrc
+bun run tauri signer sign "$FIXED_APPIMAGE" -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" >/dev/null 2>&1
+APPIMAGE="$FIXED_APPIMAGE"
+APPIMAGE_SIG="$FIXED_APPIMAGE.sig"
+
+# Ler assinatura atualizada
+SIGNATURE=$(cat "$APPIMAGE_SIG")
+echo "[INFO] Assinatura atualizada (${#SIGNATURE} bytes)"
+
 # Copiar artefatos
 echo "[INFO] Copiando artefatos para $UPDATES_DIR..."
-cp "$APPIMAGE" "$UPDATES_DIR/"
-cp "$APPIMAGE_SIG" "$UPDATES_DIR/"
+cp "$APPIMAGE" "$UPDATES_DIR/Pro ATT Machine_${VERSION}_amd64.AppImage"
+cp "$APPIMAGE_SIG" "$UPDATES_DIR/Pro ATT Machine_${VERSION}_amd64.AppImage.sig"
+
+# Limpar temporários
+rm -rf "$TMPDIR" "$APPIMAGETOOL_DIR"
 
 # Gerar latest.json
 cat > "$UPDATES_DIR/latest.json" << HEREDOC
