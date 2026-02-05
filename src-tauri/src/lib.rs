@@ -1,258 +1,40 @@
 // ============================================================
-// Codigo condicional para gerenciamento de sidecar (apenas desktop)
+// Comandos stub para desktop (sidecar roda como servico remoto)
 // ============================================================
 
 #[cfg(desktop)]
 mod sidecar {
-    use std::sync::Arc;
-    use std::time::Duration;
-    use tauri::Manager;
-    use tauri_plugin_shell::ShellExt;
-    use tokio::sync::Mutex;
-    use tokio::time::interval;
-
-    /// Estado do sidecar compartilhado entre comandos Tauri
-    pub struct SidecarManager {
-        pub child: Arc<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>,
-        pub should_run: Arc<Mutex<bool>>,
-        pub remote_url: Arc<Mutex<Option<String>>>,
-    }
-
-    impl SidecarManager {
-        pub fn new() -> Self {
-            Self {
-                child: Arc::new(Mutex::new(None)),
-                should_run: Arc::new(Mutex::new(true)),
-                remote_url: Arc::new(Mutex::new(None)),
-            }
-        }
-    }
-
-    /// Comando Tauri: definir URL do servidor Whisper remoto
+    /// Comando Tauri: iniciar sidecar (stub - servico roda na VM)
     #[tauri::command]
-    pub async fn set_whisper_url(
-        state: tauri::State<'_, SidecarManager>,
-        url: Option<String>,
-    ) -> Result<(), String> {
-        let mut remote_url = state.remote_url.lock().await;
-        *remote_url = url.filter(|s| !s.is_empty());
-        log::info!("[sidecar] Remote URL set to: {:?}", *remote_url);
+    pub async fn start_sidecar() -> Result<String, String> {
+        // Sidecar roda como servico na VM, nao gerenciado localmente
+        Ok("remote_service".to_string())
+    }
+
+    /// Comando Tauri: parar sidecar (stub - servico roda na VM)
+    #[tauri::command]
+    pub async fn stop_sidecar() -> Result<(), String> {
         Ok(())
     }
 
-    /// Comando Tauri: verificar se esta usando servidor remoto
+    /// Comando Tauri: verificar status do sidecar (stub - servico roda na VM)
     #[tauri::command]
-    pub async fn is_remote_whisper(state: tauri::State<'_, SidecarManager>) -> Result<bool, String> {
-        let remote_url = state.remote_url.lock().await;
-        Ok(remote_url.is_some())
+    pub async fn sidecar_status() -> Result<bool, String> {
+        // Sempre retorna true - o servico na VM deve estar rodando
+        Ok(true)
     }
 
-    /// Comando Tauri: iniciar sidecar manualmente
+    /// Comando Tauri: definir URL do servidor Whisper remoto (stub - sempre remoto)
     #[tauri::command]
-    pub async fn start_sidecar(
-        app: tauri::AppHandle,
-        state: tauri::State<'_, SidecarManager>,
-    ) -> Result<String, String> {
-        let mut child_guard = state.child.lock().await;
-
-        // Se ja esta rodando, retorna ok
-        if child_guard.is_some() {
-            return Ok("already_running".to_string());
-        }
-
-        // Spawn do sidecar via shell plugin
-        let shell = app.shell();
-        let sidecar = shell
-            .sidecar("voice-ai-sidecar")
-            .map_err(|e| format!("Failed to create sidecar command: {}", e))?;
-
-        let (mut rx, child) = sidecar
-            .spawn()
-            .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
-
-        // Spawn task para ler stdout/stderr (evita buffer cheio)
-        tauri::async_runtime::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                match event {
-                    tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
-                        log::info!("[sidecar] {}", String::from_utf8_lossy(&line));
-                    }
-                    tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
-                        log::warn!("[sidecar] {}", String::from_utf8_lossy(&line));
-                    }
-                    tauri_plugin_shell::process::CommandEvent::Terminated(status) => {
-                        log::info!("[sidecar] terminated with status: {:?}", status);
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-        });
-
-        *child_guard = Some(child);
-        log::info!("[sidecar] Started via command");
-        Ok("started".to_string())
-    }
-
-    /// Comando Tauri: parar sidecar
-    #[tauri::command]
-    pub async fn stop_sidecar(state: tauri::State<'_, SidecarManager>) -> Result<(), String> {
-        let mut should_run = state.should_run.lock().await;
-        *should_run = false;
-
-        let mut child_guard = state.child.lock().await;
-        if let Some(child) = child_guard.take() {
-            child
-                .kill()
-                .map_err(|e| format!("Failed to kill sidecar: {}", e))?;
-            log::info!("[sidecar] Stopped via command");
-        }
+    pub async fn set_whisper_url(_url: Option<String>) -> Result<(), String> {
         Ok(())
     }
 
-    /// Comando Tauri: verificar status do sidecar
+    /// Comando Tauri: verificar se esta usando servidor remoto (stub - sempre remoto)
     #[tauri::command]
-    pub async fn sidecar_status(state: tauri::State<'_, SidecarManager>) -> Result<bool, String> {
-        let child_guard = state.child.lock().await;
-        Ok(child_guard.is_some())
-    }
-
-    /// Health check via HTTP para verificar se sidecar esta respondendo
-    pub async fn check_sidecar_health_with_url(url: &str) -> bool {
-        let client = match reqwest::Client::builder()
-            .timeout(Duration::from_secs(2))
-            .build()
-        {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-
-        client
-            .get(format!("{}/health", url))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-    }
-
-    /// Health check para sidecar local
-    pub async fn check_sidecar_health() -> bool {
-        check_sidecar_health_with_url("http://127.0.0.1:8765").await
-    }
-
-    /// Inicia o sidecar e retorna se foi bem sucedido
-    pub async fn spawn_sidecar(app: &tauri::AppHandle, manager: &SidecarManager) -> bool {
-        // Limpar child antigo se existir
-        {
-            let mut child = manager.child.lock().await;
-            if let Some(c) = child.take() {
-                let _ = c.kill();
-            }
-        }
-
-        let shell = app.shell();
-        let sidecar = match shell.sidecar("voice-ai-sidecar") {
-            Ok(s) => s,
-            Err(e) => {
-                log::error!("[sidecar] Failed to create command: {}", e);
-                return false;
-            }
-        };
-
-        match sidecar.spawn() {
-            Ok((mut rx, child)) => {
-                // Log handler - consome stdout/stderr para evitar bloqueio
-                tauri::async_runtime::spawn(async move {
-                    while let Some(event) = rx.recv().await {
-                        match event {
-                            tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
-                                log::info!("[sidecar] {}", String::from_utf8_lossy(&line));
-                            }
-                            tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
-                                log::warn!("[sidecar] {}", String::from_utf8_lossy(&line));
-                            }
-                            tauri_plugin_shell::process::CommandEvent::Terminated(status) => {
-                                log::info!("[sidecar] Process terminated: {:?}", status);
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                });
-
-                let mut child_guard = manager.child.lock().await;
-                *child_guard = Some(child);
-                log::info!("[sidecar] Spawned successfully");
-                true
-            }
-            Err(e) => {
-                log::error!("[sidecar] Failed to spawn: {}", e);
-                false
-            }
-        }
-    }
-
-    /// Loop de monitoramento com auto-restart
-    pub async fn monitor_sidecar(app: tauri::AppHandle, manager: std::sync::Arc<SidecarManager>) {
-        // Aguardar app inicializar antes de comecar
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        // Primeira tentativa de iniciar o sidecar
-        if spawn_sidecar(&app, &manager).await {
-            log::info!("[sidecar] Initial spawn successful");
-            // Aguardar sidecar ficar pronto (FastAPI precisa inicializar)
-            tokio::time::sleep(Duration::from_secs(3)).await;
-        } else {
-            log::warn!("[sidecar] Initial spawn failed, will retry in monitor loop");
-        }
-
-        let mut check_interval = interval(Duration::from_secs(5));
-        let mut consecutive_failures = 0;
-
-        loop {
-            check_interval.tick().await;
-
-            let should_run = *manager.should_run.lock().await;
-            if !should_run {
-                log::info!("[sidecar] Monitor loop stopping (should_run = false)");
-                break;
-            }
-
-            // Se usando servidor remoto, nao monitorar sidecar local
-            let remote_url = manager.remote_url.lock().await;
-            if remote_url.is_some() {
-                log::debug!("[sidecar] Remote URL configured, skipping local monitor");
-                consecutive_failures = 0;
-                continue;
-            }
-            drop(remote_url);
-
-            let is_healthy = check_sidecar_health().await;
-
-            if is_healthy {
-                consecutive_failures = 0;
-            } else {
-                consecutive_failures += 1;
-                log::warn!(
-                    "[sidecar] Health check failed ({} consecutive)",
-                    consecutive_failures
-                );
-
-                // Reiniciar apos 2 falhas consecutivas (10 segundos sem resposta)
-                if consecutive_failures >= 2 {
-                    log::info!("[sidecar] Attempting restart...");
-
-                    if spawn_sidecar(&app, &manager).await {
-                        log::info!("[sidecar] Restarted successfully");
-                        consecutive_failures = 0;
-                        // Aguardar sidecar inicializar antes de proximo check
-                        tokio::time::sleep(Duration::from_secs(3)).await;
-                    } else {
-                        log::error!("[sidecar] Restart failed");
-                    }
-                }
-            }
-        }
+    pub async fn is_remote_whisper() -> Result<bool, String> {
+        // Sempre remoto agora
+        Ok(true)
     }
 }
 
@@ -300,26 +82,8 @@ mod sidecar {
 // Entry point principal
 // ============================================================
 
-#[cfg(desktop)]
-use std::sync::Arc;
-
-use tauri::Manager;
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(desktop)]
-    let manager = sidecar::SidecarManager::new();
-
-    #[cfg(desktop)]
-    let manager_arc = Arc::new(sidecar::SidecarManager {
-        child: manager.child.clone(),
-        should_run: manager.should_run.clone(),
-        remote_url: manager.remote_url.clone(),
-    });
-
-    #[cfg(desktop)]
-    let monitor_manager = manager_arc.clone();
-
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -335,7 +99,7 @@ pub fn run() {
             sidecar::is_remote_whisper
         ]);
 
-    // Plugins que só funcionam no desktop
+    // Plugins que so funcionam no desktop
     #[cfg(desktop)]
     {
         builder = builder
@@ -352,12 +116,6 @@ pub fn run() {
         log::info!("MCP Bridge plugin adicionado ao builder");
     }
 
-    // Registrar estado do sidecar apenas no desktop
-    #[cfg(desktop)]
-    {
-        builder = builder.manage(manager);
-    }
-
     builder
         .setup(move |app| {
             // Plugin de log (apenas em debug)
@@ -369,37 +127,7 @@ pub fn run() {
                 )?;
             }
 
-            // Iniciar loop de monitoramento do sidecar (apenas desktop)
-            #[cfg(desktop)]
-            {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    sidecar::monitor_sidecar(app_handle, monitor_manager).await;
-                });
-            }
-
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            // Cleanup ao fechar janela principal (apenas desktop)
-            #[cfg(desktop)]
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                let app = window.app_handle();
-                if let Some(manager) = app.try_state::<sidecar::SidecarManager>() {
-                    tauri::async_runtime::block_on(async {
-                        // Sinalizar para parar o monitor loop
-                        let mut should_run = manager.should_run.lock().await;
-                        *should_run = false;
-
-                        // Matar o processo do sidecar
-                        let mut child = manager.child.lock().await;
-                        if let Some(c) = child.take() {
-                            let _ = c.kill();
-                            log::info!("[sidecar] Killed on app close");
-                        }
-                    });
-                }
-            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
