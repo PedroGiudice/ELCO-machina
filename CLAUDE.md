@@ -68,6 +68,7 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 | 2026-02-04 | Declarar build concluído sem verificar se terminou | Builds Tauri demoram ~1-2 min. Se em background, LER o output file antes de declarar sucesso |
 | 2026-02-04 | Build RPM desnecessário desperdiça ~5 min no bundling | Usuário roda Ubuntu. Só precisa do DEB. Não perder tempo esperando RPM. |
 | 2026-02-04 | APK unsigned não instala no Android | Sempre buildar Android com `--debug` para assinatura automática: `bun run tauri android build --debug --target aarch64` |
+| 2026-02-05 | `pkill -f "pro-att-machine"` não mata AppImage (nome errado) | AppImage roda com nome do arquivo: `pkill -f "Pro ATT Machine_0.2.0_amd64.AppImage"`. DEB instala como `pro-att-machine`. Sempre usar o nome correto do processo. |
 
 <!--
 Formato para adicionar:
