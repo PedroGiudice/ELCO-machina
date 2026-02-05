@@ -26,7 +26,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIwODM4N0VBNUQyQzY3N0MKUldSOFp5eGQ2b2VEc0IvUnRCcVlWdUVBMkZaYnd2S3VnY3FMb1VJbjZZYm5ZaDVVUGJvcWhWYmsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE5RTY1MDNFRkNGODBEQTAKUldTZ0RmajhQbERtcVhtTmN0aVRUYTVGR0piNmhBVDdaVE5hVmF6MTZjZlVqaG92YXREaXJBL0sK",
       "dangerousInsecureTransportProtocol": true,
       "endpoints": [
         "http://100.114.203.28:8090/latest.json"
