@@ -124,8 +124,21 @@ export function PanelStats({
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs.length]);
 
-  const sttStatus = sidecarAvailable ? 'healthy' : 'error';
-  const ttsStatus = sidecarAvailable ? (isSpeaking ? 'healthy' : 'inactive') : 'error';
+  // STT: healthy se sidecar ok, warning se offline mas tem fallback Gemini,
+  // error somente se modo local e sidecar offline (sem fallback)
+  const sttStatus: 'healthy' | 'warning' | 'error' | 'inactive' = sidecarAvailable
+    ? 'healthy'
+    : transcriptionMode === 'local'
+      ? 'error'
+      : 'warning';
+
+  // TTS: independente do health check do STT. Se estiver falando, healthy.
+  // Se sidecar offline, warning (tentativa ainda possivel via fallback).
+  const ttsStatus: 'healthy' | 'warning' | 'error' | 'inactive' = isSpeaking
+    ? 'healthy'
+    : sidecarAvailable
+      ? 'inactive'
+      : 'warning';
   const geminiStatus = hasApiKey ? 'healthy' : 'warning';
   const audioStatus = isRecording ? 'healthy' : (isProcessing ? 'warning' : 'inactive');
 
@@ -166,7 +179,13 @@ export function PanelStats({
           <ServiceCard icon={Mic} label="STT" status={sttStatus}>
             <InfoLine
               label="Engine"
-              value={transcriptionMode === 'cloud' ? 'Gemini' : 'Whisper'}
+              value={
+                sidecarAvailable
+                  ? 'Whisper'
+                  : transcriptionMode === 'cloud'
+                    ? 'Gemini'
+                    : 'Gemini (fallback)'
+              }
             />
             <InfoLine label="Mode" value={transcriptionMode} />
             <InfoLine label="Status" value={sidecarStatus} />
@@ -180,6 +199,9 @@ export function PanelStats({
             <InfoLine label="Engine" value={ttsEngine} />
             <InfoLine label="Profile" value={ttsProfile} />
             <InfoLine label="Speaking" value={isSpeaking ? 'sim' : 'nao'} />
+            {!sidecarAvailable && !isSpeaking && (
+              <InfoLine label="Nota" value="health check pendente" />
+            )}
           </ServiceCard>
 
           {/* Gemini */}

@@ -7,6 +7,23 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { GoogleGenAI } from "@google/genai";
+
+/** Wrapper: tenta tauriFetch, fallback para fetch nativo se scope bloquear */
+async function safeFetch(
+    url: string,
+    init?: RequestInit & { signal?: AbortSignal },
+): Promise<Response> {
+    try {
+        return await safeFetch(url, init);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("url not allowed") || msg.includes("scope")) {
+            console.warn(`[safeFetch] tauriFetch bloqueado, usando fetch nativo: ${msg}`);
+            return await fetch(url, init);
+        }
+        throw err;
+    }
+}
 import {
     VoiceAIClient,
     type TranscribeResponse,
@@ -1311,7 +1328,7 @@ export default function App() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-            const response = await tauriFetch(`${url}/health`, {
+            const response = await safeFetch(`${url}/health`, {
                 method: "GET",
                 signal: controller.signal,
             });
@@ -1754,6 +1771,14 @@ export default function App() {
             (transcriptionMode === "local" ||
                 (transcriptionMode === "auto" && sidecarAvailable)) &&
             sidecarAvailable;
+
+        // B4: Modo local mas sidecar offline - avisar e usar cloud
+        if (transcriptionMode === "local" && !sidecarAvailable) {
+            addLog(
+                "Modo local selecionado mas sidecar offline. Usando Gemini (cloud) como fallback.",
+                "error",
+            );
+        }
 
         // Only require API key if using cloud mode or if refining with Gemini
         const currentApiKey = apiKey || process.env.API_KEY;
@@ -2200,7 +2225,7 @@ export default function App() {
                 }
             }
 
-            const response = await tauriFetch(`${whisperServerUrl}/synthesize`, {
+            const response = await safeFetch(`${whisperServerUrl}/synthesize`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(requestBody),
@@ -2426,7 +2451,7 @@ export default function App() {
                         onExportMd={() => handleDownloadText("md")}
                         onReadText={handleReadText}
                         onStopReading={stopReadText}
-                        canRead={sidecarAvailable && !!transcription}
+                        canRead={!!transcription}
                         outputStyle={outputStyle}
                         activeContext={activeContext}
                         aiModel={aiModel}
@@ -2471,7 +2496,7 @@ export default function App() {
                 panelTTS={
                     <PanelTTS
                         isSpeaking={isSpeaking}
-                        canSpeak={sidecarAvailable}
+                        canSpeak={true}
                         hasText={!!transcription}
                         onReadText={handleReadText}
                         onStopReading={stopReadText}
@@ -2860,7 +2885,9 @@ export default function App() {
                                             {
                                                 id: "local" as TranscriptionMode,
                                                 label: "Local",
-                                                desc: "Whisper",
+                                                desc: sidecarAvailable
+                                                    ? "Whisper"
+                                                    : "Whisper (offline)",
                                             },
                                             {
                                                 id: "cloud" as TranscriptionMode,
@@ -2875,16 +2902,12 @@ export default function App() {
                                                         mode.id,
                                                     )
                                                 }
-                                                disabled={
-                                                    mode.id === "local" &&
-                                                    !sidecarAvailable
-                                                }
                                                 className={`flex flex-col items-start p-3 rounded-sm border transition-all text-left ${
                                                     transcriptionMode ===
                                                     mode.id
                                                         ? "bg-white/10 border-white/30"
                                                         : "bg-white/5 border-white/5 opacity-60 hover:opacity-100"
-                                                } ${mode.id === "local" && !sidecarAvailable ? "cursor-not-allowed opacity-30" : ""}`}
+                                                } ${mode.id === "local" && !sidecarAvailable ? "border-amber-500/50" : ""}`}
                                                 style={
                                                     transcriptionMode ===
                                                     mode.id
