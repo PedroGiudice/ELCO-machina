@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Mic, Volume2, Settings } from 'lucide-react';
+import { Mic, Volume2, Settings, Activity } from 'lucide-react';
 import type { PanelType } from '../../hooks/useActivePanel';
 
 interface BottomNavProps {
@@ -13,6 +13,7 @@ const navItems: { id: PanelType; label: string; icon: typeof Mic }[] = [
   { id: 'att', label: 'ATT', icon: Mic },
   { id: 'tts', label: 'TTS', icon: Volume2 },
   { id: 'config', label: 'Config', icon: Settings },
+  { id: 'stats', label: 'Sistema', icon: Activity },
 ];
 
 export function BottomNav({ activePanel, onPanelChange, disabled = false }: BottomNavProps) {
