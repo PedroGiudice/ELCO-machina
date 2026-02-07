@@ -1552,153 +1552,34 @@ export default function App() {
     const startTime = performance.now();
 
     try {
-      // --- LOCAL STT MODE (Whisper via Sidecar) ---
-      if (useLocalSTT && voiceAIClient.current) {
-        addLog('Transcrevendo localmente com Whisper...', 'info');
+      // --- Função auxiliar: monta system prompt para refinamento text-only ---
+      const buildStylePrompt = (rawText: string): string => {
+        const currentMemory = contextMemory[activeContext] || "No previous context.";
 
-        // Convert blob to base64
-        const base64Audio = await VoiceAIClient.blobToBase64(audioBlob);
-        const format = VoiceAIClient.getFormatFromMimeType(audioBlob.type);
-
-        // Map OutputStyle to SidecarOutputStyle
-        const sidecarStyleMap: Record<string, SidecarOutputStyle> = {
-          'Whisper Only': 'verbatim',
-          'Verbatim': 'verbatim',
-          'Elegant Prose': 'elegant_prose',
-          'Formal': 'formal',
-          'Normal': 'verbatim',
-          'Concise': 'summary',
-          'Summary': 'summary',
-          'Bullet Points': 'bullet_points',
-        };
-        const sidecarStyle = sidecarStyleMap[outputStyle] || 'verbatim';
-
-        // Should we refine with Gemini?
-        // Whisper Only, Verbatim, and Normal bypass Gemini completely
-        const shouldRefine = currentApiKey && !['Whisper Only', 'Verbatim', 'Normal'].includes(outputStyle);
-
-        try {
-          const result = await voiceAIClient.current.transcribe({
-            audio: base64Audio,
-            format,
-            language: outputLanguage === 'Portuguese' ? 'pt' : outputLanguage === 'Spanish' ? 'es' : 'en',
-            refine: shouldRefine,
-            style: sidecarStyle,
-          });
-
-          // Use refined text if available, otherwise raw
-          let finalText = result.refined_text || result.text;
-
-          // Apply filename rule
-          const currentMemory = contextMemory[activeContext] || "No previous context.";
-          if (currentApiKey && shouldRefine && result.refined_text) {
-            // Text already refined by sidecar
-            finalText = result.refined_text;
-          }
-
-          // Add filename suggestion if not present (only when there is actual text)
-          if (finalText.trim() && !finalText.includes('\n\n')) {
-            const firstWords = finalText.split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '');
-            if (firstWords) {
-              finalText = `${firstWords}\n\n${finalText}`;
-            }
-          }
-
-          setTranscription(finalText);
-
-          // Update Context Memory
-          const updatedMemory = (currentMemory + "\n" + finalText).slice(-5000);
-          setContextMemory(prev => ({
-            ...prev,
-            [activeContext]: updatedMemory
-          }));
-
-          saveContextToDB({
-            name: activeContext,
-            memory: updatedMemory,
-            lastUpdated: Date.now()
-          }).catch(e => console.error("Auto-save failed", e));
-
-          // Calculate Stats
-          const endTime = performance.now();
-          const cleanedText = finalText.trim();
-          const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
-          const charCount = cleanedText.length;
-          const wpm = 200;
-          const readingTimeVal = Math.ceil(wordCount / wpm);
-
-          const newStats: ProcessingStats = {
-            processingTime: endTime - startTime,
-            audioDuration: result.duration,
-            inputSize: audioBlob.size,
-            wordCount,
-            charCount,
-            readingTime: `${readingTimeVal} min read`,
-            appliedStyle: outputStyle
-          };
-
-          setLastStats(newStats);
-
-          // Add to history
-          setHistory(prev => [{
-            text: cleanedText,
-            date: new Date().toISOString(),
-            id: generateHistoryId()
-          }, ...prev].slice(0, MAX_HISTORY_ITEMS));
-
-          const mode = result.refine_success ? 'Local + Gemini refinement' : 'Local (Whisper)';
-          addLog(`Transcricao completa via ${mode}`, 'success');
-          setIsProcessing(false);
-          return;
-
-        } catch (sidecarError: any) {
-          // Fallback to cloud if sidecar fails
-          addLog(`Sidecar falhou: ${sidecarError.message}. Tentando Gemini...`, 'warning');
-          if (!currentApiKey) {
-            addLog("Fallback para Gemini requer API Key.", 'error');
-            setIsProcessing(false);
-            return;
-          }
-          // Continue to cloud mode below
-        }
-      }
-
-      // --- CLOUD MODE (Gemini Direct) ---
-      const base64Audio = await blobToBase64(audioBlob);
-      const ai = new GoogleGenAI({ apiKey: currentApiKey! });
-
-      // Get memory for current context
-      const currentMemory = contextMemory[activeContext] || "No previous context.";
-
-      // --- CRITICAL SPLIT: LITERARY VS. PROMPT ARCHITECT VS. VERBATIM ---
-      // This ensures we do not break the "Literary" styles while fixing "Prompt" styles.
-      const isPromptEngineeringMode = [
-          'Prompt (Claude)', 
-          'Prompt (Gemini)', 
-          'Code Generator', 
-          'Tech Docs', 
+        const isPromptEngineeringMode = [
+          'Prompt (Claude)',
+          'Prompt (Gemini)',
+          'Code Generator',
+          'Tech Docs',
           'Bullet Points'
-      ].includes(outputStyle);
+        ].includes(outputStyle);
 
-      const isVerbatimMode = outputStyle === 'Verbatim' || outputStyle === 'Whisper Only';
+        const isVerbatimMode = outputStyle === 'Verbatim' || outputStyle === 'Whisper Only';
+        const isPortuguese = outputLanguage === 'Portuguese';
 
-      const isPortuguese = outputLanguage === 'Portuguese';
+        let systemPrompt = "";
 
-      let systemPrompt = "";
-
-      if (isPromptEngineeringMode) {
-          // --- MODE A: SENIOR PROMPT ARCHITECT (Strict, Technical, XML/Markdown) ---
-          
+        if (isPromptEngineeringMode) {
           let formatInstruction = "";
           if (outputStyle === 'Prompt (Claude)') {
-              formatInstruction = `
+            formatInstruction = `
               CRITICAL OUTPUT FORMATTING:
               - You MUST wrap the final prompt in XML tags: <prompt_configuration> ... </prompt_configuration>
               - Use tags like <role>, <context>, <task>, <constraints>, <output_format> to structure the prompt.
               - Do NOT use Markdown headers (##). Use XML delimiters.
               `;
           } else if (outputStyle === 'Prompt (Gemini)') {
-              formatInstruction = `
+            formatInstruction = `
               ## Prompt Engineering Directives:
               * **Minimize Interpretation:** Reduce subjective interpretation of the input.
               * **Idea Refinement:** Prioritize clarification of the core idea.
@@ -1710,19 +1591,19 @@ export default function App() {
               FORMAT: Use clear Markdown headers (## Role, ## Task, ## Constraints). Bullet points for clarity.
               `;
           } else if (outputStyle === 'Code Generator') {
-              formatInstruction = `OUTPUT ONLY VALID CODE inside Markdown code blocks. No conversational filler.`;
+            formatInstruction = `OUTPUT ONLY VALID CODE inside Markdown code blocks. No conversational filler.`;
           } else {
-             formatInstruction = `Format as a structured technical document.`;
+            formatInstruction = `Format as a structured technical document.`;
           }
 
           systemPrompt = `
             ROLE: You are a Senior Prompt Engineer and Technical Architect.
-            
-            TASK: Reverse-engineer the user's spoken audio into a professional, high-fidelity LLM Prompt or Technical Document.
-            
+
+            TASK: Reverse-engineer the user's transcribed text into a professional, high-fidelity LLM Prompt or Technical Document.
+
             INPUT ANALYSIS:
-            - Listen to the user's intent, not just their words.
-            - Filter out "thinking noises", hesitation, and non-technical filler.
+            - Analyze the user's intent from the transcribed text.
+            - Filter out hesitation markers, filler words, and non-technical noise.
             - Extract the core logic, business rules, or creative requirements.
 
             TONE & STYLE:
@@ -1735,101 +1616,96 @@ export default function App() {
             "${currentMemory.slice(-2000)}"
 
             TARGET LANGUAGE: ${outputLanguage}
-            
+
             ${formatInstruction}
 
             EXECUTION:
-            - Transform the raw audio transcript into the requested format immediately.
-            - Do not strictly transcribe; ARCHITECT the response.
+            - Transform the transcribed text into the requested format immediately.
+            - Do not echo the input; ARCHITECT the response.
           `;
 
-      } else if (isVerbatimMode) {
-          // --- MODE C: FL FLAWLESS TRANSCRIPTION (Verbatim) ---
+        } else if (isVerbatimMode) {
           systemPrompt = `
-            ROLE: You are a professional, high-fidelity transcription engine.
-            
-            TASK: Convert the spoken audio into text with absolute accuracy.
-            
+            ROLE: You are a professional text cleanup engine.
+
+            TASK: Clean up the transcribed text with minimal changes.
+
             RULES:
-            1. **Verbatim Fidelity:** Transcribe exactly what is said. Do not paraphrase.
+            1. **Fidelity:** Preserve the original meaning and structure.
             2. **Punctuation:** Add standard punctuation for readability, but do not alter sentence structure.
-            3. **Filler Words:** Remove excessive stuttering or non-lexical sounds (um, uh) ONLY if they distract significantly. Keep them if they add context/hesitation.
-            4. **No Meta-Commentary:** Do NOT add "Here is the transcript:" or any intro. Just the text.
-            
+            3. **Filler Words:** Remove excessive filler words (um, uh, tipo) ONLY if they distract significantly.
+            4. **No Meta-Commentary:** Do NOT add "Here is the text:" or any intro. Just the cleaned text.
+
             TARGET LANGUAGE: ${outputLanguage}
-            
+
             CONTEXT MEMORY (For terminology reference only):
             "${currentMemory.slice(-2000)}"
           `;
-      } else {
-          // --- MODE B: LITERARY EDITOR (Preserved Legacy Logic) ---
-          // This path handles 'Elegant Prose', 'Ana Suy', 'Normal', etc.
-          // It remains UNTOUCHED to preserve the quality you like.
-
+        } else {
           let styleInstruction = "";
           if (isPortuguese) {
-              const instructions: Record<string, string> = {
-                'Elegant Prose': `REGRAS: 1. Tom: Claro, sofisticado e preciso. Evite floreios. 2. Formato: Prosa contínua (parágrafos). 3. Voz: Refinada. 4. Objetivo: Texto bem escrito.`,
-                'Ana Suy': `REGRAS - ANA SUY: 1. Tom: Íntimo e psicanalítico. Ouça os *silêncios*. 2. Voz: Poética e acessível. 3. Foco: Experiência subjetiva. 4. Estrutura: Fluida, parágrafos de prosa.`,
-                'Poetic / Verses': `REGRAS - POÉTICO: 1. Estrutura: Quebras de linha e estrofes baseadas no ritmo. 2. Tom: Lírico e evocativo. 3. Objetivo: Verso livre.`,
-                'Normal': `Texto padrão, gramaticalmente correto e fluído. Sem gírias excessivas.`,
-                'Verbose': `Seja detalhista e expansivo. Explore cada ponto a fundo.`,
-                'Concise': `Seja direto e econômico. Remova qualquer redundância.`,
-                'Formal': `Use linguagem culta, profissional e impessoal.`,
-                'Summary': `Forneça um resumo executivo de alto nível em 1-2 parágrafos.`,
-                'Email': `Formate como um e-mail profissional.`,
-                'Tweet Thread': `Formate como uma thread viral do Twitter/X.`,
-                'Custom': `Siga estas instruções: "${customStylePrompt}".`
-              };
-              styleInstruction = instructions[outputStyle] || `Adapte para o estilo ${outputStyle}.`;
+            const instructions: Record<string, string> = {
+              'Elegant Prose': `REGRAS: 1. Tom: Claro, sofisticado e preciso. Evite floreios. 2. Formato: Prosa continua (paragrafos). 3. Voz: Refinada. 4. Objetivo: Texto bem escrito.`,
+              'Ana Suy': `REGRAS - ANA SUY: 1. Tom: Intimo e psicanalitico. Ouca os *silencios* e o que nao foi dito. 2. Voz: Poetica e acessivel. 3. Foco: Experiencia subjetiva. 4. Estrutura: Fluida, paragrafos de prosa.`,
+              'Poetic / Verses': `REGRAS - POETICO: 1. Estrutura: Quebras de linha e estrofes baseadas no ritmo. 2. Tom: Lirico e evocativo. 3. Objetivo: Verso livre.`,
+              'Normal': `Texto padrao, gramaticalmente correto e fluido. Sem girias excessivas.`,
+              'Verbose': `Seja detalhista e expansivo. Explore cada ponto a fundo.`,
+              'Concise': `Seja direto e economico. Remova qualquer redundancia.`,
+              'Formal': `Use linguagem culta, profissional e impessoal.`,
+              'Summary': `Forneca um resumo executivo de alto nivel em 1-2 paragrafos.`,
+              'Email': `Formate como um e-mail profissional.`,
+              'Tweet Thread': `Formate como uma thread viral do Twitter/X.`,
+              'Custom': `Siga estas instrucoes: "${customStylePrompt}".`
+            };
+            styleInstruction = instructions[outputStyle] || `Adapte para o estilo ${outputStyle}.`;
           } else {
-              if (outputStyle === 'Elegant Prose') {
-                styleInstruction = `
+            if (outputStyle === 'Elegant Prose') {
+              styleInstruction = `
                 TRANSFORMATION RULES:
                 1. Tone: Clear, sophisticated, and precise. Avoid flowery or overwrought language.
                 2. Format: Continuous prose (paragraphs). Do NOT use verse, stanzas, or line breaks for effect unless strictly necessary.
                 3. Voice: Refined but accessible. Not stiff or overly formal. Avoid academic jargon.
                 4. Goal: Make it sound like a well-written creative piece or essay. Focus on clarity and rhythm rather than ornamentation.
                 `;
-             } else if (outputStyle === 'Ana Suy') {
-                styleInstruction = `
+            } else if (outputStyle === 'Ana Suy') {
+              styleInstruction = `
                 TRANSFORMATION RULES - ANA SUY STYLE:
-                1. Tone: Intimate and psychoanalytic. Pay close attention to the *silences* and what is left unsaid. 
+                1. Tone: Intimate and psychoanalytic. Pay close attention to what is left unsaid.
                 2. Voice: Poetic but accessible. Use simple words to describe complex feelings.
-                3. Techniques: Use the speaker's pauses to structure the text (using ellipses or paragraph breaks). Focus on the *subjective experience*.
+                3. Techniques: Use pauses and breaks in the text to structure it (using ellipses or paragraph breaks). Focus on the *subjective experience*.
                 4. Structure: Fluid, organic, and polished. Do NOT use poem/verse format. Use prose paragraphs.
                 `;
-             } else if (outputStyle === 'Poetic / Verses') {
-                 styleInstruction = `TRANSFORMATION RULES - POETIC STYLE: Structure using line breaks and stanzas. Tone: Artistic, lyrical.`;
-             } else if (outputStyle === 'Summary') {
-                styleInstruction = `Provide a high-level executive summary of the content in 1-2 paragraphs.`;
-             } else if (outputStyle === 'Email') {
-                styleInstruction = `Format as a professional email draft based on the content. Subject line included.`;
-             } else if (outputStyle === 'Tweet Thread') {
-                styleInstruction = `Format as a viral Twitter/X thread. Short, punchy sentences. 280 chars per tweet limit simulation.`;
-             } else if (outputStyle === 'Custom') {
-                 styleInstruction = `Follow these specific user instructions: "${customStylePrompt}".`;
-             } else {
-                 styleInstruction = `Adapt the output to be ${outputStyle} in tone and length.`;
-             }
+            } else if (outputStyle === 'Poetic / Verses') {
+              styleInstruction = `TRANSFORMATION RULES - POETIC STYLE: Structure using line breaks and stanzas. Tone: Artistic, lyrical.`;
+            } else if (outputStyle === 'Summary') {
+              styleInstruction = `Provide a high-level executive summary of the content in 1-2 paragraphs.`;
+            } else if (outputStyle === 'Email') {
+              styleInstruction = `Format as a professional email draft based on the content. Subject line included.`;
+            } else if (outputStyle === 'Tweet Thread') {
+              styleInstruction = `Format as a viral Twitter/X thread. Short, punchy sentences. 280 chars per tweet limit simulation.`;
+            } else if (outputStyle === 'Custom') {
+              styleInstruction = `Follow these specific user instructions: "${customStylePrompt}".`;
+            } else {
+              styleInstruction = `Adapt the output to be ${outputStyle} in tone and length.`;
+            }
           }
 
           systemPrompt = `
-            Role: You are an expert literary editor and ghostwriter with a keen ear for vocal nuance.
-            
-            Goal: Transform the spoken audio into text that captures not just the words, but the *spirit* and *intent* of the speaker.
-            
+            Role: You are an expert literary editor and ghostwriter.
+
+            Goal: Transform the transcribed text into polished writing that captures the *spirit* and *intent* of the original.
+
             CRITICAL TEXT REFINEMENT INSTRUCTIONS (ALL STYLES):
             1. **STRICTLY REMOVE FLUFF:** You MUST remove all verbal tics, hesitations, and filler words.
             2. **CLEAN SYNTAX:** Repair broken sentences and linguistic crutches.
             3. **RECORDING MODE: ${recordingStyle.toUpperCase()}**
-            ${recordingStyle === 'Interview' ? '- IDENTIFY SPEAKERS: Differentiate between voices if possible.' : '- MONOLOGUE: Treat this as a single cohesive stream of thought.'}
+            ${recordingStyle === 'Interview' ? '- IDENTIFY SPEAKERS: Differentiate between speakers if the text contains dialogue markers.' : '- MONOLOGUE: Treat this as a single cohesive stream of thought.'}
 
-            CRITICAL AUDIO ANALYSIS INSTRUCTIONS:
-            1. Listen for Tone: Analyze the speaker's prosody.
-            2. Respect Pauses: Use punctuation to reflect the natural breathing.
+            TEXT REFINEMENT:
+            1. Preserve the original meaning and key ideas.
+            2. Improve clarity and flow.
             3. "Show, Don't Tell": Choose words that convey emotion.
-            
+
             ${outputStyle !== 'Poetic / Verses' ? '4. FORMAT CONSTRAINT: Output in standard PROSE paragraphs. Do NOT produce poetry or verse unless explicitly instructed.' : ''}
 
             Context / Memory:
@@ -1838,82 +1714,154 @@ export default function App() {
             Configuration:
             - Target Language: ${outputLanguage}
             - Style Requirement: ${styleInstruction}
-            
+
             Output:
             Return ONLY the refined text. No preambles or conversational filler.
           `;
-      }
-      
-      // --- FORCE FILENAME RULE ---
-      systemPrompt += `
-      
-      MANDATORY OUTPUT STRUCTURE:
-      Line 1: Suggested filename for this content (concise, valid chars, no extension, no "Filename:" prefix).
-      Line 2: [Empty]
-      Line 3+: The actual content.
-      `;
-
-      // FIX: Payload structure simplified to prevent 500 errors on multimodal requests
-      const response = await ai.models.generateContent({
-        model: aiModel,
-        config: {
-            temperature: isPromptEngineeringMode ? 0.2 : isVerbatimMode ? 0.1 : 0.4, 
-        },
-        contents: {
-            parts: [
-                { inlineData: { mimeType: audioBlob.type || 'audio/webm', data: base64Audio } },
-                { text: systemPrompt }
-            ]
         }
-      });
 
-      const text = response.text || "";
-      const cleanedText = text.trim();
-      setTranscription(cleanedText);
-      
-      // Update Context Memory (RAG-lite)
-      const updatedMemory = (currentMemory + "\n" + cleanedText).slice(-5000); 
-      setContextMemory(prev => ({
-        ...prev,
-        [activeContext]: updatedMemory
-      }));
+        // --- FORCE FILENAME RULE ---
+        systemPrompt += `
 
-      // Async DB Update (Fire & Forget for better UI responsiveness, but logged)
-      saveContextToDB({
+        MANDATORY OUTPUT STRUCTURE:
+        Line 1: Suggested filename for this content (concise, valid chars, no extension, no "Filename:" prefix).
+        Line 2: [Empty]
+        Line 3+: The actual content.
+        `;
+
+        return systemPrompt;
+      };
+
+      // --- Função auxiliar: refina texto via Gemini (text-only, sem áudio) ---
+      const refineWithGemini = async (rawText: string, key: string): Promise<string> => {
+        const ai = new GoogleGenAI({ apiKey: key });
+        const systemPrompt = buildStylePrompt(rawText);
+
+        const isPromptEngineeringMode = [
+          'Prompt (Claude)', 'Prompt (Gemini)', 'Code Generator', 'Tech Docs', 'Bullet Points'
+        ].includes(outputStyle);
+        const isVerbatimMode = outputStyle === 'Verbatim' || outputStyle === 'Whisper Only';
+
+        const response = await ai.models.generateContent({
+          model: aiModel,
+          config: {
+            temperature: isPromptEngineeringMode ? 0.2 : isVerbatimMode ? 0.1 : 0.4,
+          },
+          contents: {
+            parts: [
+              { text: `Texto transcrito para refinar:\n\n${rawText}` },
+              { text: systemPrompt }
+            ]
+          }
+        });
+
+        return response.text?.trim() || rawText;
+      };
+
+      // --- Função auxiliar: finaliza processamento (stats, history, memory) ---
+      const finalizeProcessing = (finalText: string, audioDuration: number, inputSize: number) => {
+        const currentMemory = contextMemory[activeContext] || "No previous context.";
+        const cleanedText = finalText.trim();
+        setTranscription(cleanedText);
+
+        // Update Context Memory
+        const updatedMemory = (currentMemory + "\n" + cleanedText).slice(-5000);
+        setContextMemory(prev => ({
+          ...prev,
+          [activeContext]: updatedMemory
+        }));
+
+        saveContextToDB({
           name: activeContext,
           memory: updatedMemory,
           lastUpdated: Date.now()
-      }).then(() => {
-          // Silent success
-      }).catch(e => console.error("Auto-save failed", e));
+        }).catch(e => console.error("Auto-save failed", e));
 
+        // Calculate Stats
+        const endTime = performance.now();
+        const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
+        const charCount = cleanedText.length;
+        const wpm = 200;
+        const readingTimeVal = Math.ceil(wordCount / wpm);
 
-      // Calculate Stats
-      const endTime = performance.now();
-      const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
-      const charCount = cleanedText.length;
-      const wpm = 200; // Average reading speed
-      const readingTimeVal = Math.ceil(wordCount / wpm);
-      
-      const newStats: ProcessingStats = {
-        processingTime: endTime - startTime,
-        audioDuration: recordingStartTime > 0 ? (Date.now() - recordingStartTime) / 1000 : 0, // Approx for recording
-        inputSize: audioBlob.size,
-        wordCount: wordCount,
-        charCount: charCount,
-        readingTime: `${readingTimeVal} min read`,
-        appliedStyle: outputStyle
+        const newStats: ProcessingStats = {
+          processingTime: endTime - startTime,
+          audioDuration,
+          inputSize,
+          wordCount,
+          charCount,
+          readingTime: `${readingTimeVal} min read`,
+          appliedStyle: outputStyle
+        };
+
+        setLastStats(newStats);
+
+        // Add to history
+        setHistory(prev => [{
+          text: cleanedText,
+          date: new Date().toISOString(),
+          id: generateHistoryId()
+        }, ...prev].slice(0, MAX_HISTORY_ITEMS));
       };
-      
-      setLastStats(newStats);
 
-      // Add to history (robust persistence via Tauri Store)
-      setHistory(prev => [{
-        text: cleanedText,
-        date: new Date().toISOString(),
-        id: generateHistoryId()
-      }, ...prev].slice(0, MAX_HISTORY_ITEMS));
-      addLog("Processing complete & Memory secured.", 'success');
+      // --- LOCAL STT MODE (Whisper via Sidecar) ---
+      if (useLocalSTT && voiceAIClient.current) {
+        addLog('Transcrevendo localmente com Whisper...', 'info');
+
+        const base64Audio = await VoiceAIClient.blobToBase64(audioBlob);
+        const format = VoiceAIClient.getFormatFromMimeType(audioBlob.type);
+
+        try {
+          // Sidecar apenas transcreve - nunca refina
+          const result = await voiceAIClient.current.transcribe({
+            audio: base64Audio,
+            format,
+            language: outputLanguage === 'Portuguese' ? 'pt' : outputLanguage === 'Spanish' ? 'es' : 'en',
+            refine: false,
+            style: 'verbatim',
+          });
+
+          let finalText = result.text;
+
+          // Se estilo != Whisper Only e tem API key, refinar com Gemini (text-only)
+          if (outputStyle !== 'Whisper Only' && currentApiKey) {
+            addLog('Refinando com Gemini (text-only)...', 'info');
+            try {
+              finalText = await refineWithGemini(finalText, currentApiKey);
+            } catch (geminiError: any) {
+              addLog(`Gemini refinamento falhou: ${geminiError.message}. Usando texto bruto.`, 'warning');
+              // Mantém o texto bruto do Whisper
+            }
+          }
+
+          // Adiciona filename se não presente
+          if (finalText.trim() && !finalText.includes('\n\n')) {
+            const firstWords = finalText.split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '');
+            if (firstWords) {
+              finalText = `${firstWords}\n\n${finalText}`;
+            }
+          }
+
+          finalizeProcessing(finalText, result.duration, audioBlob.size);
+
+          const mode = (outputStyle !== 'Whisper Only' && currentApiKey) ? 'Whisper + Gemini (text-only)' : 'Whisper';
+          addLog(`Transcricao completa via ${mode}`, 'success');
+          setIsProcessing(false);
+          return;
+
+        } catch (sidecarError: any) {
+          addLog(`Sidecar falhou: ${sidecarError.message}`, 'warning');
+          // Sem fallback para cloud multimodal - informar o usuário
+          addLog("Whisper indisponivel. Conecte o Tailscale ou verifique o sidecar.", 'error');
+          setIsProcessing(false);
+          return;
+        }
+      }
+
+      // --- SEM WHISPER: informar o usuário ---
+      addLog("Whisper indisponivel (Tailscale desconectado ou sidecar offline).", 'error');
+      addLog("Conecte o Tailscale para transcrever audio.", 'info');
+      setIsProcessing(false);
 
     } catch (err: any) {
       console.error(err);
