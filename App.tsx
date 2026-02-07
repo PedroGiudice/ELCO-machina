@@ -8,22 +8,37 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { GoogleGenAI } from "@google/genai";
 
-/** Wrapper: tenta tauriFetch, fallback para fetch nativo se scope bloquear */
+/**
+ * Override global de fetch para resolver incompatibilidades cross-distro:
+ * - HTTPS: WebKitGTK do AppImage extraído falha com "Load failed" (libs TLS Oracle Linux)
+ *   -> tauriFetch (Rust) lida com TLS corretamente
+ * - HTTP: tauriFetch bloqueia com "url not allowed on scope"
+ *   -> fetch nativo funciona (csp: null)
+ *
+ * Estratégia: tauriFetch primeiro, fallback para nativo se scope bloquear.
+ * Isso cobre ambos os cenários e beneficia SDKs de terceiros (ex: @google/genai).
+ */
+const _nativeFetch = window.fetch.bind(window);
+
 async function safeFetch(
-    url: string,
-    init?: RequestInit & { signal?: AbortSignal },
+    url: string | URL | Request,
+    init?: RequestInit,
 ): Promise<Response> {
+    const urlStr = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
     try {
-        return await safeFetch(url, init);
+        return await tauriFetch(urlStr, init);
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("url not allowed") || msg.includes("scope")) {
-            console.warn(`[safeFetch] tauriFetch bloqueado, usando fetch nativo: ${msg}`);
-            return await fetch(url, init);
+            console.warn(`[safeFetch] tauriFetch scope block, usando nativo: ${urlStr}`);
+            return await _nativeFetch(url, init);
         }
         throw err;
     }
 }
+
+// Override global para que SDKs de terceiros (Gemini, etc) usem tauriFetch para HTTPS
+window.fetch = safeFetch as typeof window.fetch;
 import {
     VoiceAIClient,
     type TranscribeResponse,
