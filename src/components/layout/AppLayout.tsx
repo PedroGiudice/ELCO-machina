@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { BottomNav } from './BottomNav';
 import type { PanelType } from '../../hooks/useActivePanel';
 
@@ -13,12 +12,6 @@ interface AppLayoutProps {
   panelConfig: React.ReactNode;
   panelStats: React.ReactNode;
 }
-
-const panelVariants = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -10 },
-};
 
 export function AppLayout({
   activePanel,
@@ -41,12 +34,10 @@ export function AppLayout({
 
   return (
     <div
-      className="
-        flex flex-col h-full w-full
-        bg-[var(--bg-base)]
-        text-[var(--text-primary)]
-      "
+      className="flex flex-col h-full w-full"
       style={{
+        backgroundColor: 'var(--bg-base)',
+        color: 'var(--text-primary)',
         paddingTop: 'var(--sat)',
         paddingLeft: 'var(--sal)',
         paddingRight: 'var(--sar)',
@@ -57,27 +48,18 @@ export function AppLayout({
         {/* Panel Area */}
         <aside
           className={`
-            ${isFullscreenPanel ? 'w-full' : 'w-full md:w-[340px]'}
-            bg-[var(--bg-elevated)]
-            ${isFullscreenPanel ? '' : 'border-r border-[var(--border-subtle)]'}
-            flex flex-col
-            overflow-hidden
+            ${isFullscreenPanel ? 'w-full' : 'w-full md:w-80'}
+            flex flex-col overflow-hidden
             ${isFullscreenPanel ? 'max-h-full' : 'md:max-h-full max-h-[45vh]'}
           `}
+          style={{
+            backgroundColor: 'var(--bg-elevated)',
+            borderRight: isFullscreenPanel ? 'none' : '1px solid var(--border-subtle)',
+          }}
         >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activePanel}
-              variants={panelVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="flex-1 overflow-y-auto pb-20"
-            >
-              {currentPanel}
-            </motion.div>
-          </AnimatePresence>
+          <div className="flex-1 overflow-y-auto pb-20">
+            {currentPanel}
+          </div>
         </aside>
 
         {/* Editor Area - Hidden when Stats panel is active */}

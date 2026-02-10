@@ -1,26 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 /**
- * Wrapper que tenta tauriFetch e faz fallback para fetch nativo.
- * Resolve "url not allowed on the configured scope" no AppImage.
+ * safeFetch delegado: usa window.fetch que ja foi substituido pelo
+ * safeFetch global (installSafeFetch em index.tsx).
+ * Nao importar @tauri-apps/plugin-http aqui -- evita dupla chamada.
  */
 async function safeFetch(
     url: string,
     init?: RequestInit & { signal?: AbortSignal },
 ): Promise<Response> {
-    try {
-        return await tauriFetch(url, init);
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("url not allowed") || msg.includes("scope")) {
-            console.warn(
-                `[safeFetch] tauriFetch bloqueado, usando fetch nativo: ${msg}`,
-            );
-            return await fetch(url, init);
-        }
-        throw err;
-    }
+    return await fetch(url, init);
 }
 
 // ============================================================================

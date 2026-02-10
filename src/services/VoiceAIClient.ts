@@ -13,27 +13,17 @@
  * Com csp:null no tauri.conf.json, o fetch nativo funciona sem CORS.
  */
 
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
-
 /**
- * Wrapper que tenta tauriFetch (plugin-http) e faz fallback para fetch nativo.
- * Resolve o bug onde tauriFetch falha com "url not allowed on the configured scope"
- * dentro do AppImage, mas o sidecar esta acessivel via fetch nativo.
+ * safeFetch delegado: usa window.fetch que ja foi substituido pelo
+ * safeFetch global (installSafeFetch em index.tsx).
+ * Nao importar @tauri-apps/plugin-http aqui -- evita dupla chamada
+ * e possivel deadlock no IPC do Tauri.
  */
 async function safeFetch(
   url: string,
   init?: RequestInit & { signal?: AbortSignal }
 ): Promise<Response> {
-  try {
-    return await tauriFetch(url, init);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("url not allowed") || msg.includes("scope")) {
-      console.warn(`[safeFetch] tauriFetch bloqueado pelo scope, usando fetch nativo: ${msg}`);
-      return await fetch(url, init);
-    }
-    throw err;
-  }
+  return await fetch(url, init);
 }
 
 // Tipos de output disponiveis
