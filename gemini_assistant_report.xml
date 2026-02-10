@@ -1,0 +1,93 @@
+<gemini_context_report scope="TTS & Audio API Analysis" timestamp="2026-02-07T12:00:00Z">
+  <project_structure>
+    src/
+    ├── services/
+    │   └── VoiceAIClient.ts    # Client HTTP para Sidecar (apenas Transcribe/Health)
+    ├── hooks/
+    │   ├── useTTS.ts           # Hook ORFÃO (Lógica TTS robusta, não usada no App.tsx)
+    │   └── useAudioProcessing.ts # Pipeline STT + Refinamento (Usado via PanelATT?)
+    ├── components/
+    │   └── panels/
+    │       └── PanelTTS.tsx    # UI de controle TTS (recebe props do App.tsx)
+    └── App.tsx                 # MONOLITO: Implementa fetch direto para TTS e gerencia estado
+  </project_structure>
+
+  <dependencies>
+    <dep name="@google/genai" version="latest" type="runtime" />
+    <dep name="Sidecar (FastAPI)" version="v1" type="runtime" />
+  </dependencies>
+
+  <analysis_data>
+    <ast_match file="src/App.tsx" type="function" name="handleReadText" complexity="HIGH">
+      <!-- 
+      Implementação MANUAL de TTS no App.tsx (Bypassa VoiceAIClient e useTTS):
+      - Endpoint: POST ${whisperServerUrl}/synthesize
+      - Payload: { text, voice, preprocess, profile, params, voice_ref }
+      - Gerencia AudioContext e onended manualmente.
+      -->
+    </ast_match>
+
+    <ast_match file="src/hooks/useTTS.ts" type="hook" name="useTTS" complexity="MEDIUM">
+      <!-- 
+      Hook estruturado mas NÃO UTILIZADO.
+      - Suporta engines: "piper" (local), "chatterbox" (remoto/GPU).
+      - Tratamento específico para Linux/GStreamer (issue #013).
+      - Timeouts configurados (180s para cold start do Chatterbox).
+      -->
+    </ast_match>
+
+    <ast_match file="src/services/VoiceAIClient.ts" type="class" name="VoiceAIClient" complexity="LOW">
+      <!-- 
+      Falta método 'synthesize'. 
+      Atualmente só suporta 'transcribe' e 'health'.
+      Isso força o App.tsx a fazer fetch manual para TTS.
+      -->
+    </ast_match>
+  </analysis_data>
+
+  <relationships>
+    <calls from="App.tsx" to="VoiceAIClient.transcribe" />
+    <calls from="App.tsx" to="GoogleGenAI.generateContent" />
+    <calls from="App.tsx" to="fetch(/synthesize)" />
+    <calls from="useAudioProcessing.ts" to="VoiceAIClient.transcribe" />
+    <calls from="useAudioProcessing.ts" to="GoogleGenAI.generateContent" />
+  </relationships>
+
+  <file_contents>
+    <file path="src/App.tsx" range="handleReadText">
+      <!-- Lógica duplicada de TTS que deveria estar no useTTS ou VoiceAIClient -->
+    </file>
+  </file_contents>
+</gemini_context_report>
+
+<gemini_analysis>
+  ## 1. Sistema TTS (Text-to-Speech)
+  - **Status Atual**: Implementado de forma **ad-hoc dentro de `App.tsx`**.
+  - **Discrepância Crítica**: O hook `useTTS.ts` existe e contém lógica robusta (tratamento de erros Linux, timeouts específicos), mas é **ignorado**. O `App.tsx` faz um `fetch` direto para o endpoint `/synthesize`.
+  - **Ponto de Falha**: `VoiceAIClient` não abstrai a chamada de TTS (`synthesize`), obrigando o frontend a conhecer a URL e estrutura do request.
+  - **Engines**: Suporta "piper" (CPU local/rápido) e "chatterbox" (GPU remoto/clonagem de voz).
+
+  ## 2. Logging & API Calls
+  - **Sistema**: Baseado em estado local (`logs` array em `App.tsx`) via função `addLog`.
+  - **Visibilidade**: Apenas UI (console na tela) e `console.log` do navegador. Não há persistência ou telemetria estruturada.
+  - **Rastreio**: Chamadas para o Sidecar (Whisper/TTS) e Google Gemini são logadas apenas como "Info/Success/Error" no UI.
+
+  ## 3. Modelos de IA
+  - **STT (Transcriçao)**: `faster-whisper` (via Sidecar). Modelo configurado no sidecar (provavelmente "medium" ou "large-v3").
+  - **Refinamento**: `gemini-2.5-pro` (default) ou `gemini-2.5-flash`. Configurável no `PanelConfig`.
+  - **TTS**: 
+    - `Piper`: Vozes locais onnx.
+    - `Chatterbox`: Modelos XTTS/Tortoise para clonagem de voz.
+
+  ## 4. Análise `useTTS.ts` (O "Hook Fantasma")
+  - **Estado**: **Morto/Não usado**.
+  - **Qualidade**: Superior à implementação do `App.tsx`. Contém constantes de timeout adequadas para cold-start de GPU (180s) e tratamento de erros de plataforma.
+  - **Ação Recomendada**: Refatorar `App.tsx` para usar este hook e adicionar método `synthesize` ao `VoiceAIClient`.
+
+  ## 5. Análise `useAudioProcessing.ts`
+  - **Função**: Pipeline de **Entrada** (Áudio -> Texto).
+  - **Fluxo**: 
+    1. Gravação (Blob) -> `VoiceAIClient.transcribe` (Whisper) -> Texto Bruto.
+    2. Texto Bruto -> `GoogleGenAI` (Gemini) -> Texto Refinado (Estilos: "Elegant Prose", "Ana Suy", "Tech Docs", etc).
+  - **Dependência**: Usa `VoiceAIClient` corretamente para STT.
+</gemini_analysis>

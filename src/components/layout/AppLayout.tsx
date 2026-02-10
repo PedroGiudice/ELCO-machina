@@ -11,6 +11,7 @@ interface AppLayoutProps {
   panelATT: React.ReactNode;
   panelTTS: React.ReactNode;
   panelConfig: React.ReactNode;
+  panelStats: React.ReactNode;
 }
 
 const panelVariants = {
@@ -27,12 +28,16 @@ export function AppLayout({
   panelATT,
   panelTTS,
   panelConfig,
+  panelStats,
 }: AppLayoutProps) {
   const currentPanel = {
     att: panelATT,
     tts: panelTTS,
     config: panelConfig,
+    stats: panelStats,
   }[activePanel];
+
+  const isFullscreenPanel = activePanel === 'stats';
 
   return (
     <div
@@ -49,17 +54,16 @@ export function AppLayout({
     >
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Panel Area - Left on desktop, overlay on mobile */}
+        {/* Panel Area */}
         <aside
-          className="
-            w-full md:w-[340px]
+          className={`
+            ${isFullscreenPanel ? 'w-full' : 'w-full md:w-[340px]'}
             bg-[var(--bg-elevated)]
-            border-r border-[var(--border-subtle)]
+            ${isFullscreenPanel ? '' : 'border-r border-[var(--border-subtle)]'}
             flex flex-col
             overflow-hidden
-            md:max-h-full
-            max-h-[45vh]
-          "
+            ${isFullscreenPanel ? 'max-h-full' : 'md:max-h-full max-h-[45vh]'}
+          `}
         >
           <AnimatePresence mode="wait">
             <motion.div
@@ -76,10 +80,12 @@ export function AppLayout({
           </AnimatePresence>
         </aside>
 
-        {/* Editor Area - Always visible, takes remaining space */}
-        <main className="flex-1 flex flex-col overflow-hidden min-h-0">
-          {editor}
-        </main>
+        {/* Editor Area - Hidden when Stats panel is active */}
+        {!isFullscreenPanel && (
+          <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+            {editor}
+          </main>
+        )}
       </div>
 
       {/* Bottom Navigation */}

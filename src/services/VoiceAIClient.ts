@@ -6,7 +6,35 @@
  * - Refinamento opcional via Gemini
  * - Health check do sidecar
  * - Fallback para Gemini direto se sidecar indisponivel
+ *
+ * NOTA: Usa safeFetch que tenta tauriFetch (plugin-http) e faz fallback
+ * para fetch nativo. O tauriFetch pode falhar com "url not allowed on
+ * the configured scope" em certos ambientes (AppImage).
+ * Com csp:null no tauri.conf.json, o fetch nativo funciona sem CORS.
  */
+
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+
+/**
+ * Wrapper que tenta tauriFetch (plugin-http) e faz fallback para fetch nativo.
+ * Resolve o bug onde tauriFetch falha com "url not allowed on the configured scope"
+ * dentro do AppImage, mas o sidecar esta acessivel via fetch nativo.
+ */
+async function safeFetch(
+  url: string,
+  init?: RequestInit & { signal?: AbortSignal }
+): Promise<Response> {
+  try {
+    return await tauriFetch(url, init);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("url not allowed") || msg.includes("scope")) {
+      console.warn(`[safeFetch] tauriFetch bloqueado pelo scope, usando fetch nativo: ${msg}`);
+      return await fetch(url, init);
+    }
+    throw err;
+  }
+}
 
 // Tipos de output disponiveis
 export type OutputStyle =
@@ -108,7 +136,7 @@ export class VoiceAIClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${this.baseUrl}/health`, {
+      const response = await safeFetch(`${this.baseUrl}/health`, {
         method: "GET",
         signal: controller.signal,
       });
@@ -177,7 +205,7 @@ export class VoiceAIClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const response = await fetch(`${this.baseUrl}/transcribe`, {
+      const response = await safeFetch(`${this.baseUrl}/transcribe`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

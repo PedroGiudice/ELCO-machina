@@ -54,6 +54,20 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 
 ---
 
+## Gestao de Issues e Roadmap (Linear)
+
+Issue tracking e roadmap via **Linear** (MCP: `mcp__linear__*`). Workspace: `cmr-auto`, Team: `Cmr-auto`, Project: `ELCO-machina`.
+
+- **Registrar proativamente**: bugs identificados, ideias de features, decisoes tecnicas, divida tecnica
+- **NAO registrar**: passos de execucao, tarefas mecanicas, coisas sendo feitas agora
+- **Roadmap**: planos futuros viram **milestones** no project relevante; issues so quando for executar
+- **Commits**: referenciar issue quando relevante: `fix(escopo): descricao (CMR-XX)`
+- **PRs**: `Fixes CMR-XX` no body fecha issue automaticamente
+
+Ver `~/.claude/rules/git-workflow.md` para detalhes completos.
+
+---
+
 ## Erros Aprendidos
 
 **INSTRUÇÃO PARA CLAUDE:** Adicione uma entrada aqui quando:
@@ -73,11 +87,26 @@ Commitar após cada mudança lógica completa. Protege contra perda de trabalho.
 | 2026-02-05 | Tratar voice-ai-sidecar como componente local (empacotar no AppImage) | O sidecar RODA NA VM (46GB RAM, 12 cores), NUNCA no notebook do usuário. O objetivo da VM é justamente evitar dependência do hardware local. Whisper medium (1.5GB RAM, CPU intensivo) não deve rodar no notebook. A arquitetura é: app no notebook envia áudio via rede -> VM processa com Whisper -> devolve transcrição. NUNCA sugerir empacotar sidecar no AppImage ou rodar localmente. |
 | 2026-02-05 | Declarar tarefa finalizada sem fazer build | NUNCA alegar conclusão sem rodar `bun run tauri build` e confirmar sucesso. Mesmo que a alteração pareça só backend/docs, o build valida tudo. Sem build = sem conclusão. |
 | 2026-02-05 | Publicar build sem bumpar versão (0.2.6 repetida em vez de 0.2.7) | SEMPRE verificar a versão atual em `tauri.conf.json` e `package.json` E a última publicada em `latest.json` ANTES de buildar. Bumpar para a próxima sequencial. Manter histórico de versões na MEMORY.md. |
+| 2026-02-07 | AppImage build falha com `failed to run linuxdeploy` | SEMPRE usar `NO_STRIP=1` antes de `bun run tauri build` no Oracle Linux. Sem isso, o `strip` do binário causa falha no linuxdeploy. Comando correto: `NO_STRIP=1 bun run tauri build --bundles appimage` |
 
 <!--
 Formato para adicionar:
 | YYYY-MM-DD | Descrição breve do erro | O que evitar/fazer diferente |
 -->
+
+---
+
+## Context Offloading (Gemini Bridge Plugin)
+
+Plugin `gemini-bridge@opc-plugins` invoca Gemini CLI via MCP server para exploracao
+e analise pesada de codigo. Preserva a janela de contexto do Claude.
+
+- **Plugin:** `gemini-bridge@opc-plugins` (MCP server Python, zero deps)
+- **Tool:** `mcp__gemini_bridge__explore` (modes: onboarding, targeted, verify, research)
+- **Subagente:** `gemini-bridge-explorer` (restrito a apenas a tool acima)
+- **Skill:** `gemini-bridge:delegation` (protocolo de delegacao)
+- **Hook:** PreToolUse bloqueia Task(Explore) e redireciona para o plugin
+- **Regras detalhadas:** `~/.claude/rules/gemini-offloading.md`
 
 ---
 
@@ -177,6 +206,36 @@ scp opc@137.131.201.119:"/home/opc/ELCO-machina/src-tauri/target/release/bundle/
 # Android APK (unsigned)
 scp opc@137.131.201.119:"/home/opc/ELCO-machina/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk" .
 ```
+
+### Update Server (Auto-Update Desktop)
+
+- **Nginx:** porta `8090`, config em `/etc/nginx/conf.d/updates.conf`
+- **Root:** `/var/www/updates/`
+- **URL base:** `http://100.114.203.28:8090/proatt/`
+- **Manifesto:** `/var/www/updates/proatt/latest.json`
+
+**Workflow de publicação (build + publish):**
+
+```bash
+# 1. Bumpar versão em tauri.conf.json e package.json
+# 2. Build (NO_STRIP necessário no Oracle Linux)
+NO_STRIP=1 bun run tauri build --bundles appimage
+
+# 3. Copiar AppImage + assinatura para o update server
+cp "src-tauri/target/release/bundle/appimage/Pro ATT Machine_X.Y.Z_amd64.AppImage" /var/www/updates/proatt/
+cp "src-tauri/target/release/bundle/appimage/Pro ATT Machine_X.Y.Z_amd64.AppImage.sig" /var/www/updates/proatt/
+
+# 4. Atualizar latest.json com versão, assinatura e URL
+# (ver formato em /var/www/updates/proatt/latest.json)
+
+# 5. Verificar publicação
+curl -s http://100.114.203.28:8090/proatt/latest.json | python3 -m json.tool
+```
+
+**IMPORTANTE:**
+- `NO_STRIP=1` é obrigatório -- sem isso, `linuxdeploy` falha no Oracle Linux
+- Sempre bumpar versão ANTES do build (auto-update só detecta versão superior)
+- O DEB é gerado automaticamente junto, mas não é publicado no update server
 
 ### Servidor HTTP temporário (alternativa)
 

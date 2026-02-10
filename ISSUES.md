@@ -6,22 +6,6 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ## Abertos
 
-### [015] App Android trava constantemente no startup (Crash Loop)
-
-- **Status:** Investigacao / Correcao Aplicada
-- **Data:** 2026-02-05
-- **Severidade:** Critica (Bloqueante)
-- **Descricao:** O app Android fecha imediatamente apos abrir ou durante o uso inicial ("O app parou de funcionar").
-- **Analise de Causa Raiz:**
-  1. **Minificacao (ProGuard/R8):** O `build.gradle.kts` estava com `isMinifyEnabled = true` para builds de release. Isso frequentemente remove classes Java/Kotlin necessarias para plugins Tauri (via JNI) se as regras de keep nao estiverem perfeitamente configuradas. E a causa #1 de crashes "funciona em dev, quebra em release".
-  2. **Inicializacao de Plugin:** `tauri-plugin-mic-recorder` e inicializado no startup. Se suas classes foram removidas pelo R8, ocorre `java.lang.ClassNotFoundException` ou `java.lang.NoSuchMethodError` no lado nativo, derrubando a VM Java e o app.
-- **Acoes Tomadas:**
-  1. **Desabilitada Minificacao:** Alterado `build.gradle.kts` para `isMinifyEnabled = false` em release.
-  2. **Logging Ativado:** Alterado `lib.rs` para permitir inicializacao do plugin de log no Android mesmo em release, facilitando debug via `adb logcat`.
-- **Proximos Passos:**
-  - Gerar novo APK e testar.
-  - Se o problema persistir, capturar logs via `adb logcat | grep com.proatt.machine`.
-
 ### [013] Piper TTS congela/crasha o app
 
 - **Status:** Aberto (causa raiz identificada)
@@ -41,6 +25,16 @@ Registro de problemas, pendencias e melhorias identificadas.
   sudo apt install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-tools
   ```
 - **Nota:** Piper roda na VM e sintetiza áudio normalmente. O problema é exclusivamente na reprodução no lado do cliente (notebook).
+
+### [017] Modelo default deveria ser Gemini 2.5 Pro (não Flash)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07
+- **Severidade:** Baixa
+- **Descricao:** O modelo de IA default persiste como `gemini-2.5-flash` (definido no `useState` do `App.tsx`). Deveria ser `gemini-2.5-pro` por padrão para melhor qualidade de refinamento.
+- **Arquivo:** `App.tsx` (linha ~738, `useState` do `aiModel`)
+- **Solucao:** Alterado default de `'gemini-2.5-flash'` para `'gemini-2.5-pro'`
 
 ### [002] Primeiro uso requer download de modelo (~1.5GB)
 
@@ -105,7 +99,83 @@ Registro de problemas, pendencias e melhorias identificadas.
 
 ---
 
+## Resolvidos (v0.2.15)
+
+### [018] Health check do sidecar falha no AppImage (tauriFetch bloqueado pelo scope)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07 (v0.2.15)
+- **Severidade:** Alta
+- **Descricao:** STT e TTS apareciam como "offline" (dot vermelho) no painel Sistema apesar do sidecar estar saudavel e acessivel. O `tauriFetch` (plugin-http) retornava `url not allowed on the configured scope` para a URL do sidecar.
+- **Causa raiz:** O padrão `http://**` nas capabilities do Tauri nao casava com a URL do sidecar (`http://100.114.203.28:8765/health`). Native fetch funcionava perfeitamente com `csp: null`.
+- **Solucao implementada:**
+  1. Criado wrapper `safeFetch()` em VoiceAIClient.ts, useTTS.ts e App.tsx que tenta tauriFetch e faz fallback para fetch nativo quando scope bloqueia
+  2. Adicionada URL explícita do sidecar no scope das capabilities (`http://100.114.203.28:8765/**`)
+- **Arquivos:** `src/services/VoiceAIClient.ts`, `src/hooks/useTTS.ts`, `App.tsx`, `src-tauri/capabilities/default.json`
+
+### [019] TTS bloqueado quando health check do sidecar falha
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07 (v0.2.15)
+- **Severidade:** Media
+- **Descricao:** `canRead` e `canSpeak` dependiam de `sidecarAvailable`. Quando health check falhava (bug #018), botao Read ficava desabilitado e TTS inacessivel.
+- **Solucao:** `canRead` agora depende apenas de `!!transcription`, `canSpeak` sempre habilitado. TTS tenta e mostra erro se falhar (melhor que bloquear preventivamente).
+- **Arquivo:** `App.tsx`
+
+### [020] Dots de status TTS e STT com logica incorreta no PanelStats
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07 (v0.2.15)
+- **Severidade:** Media
+- **Descricao:** TTS dot ficava vermelho por depender de `sidecarAvailable` (acoplamento com STT). STT dot ficava vermelho mesmo quando tinha fallback Gemini disponivel.
+- **Solucao:**
+  - STT: `healthy` se sidecar ok, `warning` se offline mas tem fallback Gemini, `error` somente se modo local e sidecar offline
+  - TTS: `healthy` se falando, `inactive` se sidecar ok, `warning` se sidecar offline (tentativa ainda possivel)
+- **Arquivo:** `src/components/panels/PanelStats.tsx`
+
+### [021] Modo "local" sem warning quando sidecar offline
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07 (v0.2.15)
+- **Severidade:** Baixa
+- **Descricao:** Quando modo de transcricao era "local" mas sidecar estava offline, a UI mostrava contradição (Trans. Mode: local + Status: offline) sem explicação.
+- **Solucao:** Botao "Local" mostra "(offline)" quando sidecar indisponivel, borda amber como indicador visual, e log explicito ao processar audio informando uso do Gemini como fallback.
+- **Arquivo:** `App.tsx`
+
+---
+
 ## Resolvidos
+
+### [017] Modelo default deveria ser Gemini 2.5 Pro (não Flash)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07
+- **Severidade:** Baixa
+- **Descricao:** Modelo default alterado para `gemini-2.5-pro` no `App.tsx` para melhor qualidade de refinamento.
+
+### [016] Refinamento Gemini requer áudio gravado (não funciona com texto digitado)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-07
+- **Resolvido em:** 2026-02-07
+- **Severidade:** Alta
+- **Descricao:** O botão de processamento agora permite refinar texto digitado diretamente no editor, mesmo sem áudio.
+- **Solução:** Implementada lógica para verificar presença de texto no editor caso não haja `audioBlob`.
+
+### [015] App Android trava constantemente no startup (Crash Loop)
+
+- **Status:** Resolvido
+- **Data:** 2026-02-05
+- **Resolvido em:** 2026-02-07
+- **Severidade:** Critica (Bloqueante)
+- **Descricao:** O app Android fechava imediatamente após abrir em release.
+- **Causa Raiz:** Minificação (R8) removendo classes essenciais.
+- **Solução:** Desabilitada minificação em `build.gradle.kts`.
 
 ### [011] Transcrição retorna silêncio (WAV EXTENSIBLE + dispositivo errado)
 
@@ -276,3 +346,6 @@ Esta VM e suficiente para rodar o modelo Whisper medium (1.5GB) com folga. Trans
 | 2026-02-05 | #011 | Resolvido: CPAL customizado + WAV 16-bit PCM (v0.2.7-v0.2.9) |
 | 2026-02-05 | #012 | Resolvido: pb-20 no AppLayout (v0.2.9) |
 | 2026-02-05 | #006 | Mitigado: workaround CPAL contorna limitação WebKitGTK |
+| 2026-02-07 | #016 | Refinamento Gemini não funciona sem áudio (texto digitado ignorado) |
+| 2026-02-07 | #017 | Resolvido: Modelo default alterado para Gemini 2.5 Pro |
+| 2026-02-07 | #018-#021 | Resolvidos: Health check scope fix, TTS desacoplado, dots corrigidos, warning modo local (v0.2.15) |

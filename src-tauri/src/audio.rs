@@ -49,7 +49,8 @@ pub async fn enumerate_audio_devices() -> Result<Vec<AudioDevice>, String> {
 
     let mut result = Vec::new();
     for device in devices {
-        if let Ok(name) = device.name() {
+        if let Ok(desc) = device.description() {
+            let name = desc.name().to_string();
             println!("[Audio] Dispositivo encontrado: {}", name);
             result.push(AudioDevice {
                 id: name.clone(),
@@ -82,14 +83,14 @@ pub async fn start_audio_recording<R: Runtime>(
     let device = if let Some(ref label) = device_label {
         let mut devices = host.input_devices().map_err(|e| e.to_string())?;
         devices
-            .find(|d| d.name().map(|n| n == *label).unwrap_or(false))
+            .find(|d| d.description().map(|desc| desc.name() == label.as_str()).unwrap_or(false))
             .ok_or_else(|| format!("Dispositivo nao encontrado: {}", label))?
     } else {
         host.default_input_device()
             .ok_or("Nenhum dispositivo de entrada padrao disponivel")?
     };
 
-    let device_name = device.name().unwrap_or_else(|_| "desconhecido".into());
+    let device_name = device.description().map(|d| d.name().to_string()).unwrap_or_else(|_| "desconhecido".into());
     println!("[Audio] Gravando com dispositivo: {}", device_name);
 
     let config = device
