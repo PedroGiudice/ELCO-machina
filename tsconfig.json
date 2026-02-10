@@ -25,5 +25,10 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "temp-figma",
+    "node_modules",
+    "src-tauri"
+  ]
 }

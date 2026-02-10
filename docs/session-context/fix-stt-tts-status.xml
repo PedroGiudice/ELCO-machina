@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session-context>
+  <metadata>
+    <title>Fix STT/TTS Status e Dependencias do Sidecar</title>
+    <version>0.2.14</version>
+    <date>2026-02-07</date>
+    <branch>feature/issue-fixes-and-feedback</branch>
+    <objetivo>Corrigir health check do sidecar e desacoplar TTS do status STT</objetivo>
+  </metadata>
+
+  <situacao-atual>
+    <descricao>
+      O painel Sistema (Stats) foi implementado na v0.2.14. Ele exibe status de 5 servicos
+      (STT, TTS, Gemini, Audio, App) com dots coloridos. Na screenshot capturada apos deploy,
+      STT e TTS aparecem com dots vermelhos apesar do sidecar estar saudavel e acessivel.
+    </descricao>
+
+    <screenshot>
+      <path>docs/screenshots-07022026/sistema_app_07022026.png</path>
+      <observacoes>
+        <item card="STT" dot="vermelho">
+          Engine: Whisper, Mode: local, Status: "Sidecar offline - usando Gemini",
+          Server: 100.114.203.28:8765
+        </item>
+        <item card="TTS" dot="vermelho">
+          Engine: chatterbox, Profile: standard, Speaking: nao
+        </item>
+        <item card="GEMINI" dot="verde">
+          Model: gemini-3-pro-preview, API Key: configurada
+        </item>
+        <item card="AUDIO" dot="cinza">
+          Mic: Default Mic, Recording: nao
+        </item>
+        <item card="APP" dot="verde">
+          Version: v0.2.14, Trans. Mode: local
+        </item>
+      </observacoes>
+    </screenshot>
+  </situacao-atual>
+
+  <bugs>
+    <bug id="B1" severidade="alta" arquivo="App.tsx">
+      <titulo>Health check do sidecar falha no AppImage mas sidecar esta acessivel</titulo>
+      <evidencia>
+        curl do notebook para http://100.114.203.28:8765/health retorna status healthy.
+        Porem tauriFetch (plugin-http) dentro do AppImage falha silenciosamente,
+        resultando em sidecarAvailable=false.
+      </evidencia>
+      <fluxo-atual>
+        1. App inicia, chama initSidecar() (App.tsx ~linha 1040)
+        2. initSidecar() chama checkSidecar()
+        3. checkSidecar() chama voiceAIClient.current?.health()
+        4. health() usa tauriFetch (plugin-http) para GET /health
+        5. tauriFetch FALHA (causa desconhecida - possivelmente timing ou lib bundled)
+        6. catch block: setSidecarAvailable(false), setSidecarStatus("Sidecar offline")
+      </fluxo-atual>
+      <hipoteses>
+        <h1>tauriFetch falha por lib GnuTLS bundled no AppImage (mesmo para HTTP)</h1>
+        <h2>voiceAIClient.current nao inicializado quando checkSidecar roda (timing)</h2>
+        <h3>AbortController timeout de 5s nao e suficiente na primeira tentativa</h3>
+      </hipoteses>
+      <arquivos-relevantes>
+        <file>src/services/VoiceAIClient.ts</file>
+        <desc>Metodo health() na linha 111 - usa tauriFetch com AbortController (5s timeout)</desc>
+        <file>App.tsx</file>
+        <desc>checkSidecar() na linha 1016, initSidecar() na linha 1040</desc>
+      </arquivos-relevantes>
+      <diagnostico-sugerido>
+        Adicionar console.log/try-catch detalhado no health() para capturar o erro exato.
+        Testar com fetch nativo do browser como fallback. Verificar se o problema e
+        especifico do AppImage (funciona em dev mode?).
+      </diagnostico-sugerido>
+    </bug>
+
+    <bug id="B2" severidade="media" arquivo="App.tsx">
+      <titulo>TTS status depende de sidecarAvailable (acoplamento indevido)</titulo>
+      <evidencia>
+        No PanelStats.tsx linha 128:
+        const ttsStatus = sidecarAvailable ? (isSpeaking ? 'healthy' : 'inactive') : 'error';
+
+        TTS (Chatterbox/Piper) roda no mesmo sidecar que STT (Whisper), entao faz sentido
+        em termos de infraestrutura. Porem se o health check do sidecar falha por bug (B1),
+        TTS tambem aparece offline mesmo que funcionaria se chamado.
+      </evidencia>
+      <correcao-sugerida>
+        Fazer health check separado para TTS ou tratar o dot como 'warning' quando
+        sidecarAvailable=false mas TTS nunca foi testado naquela sessao.
+      </correcao-sugerida>
+    </bug>
+
+    <bug id="B3" severidade="media" arquivo="App.tsx">
+      <titulo>canRead depende de sidecarAvailable (bloqueia TTS leitura)</titulo>
+      <evidencia>
+        App.tsx linha ~2429: canRead={sidecarAvailable AND transcription}
+        App.tsx linha ~2474: canSpeak={sidecarAvailable}
+
+        Se sidecarAvailable=false por causa de B1, o botao Read fica desabilitado
+        e o usuario nao consegue usar TTS mesmo que o sidecar esteja saudavel.
+      </evidencia>
+      <correcao-sugerida>
+        Permitir tentativa de TTS mesmo com sidecarAvailable=false (tentar e falhar
+        com mensagem e melhor que bloquear preventivamente com status incorreto).
+      </correcao-sugerida>
+    </bug>
+
+    <bug id="B4" severidade="baixa" arquivo="App.tsx">
+      <titulo>Modo "local" mas status "offline" - contradição na UI</titulo>
+      <evidencia>
+        Screenshot mostra Trans. Mode: local no card App, mas STT Status:
+        "Sidecar offline - usando Gemini". O modo deveria auto-ajustar para
+        cloud quando sidecar esta offline, ou mostrar warning explicito.
+      </evidencia>
+    </bug>
+  </bugs>
+
+  <issues-abertos-preexistentes>
+    <issue id="013" severidade="alta">
+      Piper TTS congela/crasha o app - GStreamer plugins ausentes no Ubuntu.
+      Solucao: sudo apt install gstreamer1.0-plugins-*
+      Status: documentado mas nao verificado se usuario instalou.
+    </issue>
+    <issue id="002" severidade="media">
+      Primeiro uso requer download de modelo Whisper (~1.5GB) sem feedback visual.
+    </issue>
+    <issue id="004" severidade="media">
+      Fluxo Whisper-Gemini nao esta claro na UI.
+    </issue>
+    <issue id="005" severidade="media">
+      UI nao indica claramente quando API Key Gemini nao esta configurada.
+    </issue>
+  </issues-abertos-preexistentes>
+
+  <infraestrutura>
+    <build-server>
+      <ip-tailscale>100.114.203.28</ip-tailscale>
+      <usuario>opc</usuario>
+      <diretorio>/home/opc/ELCO-machina</diretorio>
+      <os>Oracle Linux 10.1</os>
+      <sidecar-porta>8765</sidecar-porta>
+      <update-server-porta>8090</update-server-porta>
+    </build-server>
+    <notebook>
+      <ip-tailscale>100.102.249.9</ip-tailscale>
+      <usuario>cmr-auto</usuario>
+      <os>Ubuntu 24.04.3 LTS</os>
+      <ssh>autorizado (chave ed25519 da VM)</ssh>
+    </notebook>
+    <sidecar>
+      <url>http://100.114.203.28:8765</url>
+      <status>healthy (verificado 2026-02-07 21:00)</status>
+      <whisper>medium (loaded)</whisper>
+      <piper>pt-br-faber-medium (loaded)</piper>
+      <chatterbox>available via Modal</chatterbox>
+    </sidecar>
+  </infraestrutura>
+
+  <stack>
+    <frontend>React 19 + TypeScript + Vite</frontend>
+    <desktop>Tauri 2.9.5</desktop>
+    <sidecar>Python 3.12 + FastAPI + Faster-Whisper</sidecar>
+    <tts>Piper (local) + Chatterbox (Modal cloud)</tts>
+    <ai>Gemini 2.5 Pro (refinamento de texto)</ai>
+    <http-client>@tauri-apps/plugin-http (tauriFetch)</http-client>
+    <package-manager>bun (nunca npm)</package-manager>
+  </stack>
+
+  <arquivos-chave>
+    <file path="App.tsx">Componente monolitico principal (~2900 linhas). Todo estado vive aqui.</file>
+    <file path="src/services/VoiceAIClient.ts">Cliente HTTP para sidecar (health, transcribe, tts)</file>
+    <file path="src/hooks/useAudioProcessing.ts">Hook de gravacao e processamento de audio</file>
+    <file path="src/hooks/useTTS.ts">Hook de text-to-speech</file>
+    <file path="src/components/panels/PanelStats.tsx">Painel Sistema (stats/logs)</file>
+    <file path="src/components/panels/PanelConfig.tsx">Painel Config com STT mode selector</file>
+    <file path="src-tauri/src/lib.rs">Backend Rust (commands Tauri)</file>
+    <file path="src-tauri/tauri.conf.json">Config Tauri (plugins, updater, bundle)</file>
+    <file path="ISSUES.md">Registro de bugs e resolucoes</file>
+  </arquivos-chave>
+
+  <decisoes-arquiteturais>
+    <decisao>Sidecar (Whisper/Piper/Chatterbox) roda SOMENTE na VM, nunca no notebook</decisao>
+    <decisao>App se comunica com sidecar via HTTP (Tailscale, sem HTTPS)</decisao>
+    <decisao>tauriFetch (plugin-http) em vez de fetch nativo para evitar CORS/mixed-content</decisao>
+    <decisao>Auto-update self-hosted via nginx na porta 8090</decisao>
+    <decisao>AppImage requer patch de libgpg-error.so.0 para Ubuntu (Oracle Linux build)</decisao>
+  </decisoes-arquiteturais>
+</session-context>
