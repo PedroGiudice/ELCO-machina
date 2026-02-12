@@ -32,8 +32,9 @@ import { usePromptStore } from "./src/hooks/usePromptStore";
 // Components
 import { AppLayout } from "./src/components/layout";
 import { Editor } from "./src/components/editor";
-import { PanelATT, PanelTTS, PanelConfig, PanelStats } from "./src/components/panels";
+import { PanelATT, PanelTTS, PanelConfig, PanelStats, PromptEditorModal, PromptManagerModal } from "./src/components/panels";
 import { AudioVisualizer } from "./src/components/ui/AudioVisualizer";
+import type { PromptTemplate } from "./src/services/PromptStore";
 
 // ============================================================================
 // UTILS
@@ -53,6 +54,128 @@ export default function App() {
     // --- PromptStore ---
     const promptStore = usePromptStore();
     const selectedTemplate = promptStore.getByName(settings.outputStyle);
+
+    // --- Prompt Editor/Manager state ---
+    const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+    const [promptEditorTemplate, setPromptEditorTemplate] = useState<PromptTemplate | null>(null);
+    const [promptManagerOpen, setPromptManagerOpen] = useState(false);
+
+    const handleEditPrompt = useCallback((styleName: string) => {
+        const template = promptStore.getByName(styleName);
+        if (template) {
+            setPromptEditorTemplate(template);
+            setPromptEditorOpen(true);
+            setPromptManagerOpen(false);
+        }
+    }, [promptStore]);
+
+    const handleNewPrompt = useCallback(() => {
+        const newTemplate: PromptTemplate = {
+            id: `custom-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            name: '',
+            systemInstruction: '',
+            temperature: 0.4,
+            isBuiltin: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+        setPromptEditorTemplate(newTemplate);
+        setPromptEditorOpen(true);
+        setPromptManagerOpen(false);
+    }, []);
+
+    const handleSavePrompt = useCallback(async (template: PromptTemplate) => {
+        await promptStore.save(template);
+    }, [promptStore]);
+
+    const handleDuplicatePrompt = useCallback((id: string) => {
+        const copy = promptStore.duplicate(id);
+        if (copy) {
+            // Salvar a copia e abrir no editor
+            promptStore.save(copy).then(() => {
+                setPromptEditorTemplate(copy);
+                setPromptEditorOpen(true);
+                setPromptManagerOpen(false);
+            });
+        }
+    }, [promptStore]);
+
+    const handleDeletePrompt = useCallback(async (id: string): Promise<boolean> => {
+        const result = await promptStore.deleteTemplate(id);
+        // Se o estilo deletado era o selecionado, fallback para Verbatim
+        if (result) {
+            const stillExists = promptStore.getByName(settings.outputStyle);
+            if (!stillExists) {
+                settings.setOutputStyle('Verbatim');
+            }
+        }
+        return result;
+    }, [promptStore, settings]);
+
+    const handleExportPrompts = useCallback(async () => {
+        try {
+            const { save } = await import("@tauri-apps/plugin-dialog");
+            const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+
+            const filePath = await save({
+                defaultPath: `prompts-export-${Date.now()}.json`,
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+            });
+
+            if (filePath) {
+                await writeTextFile(filePath, JSON.stringify(promptStore.templates, null, 2));
+                persistence.addLog(`Prompts exported: ${filePath}`, "success");
+            }
+        } catch (e) {
+            console.error("Export failed:", e);
+            persistence.addLog("Failed to export prompts", "error");
+        }
+    }, [promptStore, persistence]);
+
+    const handleImportPrompts = useCallback(async () => {
+        try {
+            const { open } = await import("@tauri-apps/plugin-dialog");
+            const { readTextFile } = await import("@tauri-apps/plugin-fs");
+
+            const filePath = await open({
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+                multiple: false,
+            });
+
+            if (filePath && typeof filePath === 'string') {
+                const content = await readTextFile(filePath);
+                const imported = JSON.parse(content) as PromptTemplate[];
+                if (!Array.isArray(imported)) {
+                    persistence.addLog("Invalid format: expected array", "error");
+                    return;
+                }
+
+                let count = 0;
+                for (const t of imported) {
+                    if (t.name && t.systemInstruction !== undefined) {
+                        const importedTemplate: PromptTemplate = {
+                            ...t,
+                            id: `imported-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                            isBuiltin: false,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now(),
+                        };
+                        await promptStore.save(importedTemplate);
+                        count++;
+                    }
+                }
+                persistence.addLog(`Imported ${count} prompt templates`, "success");
+            }
+        } catch (e) {
+            console.error("Import failed:", e);
+            persistence.addLog("Failed to import prompts", "error");
+        }
+    }, [promptStore, persistence]);
+
+    const handleResetBuiltins = useCallback(async () => {
+        await promptStore.resetBuiltins();
+        persistence.addLog("Builtin prompts reset to defaults", "success");
+    }, [promptStore, persistence]);
 
     // --- Recording state (usa Tauri invoke para gravacao nativa) ---
     const [isRecording, setIsRecording] = useState(false);
@@ -513,6 +636,9 @@ export default function App() {
                         onStyleChange={settings.setOutputStyle as (style: string) => void}
                         customStylePrompt={settings.customStylePrompt}
                         onCustomStyleChange={settings.setCustomStylePrompt}
+                        templates={promptStore.templates}
+                        onEditPrompt={handleEditPrompt}
+                        onManagePrompts={() => setPromptManagerOpen(true)}
                         isProcessing={processing.isProcessing}
                         onProcess={processing.processAudio}
                         audioVisualizer={<AudioVisualizer stream={audioStream} />}
@@ -654,6 +780,39 @@ export default function App() {
                     </div>
                 </div>
             )}
+
+            {/* PROMPT EDITOR MODAL */}
+            {promptEditorOpen && promptEditorTemplate && (
+                <PromptEditorModal
+                    template={promptEditorTemplate}
+                    isOpen={promptEditorOpen}
+                    onClose={() => {
+                        setPromptEditorOpen(false);
+                        setPromptEditorTemplate(null);
+                    }}
+                    onSave={handleSavePrompt}
+                    onDuplicate={handleDuplicatePrompt}
+                    onDelete={promptEditorTemplate.isBuiltin ? undefined : handleDeletePrompt}
+                />
+            )}
+
+            {/* PROMPT MANAGER MODAL */}
+            <PromptManagerModal
+                templates={promptStore.templates}
+                isOpen={promptManagerOpen}
+                onClose={() => setPromptManagerOpen(false)}
+                onEditTemplate={(t) => {
+                    setPromptEditorTemplate(t);
+                    setPromptEditorOpen(true);
+                    setPromptManagerOpen(false);
+                }}
+                onNewTemplate={handleNewPrompt}
+                onDuplicate={handleDuplicatePrompt}
+                onDelete={handleDeletePrompt}
+                onResetBuiltins={handleResetBuiltins}
+                onExport={handleExportPrompts}
+                onImport={handleImportPrompts}
+            />
         </div>
     );
 }
