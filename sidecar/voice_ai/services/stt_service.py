@@ -6,6 +6,7 @@ Modelo Medium (1.5GB) oferece melhor custo-beneficio para PT-BR.
 """
 import base64
 import io
+import logging
 import os
 import subprocess
 import tempfile
@@ -15,6 +16,8 @@ from typing import Literal
 
 import numpy as np
 import soundfile as sf
+
+logger = logging.getLogger(__name__)
 
 
 # Tipo para tamanhos de modelo disponiveis
@@ -71,7 +74,7 @@ class STTService:
         if self._is_loaded:
             return
 
-        print(f"[STT] Carregando modelo {self.model_size}...")
+        logger.info("Carregando modelo %s...", self.model_size)
 
         try:
             from faster_whisper import WhisperModel
@@ -103,10 +106,10 @@ class STTService:
             )
 
             self._is_loaded = True
-            print(f"[STT] Modelo carregado: {self.model_size} ({device}, {compute_type})")
+            logger.info("Modelo carregado: %s (%s, %s)", self.model_size, device, compute_type)
 
         except Exception as e:
-            print(f"[STT] Erro ao carregar modelo: {e}")
+            logger.error("Erro ao carregar modelo: %s", e)
             raise RuntimeError(f"Falha ao carregar modelo Whisper: {e}") from e
 
     def unload(self):
@@ -115,7 +118,7 @@ class STTService:
             del self._model
             self._model = None
             self._is_loaded = False
-            print("[STT] Modelo descarregado")
+            logger.info("Modelo descarregado")
 
     def _convert_with_ffmpeg(self, input_path: str) -> str:
         """
@@ -173,7 +176,7 @@ class STTService:
             # Formatos que soundfile nao suporta: usar ffmpeg
             unsupported_by_sf = {"webm", "m4a", "mp4", "opus", "aac"}
             if format.lower() in unsupported_by_sf:
-                print(f"[STT] Formato {format} nao suportado por soundfile, convertendo com ffmpeg...")
+                logger.info("Formato %s nao suportado por soundfile, convertendo com ffmpeg...", format)
                 wav_converted = self._convert_with_ffmpeg(tmp_path)
                 audio_data, sample_rate = sf.read(wav_converted)
             else:
@@ -181,7 +184,7 @@ class STTService:
                     audio_data, sample_rate = sf.read(tmp_path)
                 except Exception:
                     # Fallback: tenta ffmpeg se soundfile falhar
-                    print(f"[STT] soundfile falhou para {format}, tentando ffmpeg...")
+                    logger.info("soundfile falhou para %s, tentando ffmpeg...", format)
                     wav_converted = self._convert_with_ffmpeg(tmp_path)
                     audio_data, sample_rate = sf.read(wav_converted)
 
@@ -230,18 +233,18 @@ class STTService:
         self._ensure_model_loaded()
 
         # Decodifica audio
-        print(f"[STT] Decodificando audio ({format})...")
+        logger.info("Decodificando audio (%s)...", format)
         audio_data = self._decode_audio(audio_base64, format)
         duration = len(audio_data) / 16000
 
         # Diagnostico de amplitude
         rms = float(np.sqrt(np.mean(audio_data**2)))
         peak = float(np.max(np.abs(audio_data)))
-        print(f"[STT] Audio: {duration:.1f}s, RMS={rms:.6f}, peak={peak:.6f}, samples={len(audio_data)}")
+        logger.info("Audio: %.1fs, RMS=%.6f, peak=%.6f, samples=%d", duration, rms, peak, len(audio_data))
         if rms < 0.001:
-            print(f"[STT] AVISO: Audio parece ser silencio (RMS muito baixo)")
+            logger.warning("Audio parece ser silencio (RMS muito baixo)")
 
-        print(f"[STT] Transcrevendo {duration:.1f}s de audio...")
+        logger.info("Transcrevendo %.1fs de audio...", duration)
 
         # Transcreve com Whisper
         segments, info = self._model.transcribe(
@@ -277,7 +280,7 @@ class STTService:
             # Converte log prob para porcentagem aproximada
             avg_confidence = min(1.0, max(0.0, 1.0 + avg_confidence / 5))
 
-        print(f"[STT] Transcricao completa: {len(full_text)} caracteres")
+        logger.info("Transcricao completa: %d caracteres", len(full_text))
 
         return TranscriptionResult(
             text=full_text,

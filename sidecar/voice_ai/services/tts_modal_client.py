@@ -4,8 +4,11 @@ TTS Modal Client - Cliente para chamar Chatterbox no Modal.
 Permite sintese de voz com clonagem via GPU serverless.
 """
 
+import logging
 import os
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from voice_ai.schemas.tts_profiles import TTSParameters
 
@@ -28,14 +31,14 @@ def _check_modal_available() -> bool:
         token_secret = os.environ.get("MODAL_TOKEN_SECRET")
 
         if not token_id or not token_secret:
-            print("[ModalClient] MODAL_TOKEN_ID ou MODAL_TOKEN_SECRET nao configurados")
+            logger.info("MODAL_TOKEN_ID ou MODAL_TOKEN_SECRET nao configurados")
             return False
 
         _modal_available = True
         return True
 
     except ImportError:
-        print("[ModalClient] modal nao instalado")
+        logger.info("modal nao instalado")
         return False
 
 

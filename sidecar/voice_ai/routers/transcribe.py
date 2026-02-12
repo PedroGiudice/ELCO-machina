@@ -3,6 +3,7 @@ Transcribe Router - Endpoints de Speech-to-Text
 
 POST /transcribe: Transcreve audio para texto
 """
+import asyncio
 import logging
 from typing import Literal
 
@@ -141,8 +142,10 @@ async def transcribe_audio(
         )
 
     try:
-        # 1. Transcreve com Whisper
-        result = stt_service.transcribe(
+        # 1. Transcreve com Whisper (CPU-bound, roda em thread separada
+        #    para nao bloquear o event loop durante inferencia ~2-5s)
+        result = await asyncio.to_thread(
+            stt_service.transcribe,
             audio_base64=body.audio,
             format=body.format,
             language=body.language,
