@@ -18,3 +18,7 @@ export {
   type UseAudioRecordingReturn,
   type AudioMetrics,
 } from './useAudioRecording';
+export {
+  usePromptStore,
+  type UsePromptStoreReturn,
+} from './usePromptStore';

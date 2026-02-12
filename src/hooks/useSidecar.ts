@@ -70,11 +70,11 @@ export function useSidecar(
           log('Voice AI Sidecar conectado - Transcricao local ativada', 'success');
         } else {
           setSidecarAvailable(false);
-          setSidecarStatus('Sidecar offline - usando Gemini');
+          setSidecarStatus('Sidecar offline');
         }
       } catch {
         setSidecarAvailable(false);
-        setSidecarStatus('Sidecar offline - usando Gemini');
+        setSidecarStatus('Sidecar offline');
       }
     };
 

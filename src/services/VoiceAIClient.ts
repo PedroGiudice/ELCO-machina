@@ -36,26 +36,18 @@ async function safeFetch(
   }
 }
 
-// Tipos de output disponiveis
-export type OutputStyle =
-  | "verbatim"
-  | "elegant_prose"
-  | "formal"
-  | "casual"
-  | "prompt"
-  | "bullet_points"
-  | "summary";
-
 // Formatos de audio suportados
 export type AudioFormat = "webm" | "wav" | "mp3" | "ogg" | "m4a";
 
-// Request para transcricao
+// Request para transcricao (alinhado com backend POST /transcribe)
 export interface TranscribeRequest {
   audio: string; // Base64 encoded
   format?: AudioFormat;
   language?: string | null; // null = auto-detect
   refine?: boolean;
-  style?: OutputStyle;
+  system_instruction?: string | null; // Prompt do PromptStore
+  model?: string; // default "gemini-2.5-flash"
+  temperature?: number; // default 0.4, range 0.0-2.0
 }
 
 // Segmento de transcricao
@@ -66,7 +58,7 @@ export interface TranscriptionSegment {
   confidence: number;
 }
 
-// Response da transcricao
+// Response da transcricao (alinhado com backend)
 export interface TranscribeResponse {
   text: string;
   refined_text: string | null;
@@ -76,9 +68,10 @@ export interface TranscribeResponse {
   segments: TranscriptionSegment[];
   refine_success: boolean | null;
   refine_error: string | null;
+  model_used: string | null;
 }
 
-// Response do health check
+// Response do health check (piper/modal, nao xtts)
 export interface HealthResponse {
   status: "healthy" | "degraded";
   version: string;
@@ -87,7 +80,11 @@ export interface HealthResponse {
       status: "loaded" | "available" | "not_loaded";
       model: string | null;
     };
-    xtts: {
+    piper: {
+      status: "loaded" | "available" | "not_implemented";
+      model: string | null;
+    };
+    modal: {
       status: "loaded" | "available" | "not_implemented";
       model: string | null;
     };
@@ -193,13 +190,23 @@ export class VoiceAIClient {
    * @throws Error se sidecar nao disponivel ou erro na transcricao
    */
   async transcribe(request: TranscribeRequest): Promise<TranscribeResponse> {
-    const body = {
+    const body: Record<string, unknown> = {
       audio: request.audio,
       format: request.format || "webm",
       language: request.language ?? "pt",
       refine: request.refine || false,
-      style: request.style || "verbatim",
     };
+
+    // Novos campos para refinamento via sidecar REST
+    if (request.system_instruction !== undefined) {
+      body.system_instruction = request.system_instruction;
+    }
+    if (request.model !== undefined) {
+      body.model = request.model;
+    }
+    if (request.temperature !== undefined) {
+      body.temperature = request.temperature;
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
