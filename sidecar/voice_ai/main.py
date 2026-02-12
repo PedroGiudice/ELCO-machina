@@ -87,10 +87,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - permite requisicoes do frontend Tauri
+# CORS - apenas origens do frontend Tauri e dev server
+ALLOWED_ORIGINS = [
+    "tauri://localhost",        # Tauri desktop (Linux/Windows/macOS)
+    "https://tauri.localhost",  # Tauri mobile (Android/iOS)
+    "http://localhost",
+    "http://localhost:3000",    # Vite dev server
+    "https://localhost",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tauri usa tauri://localhost ou http://localhost
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

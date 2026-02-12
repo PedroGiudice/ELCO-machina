@@ -241,10 +241,6 @@ class STTService:
         if rms < 0.001:
             print(f"[STT] AVISO: Audio parece ser silencio (RMS muito baixo)")
 
-        # Debug: salvar ultimo audio para analise
-        import soundfile as _sf
-        _sf.write("/tmp/last_audio_debug.wav", audio_data, 16000)
-
         print(f"[STT] Transcrevendo {duration:.1f}s de audio...")
 
         # Transcreve com Whisper
