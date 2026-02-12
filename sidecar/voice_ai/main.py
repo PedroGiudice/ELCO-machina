@@ -4,19 +4,28 @@ Voice AI Sidecar - FastAPI Entry Point
 Sistema de processamento de voz local-first com refinamento cloud opcional.
 Filosofia: "Whisper transcreve, Gemini refina. Privacidade e qualidade."
 """
+import logging
 import os
-import sys
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Literal
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+# Configura logging estruturado para todo o sidecar
 from voice_ai.routers import transcribe, synthesize
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
 from voice_ai.services.tts_modal_client import TTSModalClient
+
+# Configura logging estruturado para todo o sidecar
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 # Estado global do aplicativo
@@ -38,7 +47,7 @@ async def lifespan(app: FastAPI):
     Carrega modelos no startup, libera recursos no shutdown.
     """
     # Startup
-    print("[VoiceAI] Iniciando sidecar...")
+    logger.info("Iniciando sidecar...")
 
     try:
         # Inicializa STT Service (Whisper)
@@ -49,34 +58,34 @@ async def lifespan(app: FastAPI):
         # Voz sera carregada lazy na primeira requisicao
         state.tts_service = TTSService()
         if state.tts_service.is_available:
-            print("[VoiceAI] TTS (Piper) disponivel")
+            logger.info("TTS (Piper) disponivel")
         else:
-            print("[VoiceAI] TTS (Piper) nao instalado - sintese local desabilitada")
+            logger.info("TTS (Piper) nao instalado - sintese local desabilitada")
 
         # Inicializa Modal Client (Chatterbox - clonagem de voz)
         state.modal_client = TTSModalClient()
         if state.modal_client.is_available:
-            print("[VoiceAI] TTS (Modal/Chatterbox) disponivel")
+            logger.info("TTS (Modal/Chatterbox) disponivel")
         elif state.modal_client.is_enabled:
-            print("[VoiceAI] TTS (Modal) habilitado mas credenciais ausentes")
+            logger.warning("TTS (Modal) habilitado mas credenciais ausentes")
         else:
-            print("[VoiceAI] TTS (Modal) desabilitado (MODAL_ENABLED=false)")
+            logger.info("TTS (Modal) desabilitado (MODAL_ENABLED=false)")
 
         state.models_loaded = True
-        print("[VoiceAI] Sidecar pronto!")
+        logger.info("Sidecar pronto!")
     except Exception as e:
         state.startup_error = str(e)
-        print(f"[VoiceAI] Erro no startup: {e}", file=sys.stderr)
+        logger.error("Erro no startup: %s", e)
 
     yield
 
     # Shutdown
-    print("[VoiceAI] Encerrando sidecar...")
+    logger.info("Encerrando sidecar...")
     if state.stt_service:
         state.stt_service.unload()
     if state.tts_service:
         state.tts_service.unload()
-    print("[VoiceAI] Sidecar encerrado.")
+    logger.info("Sidecar encerrado.")
 
 
 # Cria aplicacao FastAPI
@@ -87,21 +96,50 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - permite requisicoes do frontend Tauri
+# CORS - apenas origens do frontend Tauri e dev server
+ALLOWED_ORIGINS = [
+    "tauri://localhost",        # Tauri desktop (Linux/Windows/macOS)
+    "https://tauri.localhost",  # Tauri mobile (Android/iOS)
+    "http://localhost",
+    "http://localhost:3000",    # Vite dev server
+    "https://localhost",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tauri usa tauri://localhost ou http://localhost
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Schemas de resposta
+# Schemas de resposta tipados para /health
+class WhisperModelStatus(BaseModel):
+    status: Literal["loaded", "available", "not_loaded"]
+    model: str | None = None
+
+
+class PiperModelStatus(BaseModel):
+    status: Literal["loaded", "available", "not_installed", "not_available"]
+    voice: str | None = None
+
+
+class ModalModelStatus(BaseModel):
+    status: Literal["available", "credentials_missing", "disabled"]
+    engine: str = "chatterbox"
+
+
+class ModelsStatus(BaseModel):
+    whisper: WhisperModelStatus
+    piper: PiperModelStatus
+    modal: ModalModelStatus
+
+
 class HealthResponse(BaseModel):
-    status: str
+    status: Literal["healthy", "degraded"]
     version: str
-    models: dict[str, Any]
+    models: ModelsStatus
     error: str | None = None
 
 
@@ -153,20 +191,19 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status="healthy" if state.models_loaded else "degraded",
         version="0.2.0",
-        models={
-            "whisper": {
-                "status": whisper_status,
-                "model": whisper_model,
-            },
-            "piper": {
-                "status": piper_status,
-                "voice": piper_voice,
-            },
-            "modal": {
-                "status": modal_status,
-                "engine": "chatterbox",
-            },
-        },
+        models=ModelsStatus(
+            whisper=WhisperModelStatus(
+                status=whisper_status,
+                model=whisper_model,
+            ),
+            piper=PiperModelStatus(
+                status=piper_status,
+                voice=piper_voice,
+            ),
+            modal=ModalModelStatus(
+                status=modal_status,
+            ),
+        ),
         error=state.startup_error,
     )
 

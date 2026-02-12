@@ -3,13 +3,16 @@ Transcribe Router - Endpoints de Speech-to-Text
 
 POST /transcribe: Transcreve audio para texto
 """
+import asyncio
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from voice_ai.services.refiner import OutputStyle, get_refiner
+from voice_ai.services.refiner import GeminiRestRefiner
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -33,9 +36,20 @@ class TranscribeRequest(BaseModel):
         default=False,
         description="Se deve refinar texto com Gemini",
     )
-    style: OutputStyle = Field(
-        default="verbatim",
-        description="Estilo de output para refinamento",
+    # Novos campos — o frontend envia o prompt e modelo desejados
+    system_instruction: str | None = Field(
+        default=None,
+        description="Prompt do sistema para refinamento (estilo de output)",
+    )
+    model: str = Field(
+        default="gemini-2.5-flash",
+        description="ID do modelo Gemini para refinamento",
+    )
+    temperature: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=2.0,
+        description="Temperatura de geracao para refinamento (0.0 - 2.0)",
     )
 
 
@@ -92,6 +106,10 @@ class TranscribeResponse(BaseModel):
         default=None,
         description="Erro do refinamento, se houver",
     )
+    model_used: str | None = Field(
+        default=None,
+        description="Modelo Gemini usado no refinamento",
+    )
 
 
 @router.post("", response_model=TranscribeResponse)
@@ -105,7 +123,7 @@ async def transcribe_audio(
     Fluxo:
     1. Audio chega como base64
     2. Whisper transcreve localmente (2-5 segundos)
-    3. Se refine=true, Gemini formata o texto
+    3. Se refine=true e system_instruction presente, Gemini formata o texto via REST
     4. Retorna texto bruto + refinado
 
     Args:
@@ -124,8 +142,10 @@ async def transcribe_audio(
         )
 
     try:
-        # 1. Transcreve com Whisper
-        result = stt_service.transcribe(
+        # 1. Transcreve com Whisper (CPU-bound, roda em thread separada
+        #    para nao bloquear o event loop durante inferencia ~2-5s)
+        result = await asyncio.to_thread(
+            stt_service.transcribe,
             audio_base64=body.audio,
             format=body.format,
             language=body.language,
@@ -148,21 +168,30 @@ async def transcribe_audio(
             ],
         )
 
-        # 2. Refina com Gemini se solicitado
-        if body.refine and result.text:
-            refiner = get_refiner()
-            refine_result = refiner.refine(
+        # 2. Refina com Gemini REST se solicitado
+        if body.refine and result.text and body.system_instruction:
+            refiner = GeminiRestRefiner()
+            refine_result = await refiner.refine(
                 text=result.text,
-                style=body.style,
+                system_instruction=body.system_instruction,
+                model=body.model,
+                temperature=body.temperature,
             )
 
             response.refined_text = refine_result.refined_text
             response.refine_success = refine_result.success
             response.refine_error = refine_result.error
+            response.model_used = refine_result.model_used
+        elif body.refine and result.text and not body.system_instruction:
+            logger.warning(
+                "Refinamento solicitado mas system_instruction ausente. "
+                "Retornando texto bruto."
+            )
 
         return response
 
     except Exception as e:
+        logger.error("Erro na transcricao: %s", e)
         raise HTTPException(
             status_code=500,
             detail=f"Erro na transcricao: {str(e)}",

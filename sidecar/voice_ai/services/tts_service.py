@@ -6,10 +6,13 @@ Suporta multiplas vozes PT-BR com baixo uso de recursos.
 """
 
 import io
+import logging
 import os
 import wave
 from pathlib import Path
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 # Piper TTS sera importado lazy para evitar erro se nao instalado
 _piper_voice = None
@@ -56,7 +59,7 @@ class TTSService:
 
             self._is_available = True
         except ImportError:
-            print("[TTSService] piper-tts nao instalado. TTS indisponivel.")
+            logger.info("piper-tts nao instalado. TTS indisponivel.")
 
     @property
     def is_available(self) -> bool:
@@ -84,7 +87,7 @@ class TTSService:
         voice_id = voice_id or self.DEFAULT_VOICE
 
         if voice_id not in self.VOICES:
-            print(f"[TTSService] Voz desconhecida: {voice_id}")
+            logger.warning("Voz desconhecida: %s", voice_id)
             return False
 
         # Se ja esta carregada, nao recarrega
@@ -100,21 +103,21 @@ class TTSService:
 
             # Baixa modelo se necessario
             if not model_path.exists():
-                print(f"[TTSService] Baixando modelo {model_name}...")
+                logger.info("Baixando modelo %s...", model_name)
                 self._download_model(model_name)
 
             if not model_path.exists():
-                print(f"[TTSService] Modelo nao encontrado: {model_path}")
+                logger.error("Modelo nao encontrado: %s", model_path)
                 return False
 
-            print(f"[TTSService] Carregando voz {voice_id}...")
+            logger.info("Carregando voz %s...", voice_id)
             self._voice = PiperVoice.load(str(model_path), str(config_path))
             self._current_voice_id = voice_id
-            print(f"[TTSService] Voz {voice_id} carregada!")
+            logger.info("Voz %s carregada!", voice_id)
             return True
 
         except Exception as e:
-            print(f"[TTSService] Erro ao carregar voz: {e}")
+            logger.error("Erro ao carregar voz: %s", e)
             return False
 
     def _download_model(self, model_name: str) -> bool:
@@ -137,7 +140,7 @@ class TTSService:
         # Formato: {lang}_{region}-{speaker}-{quality}
         parts = model_name.split("-")
         if len(parts) != 3:
-            print(f"[TTSService] Formato de modelo invalido: {model_name}")
+            logger.error("Formato de modelo invalido: %s", model_name)
             return False
 
         lang_region = parts[0]  # pt_BR
@@ -151,20 +154,20 @@ class TTSService:
             # Baixa arquivo ONNX
             onnx_url = f"{base_url}/{lang}/{lang_region}/{speaker}/{quality}/{model_name}.onnx"
             onnx_path = self.models_dir / f"{model_name}.onnx"
-            print(f"[TTSService] Baixando {onnx_url}...")
+            logger.info("Baixando %s...", onnx_url)
             urllib.request.urlretrieve(onnx_url, onnx_path)
 
             # Baixa arquivo de configuracao
             config_url = f"{base_url}/{lang}/{lang_region}/{speaker}/{quality}/{model_name}.onnx.json"
             config_path = self.models_dir / f"{model_name}.onnx.json"
-            print(f"[TTSService] Baixando {config_url}...")
+            logger.info("Baixando %s...", config_url)
             urllib.request.urlretrieve(config_url, config_path)
 
-            print(f"[TTSService] Modelo {model_name} baixado com sucesso!")
+            logger.info("Modelo %s baixado com sucesso!", model_name)
             return True
 
         except Exception as e:
-            print(f"[TTSService] Erro ao baixar modelo: {e}")
+            logger.error("Erro ao baixar modelo: %s", e)
             return False
 
     def synthesize(
@@ -238,4 +241,4 @@ class TTSService:
         """Libera recursos da voz carregada."""
         self._voice = None
         self._current_voice_id = None
-        print("[TTSService] Voz descarregada.")
+        logger.info("Voz descarregada.")

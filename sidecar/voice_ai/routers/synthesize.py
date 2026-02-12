@@ -6,11 +6,14 @@ ou Chatterbox via Modal (clonagem de voz).
 """
 
 import base64
+import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from voice_ai.utils.text_preprocessor import (
     preprocess_for_tts,
@@ -59,10 +62,10 @@ def _get_default_ptbr_ref(tts_service) -> bytes | None:
             output_format="wav",
         )
         _default_ptbr_ref = ref_bytes
-        print(f"[Synthesize] Referencia PT-BR gerada: {len(ref_bytes)} bytes")
+        logger.info("Referencia PT-BR gerada: %d bytes", len(ref_bytes))
         return ref_bytes
     except Exception as e:
-        print(f"[Synthesize] Falha ao gerar referencia PT-BR: {e}")
+        logger.error("Falha ao gerar referencia PT-BR: %s", e)
         return None
 
 
@@ -218,7 +221,7 @@ async def _synthesize_with_modal(
             tts_service = request.state.tts_service
             voice_ref_bytes = _get_default_ptbr_ref(tts_service)
             if voice_ref_bytes:
-                print("[Synthesize] Usando referencia PT-BR default (Piper)")
+                logger.info("Usando referencia PT-BR default (Piper)")
 
         # Chama Modal com parametros
         audio_bytes = modal_client.synthesize(

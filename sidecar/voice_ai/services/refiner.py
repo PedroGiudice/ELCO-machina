@@ -1,240 +1,162 @@
 """
-Gemini Refiner Service - Refinamento de texto via cloud
+Gemini Refiner Service - Refinamento de texto via REST API
 
-Papel REDUZIDO:
-- NAO faz mais STT (Whisper faz localmente)
+Cliente REST puro para a API do Gemini (generativelanguage.googleapis.com).
+Sem SDK, sem singleton global. Apenas httpx + JSON.
+
+Papel:
+- NAO faz STT (Whisper faz localmente)
 - SO formata/refina texto transcrito
-- Aplica estilos (Verbatim, Elegant Prose, Prompt, etc)
+- Aplica system_instruction fornecido pelo chamador
 - OPCIONAL - sistema funciona 100% offline sem ele
 """
+import logging
 import os
 from dataclasses import dataclass
-from typing import Literal
 
-# Estilos de output disponiveis
-OutputStyle = Literal[
-    "verbatim",      # Fiel a fala original
-    "elegant_prose", # Prosa elegante e fluida
-    "formal",        # Linguagem formal
-    "casual",        # Linguagem casual
-    "prompt",        # Otimizado para prompts de IA
-    "bullet_points", # Lista com pontos
-    "summary",       # Resumo conciso
-]
+import httpx
 
-# Prompts para cada estilo
-STYLE_PROMPTS: dict[OutputStyle, str] = {
-    "verbatim": """
-Refine o texto transcrito mantendo-o o mais fiel possivel a fala original.
-Corrija apenas:
-- Erros obvios de transcricao
-- Pontuacao basica
-- Capitalizacao
+logger = logging.getLogger(__name__)
 
-NAO altere:
-- Estrutura das frases
-- Vocabulario usado
-- Expressoes coloquiais
-
-Texto transcrito:
-{text}
-
-Texto refinado:
-""",
-
-    "elegant_prose": """
-Transforme o texto transcrito em prosa elegante e fluida.
-Mantenha todas as ideias originais, mas:
-- Melhore a estrutura das frases
-- Use vocabulario mais rico
-- Adicione transicoes suaves
-- Corrija redundancias
-
-Texto transcrito:
-{text}
-
-Prosa refinada:
-""",
-
-    "formal": """
-Converta o texto transcrito para linguagem formal.
-- Use terceira pessoa quando apropriado
-- Evite contracoces e girias
-- Mantenha tom profissional
-- Estruture em paragrafos claros
-
-Texto transcrito:
-{text}
-
-Versao formal:
-""",
-
-    "casual": """
-Mantenha o texto em tom casual e conversacional.
-- Preserve expressoes coloquiais apropriadas
-- Use linguagem acessivel
-- Corrija apenas erros graves
-- Mantenha a personalidade do falante
-
-Texto transcrito:
-{text}
-
-Versao casual:
-""",
-
-    "prompt": """
-Otimize o texto para uso como prompt de IA.
-- Seja claro e especifico
-- Remova ambiguidades
-- Estruture instrucoes logicamente
-- Adicione contexto quando necessario
-
-Texto transcrito:
-{text}
-
-Prompt otimizado:
-""",
-
-    "bullet_points": """
-Converta o texto em lista de pontos organizados.
-- Identifique ideias principais
-- Use marcadores claros
-- Agrupe itens relacionados
-- Mantenha cada ponto conciso
-
-Texto transcrito:
-{text}
-
-Lista de pontos:
-""",
-
-    "summary": """
-Crie um resumo conciso do texto.
-- Capture as ideias principais
-- Mantenha em 2-3 sentencas
-- Preserve informacoes essenciais
-- Seja objetivo
-
-Texto transcrito:
-{text}
-
-Resumo:
-""",
-}
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 @dataclass
 class RefineResult:
     """Resultado do refinamento."""
-    original_text: str
+
     refined_text: str
-    style: OutputStyle
+    model_used: str
     success: bool
     error: str | None = None
 
 
-class GeminiRefiner:
+class GeminiRestRefiner:
     """
-    Servico de refinamento de texto usando Gemini.
+    Cliente REST para refinamento de texto via Gemini API.
 
-    Atributos:
-        api_key: Chave da API do Gemini (ou None para desabilitar)
-        model: Modelo Gemini a usar (default: gemini-1.5-flash)
+    Nao usa SDK. Faz POST direto para a API REST do Gemini.
+    A api_key vem da env var GEMINI_API_KEY do sidecar.
     """
 
-    def __init__(
-        self,
-        api_key: str | None = None,
-        model: str = "gemini-1.5-flash",
-    ):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        self.model = model
-        self._client = None
-
-        if self.api_key:
-            self._init_client()
-
-    def _init_client(self):
-        """Inicializa cliente Gemini."""
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            self._client = genai.GenerativeModel(self.model)
-            print(f"[Refiner] Cliente Gemini inicializado ({self.model})")
-        except Exception as e:
-            print(f"[Refiner] Erro ao inicializar Gemini: {e}")
-            self._client = None
+    def __init__(self, api_key: str | None = None):
+        self._api_key = api_key or os.environ.get("GEMINI_API_KEY")
 
     @property
     def is_available(self) -> bool:
-        """Verifica se o refinador esta disponivel."""
-        return self._client is not None
+        """Verifica se o refinador esta disponivel (tem api_key)."""
+        return bool(self._api_key)
 
-    def refine(
+    async def refine(
         self,
         text: str,
-        style: OutputStyle = "verbatim",
+        system_instruction: str,
+        model: str = "gemini-2.5-flash",
+        temperature: float = 0.4,
     ) -> RefineResult:
         """
-        Refina texto transcrito usando Gemini.
+        Refina texto transcrito usando a API REST do Gemini.
 
         Args:
             text: Texto transcrito para refinar
-            style: Estilo de output desejado
+            system_instruction: Prompt do sistema (estilo de output)
+            model: ID do modelo Gemini
+            temperature: Temperatura de geracao (0.0 - 1.0)
 
         Returns:
-            RefineResult com texto refinado
+            RefineResult com texto refinado ou erro
         """
-        # Se Gemini nao disponivel, retorna texto original
         if not self.is_available:
             return RefineResult(
-                original_text=text,
                 refined_text=text,
-                style=style,
+                model_used=model,
                 success=False,
-                error="Gemini nao configurado. Configure GEMINI_API_KEY.",
+                error="GEMINI_API_KEY nao configurada.",
             )
 
-        # Monta prompt
-        prompt_template = STYLE_PROMPTS.get(style, STYLE_PROMPTS["verbatim"])
-        full_prompt = prompt_template.format(text=text)
+        url = f"{GEMINI_API_BASE}/{model}:generateContent"
+
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": system_instruction}],
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": text}],
+                },
+            ],
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": 8192,
+                "responseMimeType": "text/plain",
+            },
+        }
 
         try:
-            # Chama Gemini
-            response = self._client.generate_content(
-                full_prompt,
-                generation_config={
-                    "temperature": 0.3,  # Baixa para manter fidelidade
-                    "max_output_tokens": 8192,
-                },
-            )
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.post(
+                    url,
+                    params={"key": self._api_key},
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                )
 
-            refined_text = response.text.strip()
+                if response.status_code != 200:
+                    error_detail = response.text[:500]
+                    logger.error(
+                        "Gemini API erro %d: %s",
+                        response.status_code,
+                        error_detail,
+                    )
+                    return RefineResult(
+                        refined_text=text,
+                        model_used=model,
+                        success=False,
+                        error=f"HTTP {response.status_code}: {error_detail}",
+                    )
 
+                data = response.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    return RefineResult(
+                        refined_text=text,
+                        model_used=model,
+                        success=False,
+                        error="Resposta sem candidates",
+                    )
+
+                parts = candidates[0].get("content", {}).get("parts", [])
+                refined = "".join(p.get("text", "") for p in parts).strip()
+
+                if not refined:
+                    return RefineResult(
+                        refined_text=text,
+                        model_used=model,
+                        success=False,
+                        error="Resposta vazia do Gemini",
+                    )
+
+                logger.info("Refinamento concluido via %s", model)
+                return RefineResult(
+                    refined_text=refined,
+                    model_used=model,
+                    success=True,
+                )
+
+        except httpx.TimeoutException:
+            logger.error("Timeout ao chamar Gemini API")
             return RefineResult(
-                original_text=text,
-                refined_text=refined_text,
-                style=style,
-                success=True,
-            )
-
-        except Exception as e:
-            return RefineResult(
-                original_text=text,
                 refined_text=text,
-                style=style,
+                model_used=model,
+                success=False,
+                error="Timeout na chamada ao Gemini",
+            )
+        except Exception as e:
+            logger.error("Erro no refinamento: %s", e)
+            return RefineResult(
+                refined_text=text,
+                model_used=model,
                 success=False,
                 error=str(e),
             )
-
-
-# Instancia singleton para uso global
-_refiner_instance: GeminiRefiner | None = None
-
-
-def get_refiner() -> GeminiRefiner:
-    """Retorna instancia singleton do refiner."""
-    global _refiner_instance
-    if _refiner_instance is None:
-        _refiner_instance = GeminiRefiner()
-    return _refiner_instance
