@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 export type PanelType = 'att' | 'tts' | 'config' | 'stats';
 
@@ -18,9 +18,9 @@ export function useActivePanel(initialPanel: PanelType = 'att') {
     }, 300);
   }, [activePanel, isTransitioning]);
 
-  return {
+  return useMemo(() => ({
     activePanel,
     setActivePanel: changePanel,
     isTransitioning,
-  };
+  }), [activePanel, changePanel, isTransitioning]);
 }

@@ -4,7 +4,7 @@
  * Wrapper reativo sobre PromptStore singleton.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   getPromptStore,
   type PromptTemplate,
@@ -78,16 +78,19 @@ export function usePromptStore(): UsePromptStoreReturn {
     [store],
   );
 
-  return {
-    templates,
-    isLoaded,
-    getById,
-    getByName,
-    save,
-    deleteTemplate,
-    resetBuiltins,
-    duplicate,
-  };
+  return useMemo(
+    () => ({
+      templates,
+      isLoaded,
+      getById,
+      getByName,
+      save,
+      deleteTemplate,
+      resetBuiltins,
+      duplicate,
+    }),
+    [templates, isLoaded, getById, getByName, save, deleteTemplate, resetBuiltins, duplicate],
+  );
 }
 
 export default usePromptStore;

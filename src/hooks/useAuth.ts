@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 // Credenciais (hardcoded para simplicidade)
 const AUTH_USERS: Record<string, string> = {
@@ -51,7 +51,7 @@ export function useAuth(): UseAuthReturn {
     setIsAuthenticated(false);
   }, []);
 
-  return {
+  return useMemo(() => ({
     isAuthenticated,
     currentUser,
     loginUsername,
@@ -61,7 +61,7 @@ export function useAuth(): UseAuthReturn {
     loginError,
     handleLogin,
     handleLogout,
-  };
+  }), [isAuthenticated, currentUser, loginUsername, loginPassword, loginError, handleLogin, handleLogout]);
 }
 
 export default useAuth;

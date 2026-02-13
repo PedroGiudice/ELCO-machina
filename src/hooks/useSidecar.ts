@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   VoiceAIClient,
   setVoiceAIUrl,
@@ -141,7 +141,7 @@ export function useSidecar(
     }
   }, [whisperServerUrl]);
 
-  return {
+  return useMemo(() => ({
     sidecarAvailable,
     sidecarStatus,
     voiceAIClient: clientRef.current,
@@ -150,7 +150,10 @@ export function useSidecar(
     whisperTestStatus,
     whisperTestMessage,
     testWhisperServer,
-  };
+  }), [
+    sidecarAvailable, sidecarStatus,
+    whisperServerUrl, whisperTestStatus, whisperTestMessage, testWhisperServer,
+  ]);
 }
 
 export default useSidecar;

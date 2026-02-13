@@ -10,6 +10,7 @@ bun install
 
 # Build
 echo "Gerando build..."
+export TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/proatt.key)
 bun run tauri build
 
 # Listar artefatos
