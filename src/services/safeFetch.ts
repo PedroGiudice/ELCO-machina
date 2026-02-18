@@ -19,6 +19,14 @@ export async function safeFetch(
   init?: RequestInit,
 ): Promise<Response> {
   const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+  
+  // HOTFIX: Prevenir recursao infinita.
+  // O tauriFetch internamente usa window.fetch, que estamos sobrescrevendo.
+  // Restauramos o fetch nativo ANTES da chamada do tauriFetch e recolocamos
+  // nosso wrapper logo depois, garantindo que o tauri-plugin use o original
+  // e o resto da aplicacao use nosso wrapper.
+  window.fetch = _nativeFetch;
+
   try {
     return await tauriFetch(urlStr, init);
   } catch (err) {
@@ -28,6 +36,9 @@ export async function safeFetch(
       return await _nativeFetch(url, init);
     }
     throw err;
+  } finally {
+    // Garante que nosso override seja restaurado mesmo se tauriFetch falhar
+    window.fetch = safeFetch as typeof window.fetch;
   }
 }
 

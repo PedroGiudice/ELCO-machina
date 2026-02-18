@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 // ============================================================================
 // TYPES
@@ -126,7 +126,7 @@ export function useSettings(): UseSettingsReturn {
     }
   }, []);
 
-  return {
+  return useMemo(() => ({
     themeColor,
     setThemeColor,
     bgColor,
@@ -152,7 +152,11 @@ export function useSettings(): UseSettingsReturn {
     isResetConfirmOpen,
     setIsResetConfirmOpen,
     appVersion,
-  };
+  }), [
+    themeColor, bgColor, textColor, fontFamily, fontSize,
+    outputLanguage, outputStyle, customStylePrompt, aiModel,
+    transcriptionMode, isSettingsOpen, isResetConfirmOpen, appVersion,
+  ]);
 }
 
 export default useSettings;

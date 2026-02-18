@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 // ============================================================================
 // TYPES
@@ -172,11 +172,11 @@ export function useUpdater(): UseUpdaterReturn {
     return () => clearTimeout(timer);
   }, []);
 
-  return {
+  return useMemo(() => ({
     updateStatus,
     updateProgress,
     updateVersion,
-  };
+  }), [updateStatus, updateProgress, updateVersion]);
 }
 
 export default useUpdater;

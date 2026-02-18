@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 // ============================================================================
 // TYPES
@@ -536,7 +536,7 @@ export function usePersistence(): UsePersistenceReturn {
     setApiKey(key);
   }, []);
 
-  return {
+  return useMemo(() => ({
     // History
     history,
     historyLoaded,
@@ -579,7 +579,13 @@ export function usePersistence(): UsePersistenceReturn {
     // Logs
     logs,
     addLog,
-  };
+  }), [
+    history, historyLoaded, addToHistory, deleteHistoryItemFn, clearAllHistoryFn,
+    contextPools, activeContext, contextMemory, updateContextMemory, handleAddContext,
+    isMemoryModalOpen, tempMemoryEdit, isSavingContext, openMemoryEditor, saveMemoryFn,
+    apiKey, apiKeyInput, isApiKeyVisible, saveApiKeyFn,
+    logs, addLog,
+  ]);
 }
 
 export default usePersistence;

@@ -36,14 +36,22 @@ export function buildSystemInstruction(
   recordingStyle: string,
   customStylePrompt?: string,
 ): string {
+  // Helper para escapar strings para inclusao segura em JSON
+  const escapeForJson = (s: string): string => {
+    return JSON.stringify(s).slice(1, -1);
+  };
+
   let instruction = template.systemInstruction;
 
-  // Substituir placeholders
+  // Substituir placeholders com conteudo escapado
   instruction = instruction
-    .replace(/\{CONTEXT_MEMORY\}/g, contextMemory.slice(-2000))
+    .replace(/\{CONTEXT_MEMORY\}/g, escapeForJson(contextMemory.slice(-2000)))
     .replace(/\{OUTPUT_LANGUAGE\}/g, outputLanguage)
     .replace(/\{RECORDING_STYLE\}/g, recordingStyle.toUpperCase())
-    .replace(/\{CUSTOM_INSTRUCTIONS\}/g, customStylePrompt || '');
+    .replace(
+      /\{CUSTOM_INSTRUCTIONS\}/g,
+      escapeForJson(customStylePrompt || ''),
+    );
 
   // Filename obrigatorio para todos (exceto Whisper Only)
   if (template.name !== 'Whisper Only') {

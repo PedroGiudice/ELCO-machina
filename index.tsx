@@ -5,8 +5,8 @@ import App from './App';
 import { AppProvider } from './src/context/GlobalAppContext';
 import { installSafeFetch } from './src/services/safeFetch';
 
-// Instalar safeFetch como override global ANTES do render
-// Resolve TLS issues em WebKitGTK (AppImage no Oracle Linux)
+// Instala o wrapper de fetch para lidar com problemas de TLS no Linux
+// e restricoes de escopo do Tauri.
 installSafeFetch();
 
 const rootElement = document.getElementById('root');

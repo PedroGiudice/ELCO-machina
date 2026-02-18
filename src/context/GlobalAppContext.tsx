@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 
 // Hooks
 import { useAuth, type UseAuthReturn } from '../hooks/useAuth';
@@ -44,14 +44,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updater = useUpdater();
   const sidecar = useSidecar(persistence.addLog);
 
-  const value: AppContextType = {
+  const value = useMemo<AppContextType>(() => ({
     auth,
     settings,
     persistence,
     panel,
     updater,
     sidecar,
-  };
+  }), [auth, settings, persistence, panel, updater, sidecar]);
 
   return (
     <AppContext.Provider value={value}>
