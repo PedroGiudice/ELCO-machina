@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 
-export type PanelType = 'att' | 'tts' | 'config' | 'stats';
+export type PanelType = 'att' | 'editor' | 'tts' | 'config' | 'stats';
 
 export function useActivePanel(initialPanel: PanelType = 'att') {
   const [activePanel, setActivePanel] = useState<PanelType>(initialPanel);
