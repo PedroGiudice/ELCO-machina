@@ -32,12 +32,11 @@ export function AppLayout({
 }: AppLayoutProps) {
   const currentPanel = {
     att: panelATT,
+    editor,
     tts: panelTTS,
     config: panelConfig,
     stats: panelStats,
   }[activePanel];
-
-  const isFullscreenPanel = activePanel === 'stats';
 
   return (
     <div
@@ -52,40 +51,21 @@ export function AppLayout({
         paddingRight: 'var(--sar)',
       }}
     >
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Panel Area */}
-        <aside
-          className={`
-            ${isFullscreenPanel ? 'w-full' : 'w-full md:w-[340px]'}
-            bg-[var(--bg-elevated)]
-            ${isFullscreenPanel ? '' : 'border-r border-[var(--border-subtle)]'}
-            flex flex-col
-            overflow-hidden
-            ${isFullscreenPanel ? 'max-h-full' : 'md:max-h-full max-h-[45vh]'}
-          `}
-        >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activePanel}
-              variants={panelVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="flex-1 overflow-y-auto pb-20"
-            >
-              {currentPanel}
-            </motion.div>
-          </AnimatePresence>
-        </aside>
-
-        {/* Editor Area - Hidden when Stats panel is active */}
-        {!isFullscreenPanel && (
-          <main className="flex-1 flex flex-col overflow-hidden min-h-0">
-            {editor}
-          </main>
-        )}
+      {/* Full-screen panel */}
+      <div className="flex-1 overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activePanel}
+            variants={panelVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="h-full pb-20"
+          >
+            {currentPanel}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Bottom Navigation */}

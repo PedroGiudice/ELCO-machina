@@ -55,7 +55,7 @@ export function Editor({
   const isCodeMode = outputStyle === 'Code Generator';
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[var(--bg-base)]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-base)]">
       {/* Toolbar */}
       <div className="h-12 border-b border-[var(--border-subtle)] flex items-center px-4 justify-between bg-[var(--bg-elevated)] shrink-0">
         {/* Left: Title + Context */}
