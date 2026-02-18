@@ -41,7 +41,7 @@ export function useSidecar(
   const clientRef = useRef<VoiceAIClient | null>(null);
 
   const [whisperServerUrl, setWhisperServerUrl] = useState<string>(() => {
-    return localStorage.getItem('whisper_server_url') || 'http://100.114.203.28:8765';
+    return localStorage.getItem('whisper_server_url') || 'http://137.131.201.119/sidecar';
   });
   const [whisperTestStatus, setWhisperTestStatus] = useState<WhisperTestStatus>('idle');
   const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
@@ -54,7 +54,7 @@ export function useSidecar(
 
   // Initialize Voice AI Client and check health
   useEffect(() => {
-    const url = whisperServerUrl || 'http://100.114.203.28:8765';
+    const url = whisperServerUrl || 'http://137.131.201.119/sidecar';
     setVoiceAIUrl(whisperServerUrl || null);
     clientRef.current = getVoiceAIClient();
 
