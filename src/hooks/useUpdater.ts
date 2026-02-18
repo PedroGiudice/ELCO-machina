@@ -24,7 +24,7 @@ const isAndroid = (): boolean => {
   return typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 };
 
-const ANDROID_UPDATE_URL = 'http://100.114.203.28:8090/proatt/latest-android.json';
+const ANDROID_UPDATE_URL = 'http://137.131.201.119/proatt/latest-android.json';
 
 const isNewerVersion = (remote: string, local: string): boolean => {
   const r = remote.split('.').map(Number);
