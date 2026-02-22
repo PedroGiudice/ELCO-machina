@@ -1,16 +1,15 @@
 """
 STT Service - Speech-to-Text com whisper-server HTTP + fallback Faster-Whisper
 
-Engine primaria: whisper-server (HTTP, modelo warm em RAM, RTF ~1.0x).
-Fallback: Faster-Whisper (CTranslate2) se whisper-server indisponivel.
-Modelo: large-v3-turbo (melhor qualidade para PT-BR, pontuacao automatica).
+Suporta multiplos modelos via whisper-server instances (cada uma em porta propria).
+Fallback: Faster-Whisper (CTranslate2) se nenhum whisper-server disponivel.
 """
 import base64
 import logging
 import os
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -19,9 +18,16 @@ import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
-# whisper-server config
-WHISPER_SERVER_URL = os.environ.get("WHISPER_SERVER_URL", "http://127.0.0.1:8178")
 WHISPER_SERVER_TIMEOUT = int(os.environ.get("WHISPER_SERVER_TIMEOUT", "300"))
+
+# Modelos disponiveis via whisper-server (model_id -> URL)
+# Cada instancia roda em porta separada com modelo fixo.
+WHISPER_SERVERS: dict[str, str] = {
+    "large-v3-turbo": os.environ.get("WHISPER_SERVER_URL", "http://127.0.0.1:8178"),
+    "small": os.environ.get("WHISPER_SERVER_SMALL_URL", "http://127.0.0.1:8179"),
+}
+
+DEFAULT_MODEL = os.environ.get("WHISPER_DEFAULT_MODEL", "large-v3-turbo")
 
 
 @dataclass
@@ -35,25 +41,33 @@ class TranscriptionResult:
     segments: list[dict]
 
 
+@dataclass
+class ModelInfo:
+    """Info sobre um modelo STT disponivel."""
+    model_id: str
+    backend: str  # "whisper-server" ou "faster-whisper"
+    url: str | None = None  # URL do whisper-server (se aplicavel)
+    warm: bool = False  # modelo carregado em RAM
+
+
 class STTService:
     """
-    Servico de Speech-to-Text.
+    Servico de Speech-to-Text com suporte a multiplos modelos.
 
-    Engine primaria: whisper-server (HTTP, modelo warm em RAM).
-    Fallback: faster-whisper (CTranslate2, int8) se whisper-server indisponivel.
+    Cada modelo pode estar warm (whisper-server) ou cold (faster-whisper fallback).
+    O usuario escolhe o modelo por request; default configuravel via env.
     """
 
     def __init__(
         self,
-        model_size: str = "large-v3-turbo",
         device: str = "auto",
         compute_type: str = "auto",
     ):
-        self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
-        self._fw_model = None  # faster-whisper model (lazy ou eager)
-        self._backend: str | None = None
+        self._fw_model = None
+        self._available_models: dict[str, ModelInfo] = {}
+        self._has_faster_whisper = False
 
         self.models_dir = Path(os.environ.get(
             "VOICE_AI_MODELS_DIR",
@@ -61,37 +75,66 @@ class STTService:
         ))
         self.models_dir.mkdir(parents=True, exist_ok=True)
 
-        # Detecta backend disponivel
-        if self._check_whisper_server():
-            self._backend = "whisper-server"
-            logger.info("STT backend: whisper-server (%s)", WHISPER_SERVER_URL)
-        else:
-            try:
-                from faster_whisper import WhisperModel  # noqa: F401
-                self._backend = "faster-whisper"
-                logger.info("STT backend: faster-whisper (whisper-server indisponivel)")
-                # Warm load - carrega modelo em RAM imediatamente
-                self._ensure_fw_model()
-            except ImportError:
-                logger.error("Nenhum backend STT disponivel (whisper-server nem faster-whisper)")
+        # Detecta whisper-server instances disponiveis
+        for model_id, url in WHISPER_SERVERS.items():
+            if self._check_server(url):
+                self._available_models[model_id] = ModelInfo(
+                    model_id=model_id,
+                    backend="whisper-server",
+                    url=url,
+                    warm=True,
+                )
+                logger.info("STT model '%s': whisper-server warm (%s)", model_id, url)
+
+        # Detecta faster-whisper como fallback
+        try:
+            from faster_whisper import WhisperModel  # noqa: F401
+            self._has_faster_whisper = True
+            logger.info("STT fallback: faster-whisper disponivel")
+        except ImportError:
+            pass
+
+        if not self._available_models and not self._has_faster_whisper:
+            logger.error("Nenhum backend STT disponivel")
 
     @staticmethod
-    def _check_whisper_server() -> bool:
-        """Verifica se whisper-server esta acessivel."""
+    def _check_server(url: str) -> bool:
+        """Verifica se um whisper-server esta acessivel."""
         try:
             with httpx.Client(timeout=5) as client:
-                resp = client.get(WHISPER_SERVER_URL)
+                resp = client.get(url)
                 return resp.status_code < 500
         except Exception:
             return False
 
     @property
     def is_loaded(self) -> bool:
-        return self._backend is not None
+        return bool(self._available_models) or self._has_faster_whisper
 
     @property
     def backend(self) -> str | None:
-        return self._backend
+        if self._available_models:
+            return "whisper-server"
+        if self._has_faster_whisper:
+            return "faster-whisper"
+        return None
+
+    @property
+    def model_size(self) -> str:
+        return DEFAULT_MODEL
+
+    @property
+    def available_models(self) -> list[dict]:
+        """Lista modelos disponiveis com status warm/cold."""
+        models = []
+        for model_id, info in self._available_models.items():
+            models.append({
+                "id": model_id,
+                "backend": info.backend,
+                "warm": info.warm,
+                "default": model_id == DEFAULT_MODEL,
+            })
+        return models
 
     def unload(self):
         """Libera modelo faster-whisper da memoria."""
@@ -146,9 +189,10 @@ class STTService:
         finally:
             os.unlink(wav_path)
 
-    def _transcribe_via_server(self, wav_path: str, duration: float, language: str | None) -> TranscriptionResult:
+    def _transcribe_via_server(self, wav_path: str, duration: float, language: str | None, server_url: str | None = None) -> TranscriptionResult:
         """Transcreve usando whisper-server via HTTP POST multipart."""
-        url = f"{WHISPER_SERVER_URL}/inference"
+        base_url = server_url or WHISPER_SERVERS.get(DEFAULT_MODEL, "http://127.0.0.1:8178")
+        url = f"{base_url}/inference"
 
         with open(wav_path, "rb") as f:
             files = {"file": ("audio.wav", f, "audio/wav")}
@@ -245,6 +289,7 @@ class STTService:
         audio_base64: str,
         format: str = "webm",
         language: str | None = "pt",
+        model: str | None = None,
     ) -> TranscriptionResult:
         """
         Transcreve audio para texto.
@@ -253,33 +298,43 @@ class STTService:
             audio_base64: Audio codificado em base64
             format: Formato do audio (webm, wav, mp3, ogg)
             language: Codigo do idioma (pt, en, es, etc.) ou None para auto-detect
+            model: ID do modelo (large-v3-turbo, small). None usa default.
 
         Returns:
             TranscriptionResult com texto transcrito e metadados
         """
-        if not self._backend:
+        if not self.is_loaded:
             raise RuntimeError("Nenhum backend STT disponivel")
 
-        if self._backend == "whisper-server":
+        model = model or DEFAULT_MODEL
+
+        # Tenta whisper-server para o modelo solicitado
+        model_info = self._available_models.get(model)
+
+        if model_info:
             wav_path, duration = self._decode_audio_to_file(audio_base64, format)
             try:
-                logger.info("Transcrevendo %.1fs com whisper-server...", duration)
-                return self._transcribe_via_server(wav_path, duration, language)
+                logger.info("Transcrevendo %.1fs com whisper-server '%s'...", duration, model)
+                return self._transcribe_via_server(wav_path, duration, language, server_url=model_info.url)
             except Exception as e:
-                logger.warning("whisper-server falhou (%s), tentando faster-whisper...", e)
-                try:
-                    audio_data, _ = sf.read(wav_path)
-                    if len(audio_data.shape) > 1:
-                        audio_data = audio_data.mean(axis=1)
-                    return self._transcribe_faster_whisper(audio_data.astype(np.float32), duration, language)
-                except Exception:
-                    raise
+                logger.warning("whisper-server '%s' falhou (%s), tentando faster-whisper...", model, e)
+                if self._has_faster_whisper:
+                    try:
+                        audio_data, _ = sf.read(wav_path)
+                        if len(audio_data.shape) > 1:
+                            audio_data = audio_data.mean(axis=1)
+                        return self._transcribe_faster_whisper(audio_data.astype(np.float32), duration, language)
+                    except Exception:
+                        raise
+                raise
             finally:
                 if os.path.exists(wav_path):
                     os.unlink(wav_path)
-        else:
-            # faster-whisper direto
+
+        # Modelo nao tem server warm — fallback para faster-whisper
+        if self._has_faster_whisper:
             audio_data, duration = self._decode_audio_to_array(audio_base64, format)
-            rms = float(np.sqrt(np.mean(audio_data**2)))
-            logger.info("Transcrevendo %.1fs com faster-whisper (RMS=%.6f)...", duration, rms)
+            logger.info("Transcrevendo %.1fs com faster-whisper (modelo '%s' sem server warm)...", duration, model)
             return self._transcribe_faster_whisper(audio_data, duration, language)
+
+        raise RuntimeError(f"Modelo '{model}' nao disponivel. Disponiveis: {list(self._available_models.keys())}")

@@ -32,6 +32,10 @@ class TranscribeRequest(BaseModel):
         default="pt",
         description="Codigo do idioma (pt, en, es) ou null para auto-detect",
     )
+    stt_model: str | None = Field(
+        default=None,
+        description="Modelo Whisper (large-v3-turbo, small). None usa default do server.",
+    )
     refine: bool = Field(
         default=False,
         description="Se deve refinar texto com Gemini",
@@ -149,6 +153,7 @@ async def transcribe_audio(
             audio_base64=body.audio,
             format=body.format,
             language=body.language,
+            model=body.stt_model,
         )
 
         # Prepara resposta base
@@ -196,3 +201,17 @@ async def transcribe_audio(
             status_code=500,
             detail=f"Erro na transcricao: {str(e)}",
         )
+
+
+@router.get("/models")
+async def list_stt_models(request: Request) -> dict:
+    """Lista modelos STT disponiveis e seus status (warm/cold)."""
+    stt_service = getattr(request.state, "stt_service", None)
+
+    if not stt_service:
+        return {"models": [], "default": None}
+
+    return {
+        "models": stt_service.available_models,
+        "default": stt_service.model_size,
+    }
