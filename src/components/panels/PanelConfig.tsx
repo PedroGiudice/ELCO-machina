@@ -320,7 +320,7 @@ export function PanelConfig({
                             onChange={(e) =>
                                 onWhisperServerUrlChange(e.target.value)
                             }
-                            placeholder="http://100.114.203.28:8765"
+                            placeholder="http://100.123.73.128:8765"
                             className="flex-1 px-3 py-2 text-xs bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] focus:outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
                         />
                         <Button

@@ -28,11 +28,8 @@ async function safeFetch(
     return await tauriFetch(url, init);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("url not allowed") || msg.includes("scope")) {
-      console.warn(`[safeFetch] tauriFetch bloqueado pelo scope, usando fetch nativo: ${msg}`);
-      return await fetch(url, init);
-    }
-    throw err;
+    console.warn(`[safeFetch] tauriFetch falhou, fallback para fetch nativo: ${msg}`);
+    return await fetch(url, init);
   }
 }
 
@@ -113,7 +110,7 @@ export class VoiceAIClient {
    * @param timeout Timeout em ms para requests (default: 60000)
    */
   constructor(
-    baseUrl: string = "http://localhost:8765",
+    baseUrl: string = "http://100.123.73.128:8765",
     timeout: number = 60000
   ) {
     this.baseUrl = baseUrl;
@@ -314,7 +311,7 @@ let configuredUrl: string | null = null;
 
 /**
  * Define a URL do servidor Whisper (remoto ou local)
- * @param url URL do servidor (ex: http://100.114.203.28:8765) ou null para usar localhost
+ * @param url URL do servidor (ex: http://100.123.73.128:8765) ou null para usar Contabo via Tailscale
  */
 export function setVoiceAIUrl(url: string | null): void {
   configuredUrl = url && url.trim() !== "" ? url.trim() : null;
