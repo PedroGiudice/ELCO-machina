@@ -14,21 +14,44 @@
  */
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { invoke } from "@tauri-apps/api/core";
+
+// Detect Android (WebView blocks HTTP to private IPs via Private Network Access)
+const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 
 /**
- * Wrapper que tenta tauriFetch (plugin-http) e faz fallback para fetch nativo.
- * Resolve o bug onde tauriFetch falha com "url not allowed on the configured scope"
- * dentro do AppImage, mas o sidecar esta acessivel via fetch nativo.
+ * Proxy HTTP via Tauri IPC (Rust-side reqwest).
+ * Contorna Private Network Access do Chrome Android que bloqueia
+ * fetch/XHR para IPs no range 100.x.x.x (Tailscale CGNAT).
+ */
+async function proxyFetch(
+  url: string,
+  init?: RequestInit & { signal?: AbortSignal }
+): Promise<Response> {
+  const method = init?.method || "GET";
+  const body = init?.body ? String(init.body) : undefined;
+  const text = await invoke<string>("proxy_fetch", { url, method, body });
+  return new Response(text, {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Wrapper HTTP: Android usa proxy IPC (Rust), desktop usa tauriFetch/fetch.
  */
 async function safeFetch(
   url: string,
   init?: RequestInit & { signal?: AbortSignal }
 ): Promise<Response> {
+  if (isAndroid) {
+    return proxyFetch(url, init);
+  }
   try {
     return await tauriFetch(url, init);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[safeFetch] tauriFetch falhou, fallback para fetch nativo: ${msg}`);
+    console.warn(`[safeFetch] tauriFetch failed (${msg}), trying native fetch`);
     return await fetch(url, init);
   }
 }

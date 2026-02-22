@@ -72,9 +72,12 @@ export function useSidecar(
           setSidecarAvailable(false);
           setSidecarStatus('Sidecar offline');
         }
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[useSidecar] health check failed:', msg, err);
+        log(`Health check falhou: ${msg}`, 'error');
         setSidecarAvailable(false);
-        setSidecarStatus('Sidecar offline');
+        setSidecarStatus(`Sidecar offline: ${msg}`);
       }
     };
 

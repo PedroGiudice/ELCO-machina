@@ -50,7 +50,6 @@ mod sidecar {
     /// Comando Tauri: iniciar sidecar (stub para mobile)
     #[tauri::command]
     pub async fn start_sidecar() -> Result<String, String> {
-        // Sidecar nao disponivel no mobile
         Err("Sidecar not available on mobile".to_string())
     }
 
@@ -69,16 +68,57 @@ mod sidecar {
     /// Comando Tauri: definir URL do servidor Whisper remoto (stub para mobile)
     #[tauri::command]
     pub async fn set_whisper_url(_url: Option<String>) -> Result<(), String> {
-        // Mobile sempre usa servidor remoto, nao precisa gerenciar estado aqui
         Ok(())
     }
 
     /// Comando Tauri: verificar se esta usando servidor remoto (stub para mobile)
     #[tauri::command]
     pub async fn is_remote_whisper() -> Result<bool, String> {
-        // Mobile sempre usa servidor remoto
         Ok(true)
     }
+}
+
+/// Proxy HTTP via Rust -- contorna restricao de Private Network Access do WebView Android
+#[tauri::command]
+async fn proxy_fetch(url: String, method: String, body: Option<String>) -> Result<String, String> {
+    let body_len = body.as_ref().map(|b| b.len()).unwrap_or(0);
+    log::info!("[proxy_fetch] {} {} (body: {} bytes)", method, url, body_len);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|e| {
+            log::error!("[proxy_fetch] client build error: {e}");
+            format!("client error: {e}")
+        })?;
+
+    let req = match method.to_uppercase().as_str() {
+        "POST" => {
+            let mut r = client.post(&url).header("Content-Type", "application/json");
+            if let Some(b) = body {
+                r = r.body(b);
+            }
+            r
+        }
+        _ => client.get(&url),
+    };
+
+    let resp = req.send().await.map_err(|e| {
+        log::error!("[proxy_fetch] send error: {e:?}");
+        format!("request error: {e}")
+    })?;
+
+    let status = resp.status().as_u16();
+    log::info!("[proxy_fetch] response status: {}", status);
+    let text = resp.text().await.map_err(|e| format!("body error: {e}"))?;
+
+    if status >= 400 {
+        log::error!("[proxy_fetch] HTTP {}: {}", status, &text[..text.len().min(200)]);
+        return Err(format!("HTTP {status}: {text}"));
+    }
+    Ok(text)
 }
 
 // ============================================================
@@ -107,13 +147,14 @@ pub fn run() {
                 sidecar::sidecar_status,
                 sidecar::set_whisper_url,
                 sidecar::is_remote_whisper,
+                proxy_fetch,
                 audio::enumerate_audio_devices,
                 audio::start_audio_recording,
                 audio::stop_audio_recording
             ]);
     }
 
-    // Mobile: apenas sidecar stubs (áudio via mic-recorder plugin)
+    // Mobile: sidecar stubs + proxy_fetch (contorna Private Network Access)
     #[cfg(mobile)]
     {
         builder = builder
@@ -123,6 +164,7 @@ pub fn run() {
                 sidecar::sidecar_status,
                 sidecar::set_whisper_url,
                 sidecar::is_remote_whisper,
+                proxy_fetch,
             ]);
     }
 
