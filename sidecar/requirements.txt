@@ -6,11 +6,11 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 
-# STT - Faster-Whisper (CTranslate2)
-faster-whisper==1.0.3
+# STT - Faster-Whisper (CTranslate2) - fallback para whisper.cpp
+faster-whisper==1.2.1
 
-# TTS - Piper (ONNX)
-piper-tts>=1.2.0
+# TTS - Kokoro (82M params, PT-BR nativo)
+kokoro>=0.9.4
 
 # Audio Processing
 pydub==0.25.1

@@ -22,7 +22,7 @@ Descobrimos que e possivel conectar ADB wireless debugging ao celular via Tailsc
 **Problemas encontrados:**
 - A sessao ADB expira frequentemente (a cada ~5-10min de inatividade)
 - Cada reconexao requer novo pareamento (novo codigo de 6 digitos)
-- O celular as vezes mostra IP local (192.168.x.x) ao inves do Tailscale (100.x.x.x) na tela de pareamento -- quando mostra local, nao funciona da VM GCP
+- O celular as vezes mostra IP local (192.168.x.x) ao inves do Tailscale (100.x.x.x) na tela de pareamento -- quando mostra local, nao funciona da VM Contabo
 
 **Capacidades confirmadas via ADB:**
 - `adb install` -- instalar APK remoto
