@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from voice_ai.services.refiner import GeminiRestRefiner
+from voice_ai.services.refiner import get_refiner
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +38,18 @@ class TranscribeRequest(BaseModel):
     )
     refine: bool = Field(
         default=False,
-        description="Se deve refinar texto com Gemini",
+        description="Se deve refinar texto com LLM (Ollama ou Gemini)",
     )
-    # Novos campos — o frontend envia o prompt e modelo desejados
     system_instruction: str | None = Field(
         default=None,
         description="Prompt do sistema para refinamento (estilo de output)",
     )
-    model: str = Field(
-        default="gemini-2.5-flash",
-        description="ID do modelo Gemini para refinamento",
+    model: str | None = Field(
+        default=None,
+        description="Modelo para refinamento. None usa default do backend ativo.",
     )
     temperature: float = Field(
-        default=0.4,
+        default=0.3,
         ge=0.0,
         le=2.0,
         description="Temperatura de geracao para refinamento (0.0 - 2.0)",
@@ -78,7 +77,7 @@ class TranscribeResponse(BaseModel):
     # Texto refinado (se refine=true)
     refined_text: str | None = Field(
         default=None,
-        description="Texto refinado pelo Gemini (se solicitado)",
+        description="Texto refinado pelo LLM (Ollama ou Gemini)",
     )
 
     # Metadados
@@ -112,7 +111,11 @@ class TranscribeResponse(BaseModel):
     )
     model_used: str | None = Field(
         default=None,
-        description="Modelo Gemini usado no refinamento",
+        description="Modelo usado no refinamento",
+    )
+    refine_backend: str | None = Field(
+        default=None,
+        description="Backend usado (ollama ou gemini)",
     )
 
 
@@ -173,20 +176,29 @@ async def transcribe_audio(
             ],
         )
 
-        # 2. Refina com Gemini REST se solicitado
+        # 2. Refina com LLM se solicitado
         if body.refine and result.text and body.system_instruction:
-            refiner = GeminiRestRefiner()
-            refine_result = await refiner.refine(
-                text=result.text,
-                system_instruction=body.system_instruction,
-                model=body.model,
-                temperature=body.temperature,
-            )
+            refiner = get_refiner()
+            if refiner is None:
+                response.refine_success = False
+                response.refine_error = "Nenhum backend de refinamento disponivel"
+            else:
+                from voice_ai.services.refiner import OllamaRefiner
 
-            response.refined_text = refine_result.refined_text
-            response.refine_success = refine_result.success
-            response.refine_error = refine_result.error
-            response.model_used = refine_result.model_used
+                backend_name = (
+                    "ollama" if isinstance(refiner, OllamaRefiner) else "gemini"
+                )
+                refine_result = await refiner.refine(
+                    text=result.text,
+                    system_instruction=body.system_instruction,
+                    model=body.model,
+                    temperature=body.temperature,
+                )
+                response.refined_text = refine_result.refined_text
+                response.refine_success = refine_result.success
+                response.refine_error = refine_result.error
+                response.model_used = refine_result.model_used
+                response.refine_backend = backend_name
         elif body.refine and result.text and not body.system_instruction:
             logger.warning(
                 "Refinamento solicitado mas system_instruction ausente. "

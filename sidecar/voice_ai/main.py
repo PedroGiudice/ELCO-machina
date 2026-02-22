@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 # Configura logging estruturado para todo o sidecar
 from voice_ai.routers import transcribe, synthesize
+from voice_ai.services.refiner import get_refiner, OllamaRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
 from voice_ai.services.tts_modal_client import TTSModalClient
@@ -35,6 +36,8 @@ class AppState:
     modal_client: TTSModalClient | None = None
     models_loaded: bool = False
     startup_error: str | None = None
+    refiner_backend: str | None = None
+    refiner_model: str | None = None
 
 
 state = AppState()
@@ -70,6 +73,19 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("TTS (Modal) desabilitado (MODAL_ENABLED=false)")
 
+        # Detecta refiner disponivel
+        refiner = get_refiner()
+        if refiner:
+            backend = "Ollama" if isinstance(refiner, OllamaRefiner) else "Gemini"
+            model = getattr(refiner, "model", "unknown")
+            state.refiner_backend = backend
+            state.refiner_model = model
+            logger.info("Refiner: %s (%s)", backend, model)
+        else:
+            state.refiner_backend = None
+            state.refiner_model = None
+            logger.warning("Nenhum refiner disponivel (Ollama/Gemini)")
+
         state.models_loaded = True
         logger.info("Sidecar pronto!")
     except Exception as e:
@@ -90,7 +106,7 @@ async def lifespan(app: FastAPI):
 # Cria aplicacao FastAPI
 app = FastAPI(
     title="Voice AI Sidecar",
-    description="STT (Whisper) e TTS (Kokoro) local com refinamento opcional via Gemini",
+    description="STT (Whisper) e TTS (Kokoro) local com refinamento opcional via Ollama/Gemini",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -131,10 +147,17 @@ class ModalModelStatus(BaseModel):
     engine: str = "chatterbox"
 
 
+class RefinerStatus(BaseModel):
+    status: Literal["available", "unavailable"]
+    backend: str | None = None
+    model: str | None = None
+
+
 class ModelsStatus(BaseModel):
     whisper: WhisperModelStatus
     tts: TTSModelStatus
     modal: ModalModelStatus
+    refiner: RefinerStatus
 
 
 class HealthResponse(BaseModel):
@@ -205,6 +228,11 @@ async def health_check() -> HealthResponse:
             ),
             modal=ModalModelStatus(
                 status=modal_status,
+            ),
+            refiner=RefinerStatus(
+                status="available" if state.refiner_backend else "unavailable",
+                backend=state.refiner_backend,
+                model=state.refiner_model,
             ),
         ),
         error=state.startup_error,

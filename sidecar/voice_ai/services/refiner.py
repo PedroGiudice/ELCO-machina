@@ -1,17 +1,21 @@
 """
-Gemini Refiner Service - Refinamento de texto via REST API
+Refiner Service - Refinamento de texto via LLM
 
-Cliente REST puro para a API do Gemini (generativelanguage.googleapis.com).
-Sem SDK, sem singleton global. Apenas httpx + JSON.
+Backends:
+1. OllamaRefiner - Ollama local (default, gratuito)
+2. GeminiRestRefiner - Gemini REST API (fallback, pago)
 
 Papel:
 - NAO faz STT (Whisper faz localmente)
 - SO formata/refina texto transcrito
 - Aplica system_instruction fornecido pelo chamador
 - OPCIONAL - sistema funciona 100% offline sem ele
+
+Factory get_refiner() tenta Ollama primeiro, depois Gemini, ou None.
 """
 import logging
 import os
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -160,3 +164,136 @@ class GeminiRestRefiner:
                 success=False,
                 error=str(e),
             )
+
+
+class OllamaRefiner:
+    """
+    Cliente REST para refinamento de texto via Ollama local.
+
+    Faz POST para /api/generate. Sem SDK, sem dependencias extras.
+    """
+
+    def __init__(self, base_url: str | None = None):
+        self._base_url = base_url or os.environ.get(
+            "OLLAMA_URL", "http://127.0.0.1:11434"
+        )
+        self._default_model = os.environ.get("OLLAMA_REFINE_MODEL", "qwen2.5:3b")
+        self._timeout = int(os.environ.get("OLLAMA_REFINE_TIMEOUT", "120"))
+        self._available: bool | None = None
+        self._available_checked_at: float = 0
+
+    @property
+    def is_available(self) -> bool:
+        """Verifica se Ollama esta acessivel (GET /api/tags, cached 60s)."""
+        now = time.monotonic()
+        if self._available is not None and (now - self._available_checked_at) < 60:
+            return self._available
+
+        try:
+            resp = httpx.get(f"{self._base_url}/api/tags", timeout=5)
+            self._available = resp.status_code == 200
+        except Exception:
+            self._available = False
+
+        self._available_checked_at = now
+        return self._available
+
+    @property
+    def model(self) -> str:
+        return self._default_model
+
+    async def refine(
+        self,
+        text: str,
+        system_instruction: str,
+        model: str | None = None,
+        temperature: float = 0.3,
+    ) -> RefineResult:
+        """Refina texto via Ollama /api/generate."""
+        used_model = model or self._default_model
+
+        if not self.is_available:
+            return RefineResult(
+                refined_text=text,
+                model_used=used_model,
+                success=False,
+                error="Ollama nao disponivel",
+            )
+
+        url = f"{self._base_url}/api/generate"
+        payload = {
+            "model": used_model,
+            "system": system_instruction,
+            "prompt": text,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.post(url, json=payload)
+
+                if response.status_code != 200:
+                    error_detail = response.text[:500]
+                    logger.error(
+                        "Ollama API erro %d: %s", response.status_code, error_detail
+                    )
+                    return RefineResult(
+                        refined_text=text,
+                        model_used=used_model,
+                        success=False,
+                        error=f"HTTP {response.status_code}: {error_detail}",
+                    )
+
+                data = response.json()
+                refined = data.get("response", "").strip()
+
+                if not refined:
+                    return RefineResult(
+                        refined_text=text,
+                        model_used=used_model,
+                        success=False,
+                        error="Resposta vazia do Ollama",
+                    )
+
+                logger.info("Refinamento concluido via Ollama/%s", used_model)
+                return RefineResult(
+                    refined_text=refined,
+                    model_used=used_model,
+                    success=True,
+                )
+
+        except httpx.TimeoutException:
+            logger.error("Timeout ao chamar Ollama (%ds)", self._timeout)
+            return RefineResult(
+                refined_text=text,
+                model_used=used_model,
+                success=False,
+                error=f"Timeout ({self._timeout}s) na chamada ao Ollama",
+            )
+        except Exception as e:
+            logger.error("Erro no refinamento Ollama: %s", e)
+            return RefineResult(
+                refined_text=text,
+                model_used=used_model,
+                success=False,
+                error=str(e),
+            )
+
+
+def get_refiner() -> OllamaRefiner | GeminiRestRefiner | None:
+    """Factory: retorna o primeiro refiner disponivel (Ollama > Gemini > None)."""
+    ollama = OllamaRefiner()
+    if ollama.is_available:
+        logger.info("Refiner: Ollama (%s)", ollama.model)
+        return ollama
+
+    gemini = GeminiRestRefiner()
+    if gemini.is_available:
+        logger.info("Refiner: Gemini REST")
+        return gemini
+
+    logger.warning("Nenhum refiner disponivel")
+    return None
