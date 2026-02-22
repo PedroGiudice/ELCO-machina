@@ -52,7 +52,7 @@ export function AppLayout({
       }}
     >
       {/* Full-screen panel */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           <motion.div
             key={activePanel}
@@ -61,7 +61,7 @@ export function AppLayout({
             animate="animate"
             exit="exit"
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="h-full pb-20"
+            className="min-h-full pb-32"
           >
             {currentPanel}
           </motion.div>
@@ -75,8 +75,8 @@ export function AppLayout({
         disabled={isProcessing}
       />
 
-      {/* Bottom padding for mobile nav */}
-      <div className="h-16 md:h-0 shrink-0" />
+      {/* Bottom padding for safe area below nav */}
+      <div className="h-[var(--sab)] shrink-0" />
     </div>
   );
 }

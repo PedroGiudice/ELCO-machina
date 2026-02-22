@@ -28,11 +28,8 @@ async function safeFetch(
     return await tauriFetch(url, init);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("url not allowed") || msg.includes("scope")) {
-      console.warn(`[safeFetch] tauriFetch bloqueado pelo scope, usando fetch nativo: ${msg}`);
-      return await fetch(url, init);
-    }
-    throw err;
+    console.warn(`[safeFetch] tauriFetch falhou, fallback para fetch nativo: ${msg}`);
+    return await fetch(url, init);
   }
 }
 

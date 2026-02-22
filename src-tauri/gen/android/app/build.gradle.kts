@@ -17,7 +17,7 @@ android {
     compileSdk = 36
     namespace = "com.proatt.machine"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "com.proatt.machine"
         minSdk = 24
         targetSdk = 36
