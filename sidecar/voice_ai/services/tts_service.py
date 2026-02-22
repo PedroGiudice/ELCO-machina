@@ -1,179 +1,70 @@
 """
-TTS Service - Piper TTS Local
+TTS Service - Kokoro-82M
 
-Servico de sintese de voz usando Piper TTS (ONNX).
-Suporta multiplas vozes PT-BR com baixo uso de recursos.
+Sintese de voz local usando Kokoro (82M params).
+Suporta vozes PT-BR nativas. RTF < 1.0 em CPU.
 """
-
 import io
 import logging
 import os
 import wave
-from pathlib import Path
 from typing import Literal
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Piper TTS sera importado lazy para evitar erro se nao instalado
-_piper_voice = None
+
+# Vozes PT-BR disponiveis no Kokoro
+VOICES = {
+    "pf_dora": {"description": "Feminina PT-BR", "lang": "p"},
+    "pm_santa": {"description": "Masculina PT-BR", "lang": "p"},
+}
+
+DEFAULT_VOICE = "pf_dora"
 
 
 class TTSService:
-    """Servico de Text-to-Speech usando Piper."""
+    """Servico de Text-to-Speech usando Kokoro-82M."""
 
-    # Vozes PT-BR disponiveis
-    VOICES = {
-        "pt-br-edresson-low": {
-            "model": "pt_BR-edresson-low",
-            "quality": "low",
-            "description": "Voz masculina, baixa qualidade, rapida",
-        },
-        "pt-br-faber-medium": {
-            "model": "pt_BR-faber-medium",
-            "quality": "medium",
-            "description": "Voz masculina, qualidade media",
-        },
-    }
+    DEFAULT_VOICE = DEFAULT_VOICE
 
-    DEFAULT_VOICE = "pt-br-faber-medium"
-
-    def __init__(self, models_dir: str | None = None):
-        """
-        Inicializa o servico TTS.
-
-        Args:
-            models_dir: Diretorio para cache de modelos Piper
-        """
-        self.models_dir = Path(
-            models_dir or os.environ.get("PIPER_MODELS_DIR", "~/.local/share/piper")
-        ).expanduser()
-        self.models_dir.mkdir(parents=True, exist_ok=True)
-
-        self._voice = None
-        self._current_voice_id = None
+    def __init__(self):
+        self._pipeline = None
         self._is_available = False
 
-        # Verifica se Piper esta instalado
         try:
-            import piper  # noqa: F401
-
+            import kokoro  # noqa: F401
             self._is_available = True
         except ImportError:
-            logger.info("piper-tts nao instalado. TTS indisponivel.")
+            logger.info("kokoro nao instalado. TTS indisponivel.")
 
     @property
     def is_available(self) -> bool:
-        """Retorna se TTS esta disponivel."""
         return self._is_available
 
     @property
     def is_loaded(self) -> bool:
-        """Retorna se uma voz esta carregada."""
-        return self._voice is not None
+        return self._pipeline is not None
 
-    def load_voice(self, voice_id: str | None = None) -> bool:
-        """
-        Carrega uma voz Piper.
+    def _ensure_loaded(self):
+        """Carrega o pipeline Kokoro (lazy, ~16s no primeiro load)."""
+        if self._pipeline:
+            return
 
-        Args:
-            voice_id: ID da voz (default: pt-br-faber-medium)
-
-        Returns:
-            True se carregou com sucesso
-        """
         if not self._is_available:
-            return False
+            raise RuntimeError("TTS nao disponivel. Instale kokoro.")
 
-        voice_id = voice_id or self.DEFAULT_VOICE
+        from kokoro import KPipeline
 
-        if voice_id not in self.VOICES:
-            logger.warning("Voz desconhecida: %s", voice_id)
-            return False
-
-        # Se ja esta carregada, nao recarrega
-        if self._voice and self._current_voice_id == voice_id:
-            return True
-
-        try:
-            from piper import PiperVoice
-
-            model_name = self.VOICES[voice_id]["model"]
-            model_path = self.models_dir / f"{model_name}.onnx"
-            config_path = self.models_dir / f"{model_name}.onnx.json"
-
-            # Baixa modelo se necessario
-            if not model_path.exists():
-                logger.info("Baixando modelo %s...", model_name)
-                self._download_model(model_name)
-
-            if not model_path.exists():
-                logger.error("Modelo nao encontrado: %s", model_path)
-                return False
-
-            logger.info("Carregando voz %s...", voice_id)
-            self._voice = PiperVoice.load(str(model_path), str(config_path))
-            self._current_voice_id = voice_id
-            logger.info("Voz %s carregada!", voice_id)
-            return True
-
-        except Exception as e:
-            logger.error("Erro ao carregar voz: %s", e)
-            return False
-
-    def _download_model(self, model_name: str) -> bool:
-        """
-        Baixa modelo Piper do repositorio oficial.
-
-        Args:
-            model_name: Nome do modelo (ex: pt_BR-faber-medium)
-
-        Returns:
-            True se baixou com sucesso
-        """
-        import urllib.request
-
-        # Estrutura do HuggingFace Piper Voices:
-        # https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/{speaker}/{quality}/{model_name}.onnx
-        base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0"
-
-        # Extrai componentes do model_name (ex: pt_BR-faber-medium)
-        # Formato: {lang}_{region}-{speaker}-{quality}
-        parts = model_name.split("-")
-        if len(parts) != 3:
-            logger.error("Formato de modelo invalido: %s", model_name)
-            return False
-
-        lang_region = parts[0]  # pt_BR
-        speaker = parts[1]  # faber
-        quality = parts[2]  # medium
-
-        # Converte pt_BR para pt/pt_BR
-        lang = lang_region.split("_")[0]  # pt
-
-        try:
-            # Baixa arquivo ONNX
-            onnx_url = f"{base_url}/{lang}/{lang_region}/{speaker}/{quality}/{model_name}.onnx"
-            onnx_path = self.models_dir / f"{model_name}.onnx"
-            logger.info("Baixando %s...", onnx_url)
-            urllib.request.urlretrieve(onnx_url, onnx_path)
-
-            # Baixa arquivo de configuracao
-            config_url = f"{base_url}/{lang}/{lang_region}/{speaker}/{quality}/{model_name}.onnx.json"
-            config_path = self.models_dir / f"{model_name}.onnx.json"
-            logger.info("Baixando %s...", config_url)
-            urllib.request.urlretrieve(config_url, config_path)
-
-            logger.info("Modelo %s baixado com sucesso!", model_name)
-            return True
-
-        except Exception as e:
-            logger.error("Erro ao baixar modelo: %s", e)
-            return False
+        logger.info("Carregando Kokoro pipeline (lang=p)...")
+        self._pipeline = KPipeline(lang_code="p")
+        logger.info("Kokoro pipeline carregado")
 
     def synthesize(
         self,
         text: str,
-        voice_id: str | None = None,
+        voice: str | None = None,
         speed: float = 1.0,
         output_format: Literal["wav", "raw"] = "wav",
     ) -> bytes:
@@ -182,63 +73,50 @@ class TTSService:
 
         Args:
             text: Texto para sintetizar
-            voice_id: ID da voz (carrega se necessario)
+            voice: Nome da voz (pf_dora, pm_santa)
             speed: Velocidade (0.5 - 2.0)
             output_format: Formato de saida
 
         Returns:
-            Bytes do audio gerado
-
-        Raises:
-            RuntimeError: Se TTS nao disponivel ou erro na sintese
+            Bytes do audio gerado (WAV 24kHz mono 16-bit ou raw float32)
         """
-        if not self._is_available:
-            raise RuntimeError("TTS nao disponivel. Instale piper-tts.")
+        self._ensure_loaded()
 
-        # Carrega voz se necessario
-        voice_id = voice_id or self.DEFAULT_VOICE
-        if not self._voice or self._current_voice_id != voice_id:
-            if not self.load_voice(voice_id):
-                raise RuntimeError(f"Falha ao carregar voz: {voice_id}")
+        voice = voice or DEFAULT_VOICE
+        if voice not in VOICES:
+            raise ValueError(f"Voz desconhecida: {voice}. Disponiveis: {list(VOICES.keys())}")
 
-        # Valida velocidade
         speed = max(0.5, min(2.0, speed))
 
-        try:
-            from piper.config import SynthesisConfig
+        # Kokoro retorna generator de (graphemes, phonemes, audio_tensor)
+        audio_chunks = []
+        for _, _, audio in self._pipeline(text, voice=voice, speed=speed):
+            audio_chunks.append(audio.numpy() if hasattr(audio, 'numpy') else np.array(audio))
 
-            # Configura sintese com velocidade
-            syn_config = SynthesisConfig(length_scale=1.0 / speed)
+        if not audio_chunks:
+            raise RuntimeError("Kokoro nao gerou audio")
 
-            # Sintetiza - piper.synthesize() retorna generator de AudioChunk
-            audio_data = b""
-            for audio_chunk in self._voice.synthesize(text, syn_config):
-                audio_data += audio_chunk.audio_int16_bytes
+        audio_data = np.concatenate(audio_chunks)
 
-            if output_format == "raw":
-                return audio_data
+        if output_format == "raw":
+            return audio_data.tobytes()
 
-            # Converte para WAV
-            sample_rate = self._voice.config.sample_rate
-            wav_buffer = io.BytesIO()
+        # Converte para WAV 24kHz 16-bit mono
+        audio_int16 = (audio_data * 32767).clip(-32768, 32767).astype(np.int16)
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(24000)
+            wf.writeframes(audio_int16.tobytes())
 
-            with wave.open(wav_buffer, "wb") as wav_file:
-                wav_file.setnchannels(1)  # Mono
-                wav_file.setsampwidth(2)  # 16-bit
-                wav_file.setframerate(sample_rate)
-                wav_file.writeframes(audio_data)
-
-            return wav_buffer.getvalue()
-
-        except Exception as e:
-            raise RuntimeError(f"Erro na sintese: {e}")
+        return wav_buffer.getvalue()
 
     def get_voices(self) -> dict:
         """Retorna vozes disponiveis."""
-        return self.VOICES.copy()
+        return VOICES.copy()
 
     def unload(self):
-        """Libera recursos da voz carregada."""
-        self._voice = None
-        self._current_voice_id = None
-        logger.info("Voz descarregada.")
+        """Libera pipeline da memoria."""
+        self._pipeline = None
+        logger.info("Kokoro pipeline descarregado")

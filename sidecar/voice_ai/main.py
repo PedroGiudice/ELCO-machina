@@ -54,13 +54,12 @@ async def lifespan(app: FastAPI):
         # Modelo sera carregado lazy na primeira requisicao
         state.stt_service = STTService()
 
-        # Inicializa TTS Service (Piper)
-        # Voz sera carregada lazy na primeira requisicao
+        # Inicializa TTS Service (Kokoro)
         state.tts_service = TTSService()
         if state.tts_service.is_available:
-            logger.info("TTS (Piper) disponivel")
+            logger.info("TTS (Kokoro) disponivel")
         else:
-            logger.info("TTS (Piper) nao instalado - sintese local desabilitada")
+            logger.info("TTS (Kokoro) nao instalado - sintese local desabilitada")
 
         # Inicializa Modal Client (Chatterbox - clonagem de voz)
         state.modal_client = TTSModalClient()
@@ -91,7 +90,7 @@ async def lifespan(app: FastAPI):
 # Cria aplicacao FastAPI
 app = FastAPI(
     title="Voice AI Sidecar",
-    description="STT (Whisper) e TTS (Piper) local com refinamento opcional via Gemini",
+    description="STT (Whisper) e TTS (Kokoro) local com refinamento opcional via Gemini",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -117,11 +116,13 @@ app.add_middleware(
 # Schemas de resposta tipados para /health
 class WhisperModelStatus(BaseModel):
     status: Literal["loaded", "available", "not_loaded"]
+    backend: str | None = None
     model: str | None = None
 
 
-class PiperModelStatus(BaseModel):
+class TTSModelStatus(BaseModel):
     status: Literal["loaded", "available", "not_installed", "not_available"]
+    engine: str = "kokoro"
     voice: str | None = None
 
 
@@ -132,7 +133,7 @@ class ModalModelStatus(BaseModel):
 
 class ModelsStatus(BaseModel):
     whisper: WhisperModelStatus
-    piper: PiperModelStatus
+    tts: TTSModelStatus
     modal: ModalModelStatus
 
 
@@ -157,28 +158,29 @@ async def health_check() -> HealthResponse:
     """
     whisper_status = "not_loaded"
     whisper_model = None
+    whisper_backend = None
 
     if state.stt_service:
         if state.stt_service.is_loaded:
             whisper_status = "loaded"
             whisper_model = state.stt_service.model_size
+            whisper_backend = state.stt_service.backend
         else:
             whisper_status = "available"
             whisper_model = state.stt_service.model_size
 
-    # Status do TTS (Piper)
-    piper_status = "not_available"
-    piper_voice = None
+    # Status do TTS (Kokoro)
+    tts_status = "not_available"
+    tts_voice = None
 
     if state.tts_service:
         if state.tts_service.is_available:
             if state.tts_service.is_loaded:
-                piper_status = "loaded"
-                piper_voice = state.tts_service._current_voice_id
+                tts_status = "loaded"
             else:
-                piper_status = "available"
+                tts_status = "available"
         else:
-            piper_status = "not_installed"
+            tts_status = "not_installed"
 
     # Status do Modal (Chatterbox)
     modal_status = "disabled"
@@ -194,11 +196,12 @@ async def health_check() -> HealthResponse:
         models=ModelsStatus(
             whisper=WhisperModelStatus(
                 status=whisper_status,
+                backend=whisper_backend,
                 model=whisper_model,
             ),
-            piper=PiperModelStatus(
-                status=piper_status,
-                voice=piper_voice,
+            tts=TTSModelStatus(
+                status=tts_status,
+                voice=tts_voice,
             ),
             modal=ModalModelStatus(
                 status=modal_status,

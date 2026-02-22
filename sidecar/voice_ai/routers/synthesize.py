@@ -1,7 +1,7 @@
 """
 Synthesize Router - Endpoint /synthesize
 
-Endpoint para sintese de texto em audio usando Piper TTS (local)
+Endpoint para sintese de texto em audio usando Kokoro TTS (local)
 ou Chatterbox via Modal (clonagem de voz).
 """
 
@@ -29,7 +29,7 @@ from voice_ai.schemas.tts_profiles import (
 
 router = APIRouter()
 
-# Cache para referencia PT-BR gerada pelo Piper
+# Cache para referencia PT-BR gerada pelo Kokoro
 _default_ptbr_ref: bytes | None = None
 
 # Texto para gerar referencia PT-BR (cobre fonemas variados do portugues)
@@ -42,7 +42,7 @@ _PTBR_REF_TEXT = (
 
 def _get_default_ptbr_ref(tts_service) -> bytes | None:
     """
-    Gera (e cacheia) uma referencia PT-BR usando Piper local.
+    Gera (e cacheia) uma referencia PT-BR usando Kokoro local.
     Usada como voice_ref default para Chatterbox quando o usuario
     nao fornece amostra de voz propria.
     """
@@ -57,7 +57,7 @@ def _get_default_ptbr_ref(tts_service) -> bytes | None:
     try:
         ref_bytes = tts_service.synthesize(
             text=_PTBR_REF_TEXT,
-            voice_id="pt-br-faber-medium",
+            voice="pf_dora",
             speed=1.0,
             output_format="wav",
         )
@@ -73,7 +73,7 @@ class SynthesizeRequest(BaseModel):
     """Request para sintese de audio."""
 
     text: str = Field(..., min_length=1, max_length=10000, description="Texto para sintetizar")
-    voice: str = Field(default="pt-br-faber-medium", description="ID da voz ou 'cloned' para Modal")
+    voice: str = Field(default="pf_dora", description="Nome da voz (pf_dora, pm_santa) ou 'cloned' para Modal")
     speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Velocidade (0.5-2.0, so Piper)")
     format: Literal["wav", "mp3"] = Field(default="wav", description="Formato de saida")
     preprocess: bool = Field(default=True, description="Preprocessar Markdown")
@@ -115,7 +115,7 @@ async def synthesize(request: Request, body: SynthesizeRequest) -> Response:
     Sintetiza texto em audio.
 
     Modos:
-    - voice="pt-br-*": Usa Piper TTS local (rapido, sem clonagem)
+    - voice="pf_dora"/"pm_santa": Usa Kokoro TTS local (rapido, sem clonagem)
     - voice="cloned": Usa Chatterbox via Modal (GPU, com clonagem)
 
     Args:
@@ -139,47 +139,44 @@ async def synthesize(request: Request, body: SynthesizeRequest) -> Response:
     if body.voice == "cloned":
         return await _synthesize_with_modal(request, text, body)
     else:
-        return await _synthesize_with_piper(request, text, body)
+        return await _synthesize_with_kokoro(request, text, body)
 
 
-async def _synthesize_with_piper(
+async def _synthesize_with_kokoro(
     request: Request,
     text: str,
     body: SynthesizeRequest
 ) -> Response:
-    """Sintetiza usando Piper TTS local."""
+    """Sintetiza usando Kokoro TTS local."""
     tts_service = request.state.tts_service
 
     if not tts_service or not tts_service.is_available:
         raise HTTPException(
             status_code=503,
-            detail="TTS local (Piper) nao disponivel. Verifique se piper-tts esta instalado.",
+            detail="TTS local (Kokoro) nao disponivel. Verifique se kokoro esta instalado.",
         )
 
     try:
         audio_bytes = tts_service.synthesize(
             text=text,
-            voice_id=body.voice,
+            voice=body.voice,
             speed=body.speed,
             output_format="wav",
         )
 
-        content_type = "audio/wav"
-        # TODO: Converter para MP3 se solicitado
-
         return Response(
             content=audio_bytes,
-            media_type=content_type,
+            media_type="audio/wav",
             headers={
                 "Content-Disposition": f'attachment; filename="speech.{body.format}"',
-                "X-TTS-Engine": "piper",
+                "X-TTS-Engine": "kokoro",
             },
         )
 
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na sintese Piper: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro na sintese Kokoro: {e}")
 
 
 async def _synthesize_with_modal(
@@ -221,7 +218,7 @@ async def _synthesize_with_modal(
             tts_service = request.state.tts_service
             voice_ref_bytes = _get_default_ptbr_ref(tts_service)
             if voice_ref_bytes:
-                logger.info("Usando referencia PT-BR default (Piper)")
+                logger.info("Usando referencia PT-BR default (Kokoro)")
 
         # Chama Modal com parametros
         audio_bytes = modal_client.synthesize(
