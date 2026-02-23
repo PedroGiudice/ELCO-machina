@@ -145,14 +145,14 @@ export function Editor({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative min-h-0">
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           spellCheck={false}
           style={{ fontSize: `${fontSize}px` }}
           className={`
-            w-full h-full bg-transparent border-0
+            w-full h-full bg-transparent border-0 overflow-y-auto
             p-4 md:p-8 resize-none
             focus:ring-0 focus:outline-none
             leading-relaxed placeholder:opacity-30
