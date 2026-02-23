@@ -52,7 +52,7 @@ export function AppLayout({
       }}
     >
       {/* Full-screen panel */}
-      <div className="flex-1 overflow-y-auto">
+      <div className={`flex-1 ${activePanel === 'editor' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activePanel}
@@ -61,7 +61,7 @@ export function AppLayout({
             animate="animate"
             exit="exit"
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="min-h-full pb-32"
+            className={activePanel === 'editor' ? 'h-full' : 'min-h-full pb-32'}
           >
             {currentPanel}
           </motion.div>
