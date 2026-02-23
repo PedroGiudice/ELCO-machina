@@ -6,9 +6,6 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 
-# STT - Faster-Whisper (CTranslate2) - fallback para whisper.cpp
-faster-whisper==1.2.1
-
 # TTS - Kokoro (82M params, PT-BR nativo)
 kokoro>=0.9.4
 
@@ -17,7 +14,7 @@ pydub==0.25.1
 soundfile==0.12.1
 numpy>=1.24.0,<2.0.0
 
-# HTTP Client (Gemini REST, chamadas externas)
+# HTTP Client (chamadas externas)
 httpx>=0.27.0
 
 # Utilities
