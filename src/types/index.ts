@@ -20,7 +20,7 @@ export type OutputStyle =
   | 'Concise'
   | 'Formal'
   | 'Prompt (Claude)'
-  | 'Prompt (Gemini)'
+  | 'Prompt (LLM)'
   | 'Bullet Points'
   | 'Summary'
   | 'Tech Docs'

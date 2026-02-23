@@ -1,8 +1,8 @@
 """
 Voice AI Sidecar - FastAPI Entry Point
 
-Sistema de processamento de voz local-first com refinamento cloud opcional.
-Filosofia: "Whisper transcreve, Gemini refina. Privacidade e qualidade."
+Sistema de processamento de voz local-first com refinamento via Claude CLI.
+Filosofia: "Whisper transcreve, Claude refina."
 """
 import logging
 import os
@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 # Configura logging estruturado para todo o sidecar
 from voice_ai.routers import transcribe, synthesize
-from voice_ai.services.refiner import get_refiner, OllamaRefiner
+from voice_ai.services.refiner import ClaudeRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
 from voice_ai.services.tts_modal_client import TTSModalClient
@@ -73,18 +73,10 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("TTS (Modal) desabilitado (MODAL_ENABLED=false)")
 
-        # Detecta refiner disponivel
-        refiner = get_refiner()
-        if refiner:
-            backend = "Ollama" if isinstance(refiner, OllamaRefiner) else "Gemini"
-            model = getattr(refiner, "model", "unknown")
-            state.refiner_backend = backend
-            state.refiner_model = model
-            logger.info("Refiner: %s (%s)", backend, model)
-        else:
-            state.refiner_backend = None
-            state.refiner_model = None
-            logger.warning("Nenhum refiner disponivel (Ollama/Gemini)")
+        # Inicializa Claude refiner
+        state.refiner_backend = "claude"
+        state.refiner_model = "sonnet"
+        logger.info("Refiner: Claude CLI (modelo padrao: sonnet)")
 
         state.models_loaded = True
         logger.info("Sidecar pronto!")
@@ -106,7 +98,7 @@ async def lifespan(app: FastAPI):
 # Cria aplicacao FastAPI
 app = FastAPI(
     title="Voice AI Sidecar",
-    description="STT (Whisper) e TTS (Kokoro) local com refinamento opcional via Ollama/Gemini",
+    description="STT (Whisper) e TTS (Kokoro) local com refinamento via Claude CLI",
     version="0.2.0",
     lifespan=lifespan,
 )

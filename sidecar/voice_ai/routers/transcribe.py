@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from voice_ai.services.refiner import get_refiner
+from voice_ai.services.refiner import ClaudeRefiner
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class TranscribeRequest(BaseModel):
     )
     refine: bool = Field(
         default=False,
-        description="Se deve refinar texto com LLM (Ollama ou Gemini)",
+        description="Se deve refinar texto com Claude CLI",
     )
     system_instruction: str | None = Field(
         default=None,
@@ -77,7 +77,7 @@ class TranscribeResponse(BaseModel):
     # Texto refinado (se refine=true)
     refined_text: str | None = Field(
         default=None,
-        description="Texto refinado pelo LLM (Ollama ou Gemini)",
+        description="Texto refinado pelo Claude CLI",
     )
 
     # Metadados
@@ -115,7 +115,7 @@ class TranscribeResponse(BaseModel):
     )
     refine_backend: str | None = Field(
         default=None,
-        description="Backend usado (ollama ou gemini)",
+        description="Backend usado (claude)",
     )
 
 
@@ -130,7 +130,7 @@ async def transcribe_audio(
     Fluxo:
     1. Audio chega como base64
     2. Whisper transcreve localmente (2-5 segundos)
-    3. Se refine=true e system_instruction presente, Gemini formata o texto via REST
+    3. Se refine=true e system_instruction presente, Claude CLI refina o texto
     4. Retorna texto bruto + refinado
 
     Args:
@@ -176,29 +176,19 @@ async def transcribe_audio(
             ],
         )
 
-        # 2. Refina com LLM se solicitado
+        # 2. Refina com Claude CLI se solicitado
         if body.refine and result.text and body.system_instruction:
-            refiner = get_refiner()
-            if refiner is None:
-                response.refine_success = False
-                response.refine_error = "Nenhum backend de refinamento disponivel"
-            else:
-                from voice_ai.services.refiner import OllamaRefiner
-
-                backend_name = (
-                    "ollama" if isinstance(refiner, OllamaRefiner) else "gemini"
-                )
-                refine_result = await refiner.refine(
-                    text=result.text,
-                    system_instruction=body.system_instruction,
-                    model=body.model,
-                    temperature=body.temperature,
-                )
-                response.refined_text = refine_result.refined_text
-                response.refine_success = refine_result.success
-                response.refine_error = refine_result.error
-                response.model_used = refine_result.model_used
-                response.refine_backend = backend_name
+            refiner = ClaudeRefiner()
+            refine_result = await refiner.refine(
+                text=result.text,
+                system_instruction=body.system_instruction,
+                model=body.model or "sonnet",
+            )
+            response.refined_text = refine_result.refined_text
+            response.refine_success = refine_result.success
+            response.refine_error = refine_result.error
+            response.model_used = refine_result.model_used
+            response.refine_backend = "claude"
         elif body.refine and result.text and not body.system_instruction:
             logger.warning(
                 "Refinamento solicitado mas system_instruction ausente. "

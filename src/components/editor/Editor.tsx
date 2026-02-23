@@ -47,7 +47,7 @@ export function Editor({
   canRead = false,
   outputStyle = 'Verbatim',
   activeContext = 'General',
-  aiModel = 'gemini-2.5-flash',
+  aiModel = 'sonnet',
 }: EditorProps) {
   const lineCount = value.split('\n').length;
   const charCount = value.length;
@@ -187,7 +187,7 @@ export function Editor({
           <span>Ln {lineCount}, Col {charCount}</span>
           <span>UTF-8</span>
           <span className="hidden md:inline opacity-50">
-            Model: {aiModel.replace('gemini-', '')}
+            Model: {aiModel}
           </span>
         </div>
         <div className="flex items-center gap-2">

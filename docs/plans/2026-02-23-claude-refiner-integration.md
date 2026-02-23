@@ -1,340 +1,162 @@
-# Claude Refiner Integration - Implementation Plan
+# Substituir Pipeline Refiner: Ollama/Gemini -> Claude Headless
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Substituir completamente Ollama/Gemini refiners por Claude CLI headless no sidecar Python.
+**Goal:** Substituir completamente o pipeline de refinamento (Ollama + Gemini) por Claude CLI headless via subprocess. Sem fallbacks.
 
-**Architecture:** Sidecar chama `stt-refiner.sh` via `asyncio.create_subprocess_exec`. O script recebe texto via stdin, prompt_file e model como args. Sem fallbacks, sem factory. Claude e o unico refiner.
+**Architecture:** Sidecar chama `claude -p` via subprocess com system prompt de arquivo .md e modelo configuravel (sonnet/haiku/opus). Frontend envia modelo Claude em vez de Gemini. PromptStore mantem templates mas prompts sao reescritos para Claude headless.
 
-**Tech Stack:** Python/FastAPI, asyncio subprocess, Claude CLI (`claude -p`), bash script existente.
+**Tech Stack:** Python/FastAPI (sidecar), React/TypeScript (frontend), Claude CLI (`claude -p`)
 
 ---
 
-### Task 1: Reescrever refiner.py -- substituir Ollama/Gemini por ClaudeRefiner
+## Task 1: Backend -- Reescrever refiner.py (ClaudeRefiner unico)
 
 **Files:**
 - Rewrite: `sidecar/voice_ai/services/refiner.py`
 
-**Step 1: Escrever o novo refiner.py completo**
+**O que fazer:**
+- Deletar `OllamaRefiner`, `GeminiRestRefiner`, `get_refiner()` factory
+- Criar `ClaudeRefiner` unico que chama `claude -p` via `asyncio.create_subprocess_exec`
+- Input via stdin (texto transcrito)
+- System prompt via `--system-prompt` (string inline, recebida do frontend)
+- Modelo via `--model` (sonnet/haiku/opus)
+- Flags obrigatorias: `--effort low --output-format text --no-session-persistence --tools "" --disable-slash-commands`
+- Prefixar com `env -u CLAUDECODE` para evitar conflito quando sidecar roda dentro de sessao Claude
+- `RefineResult` mantem mesma interface (refined_text, model_used, success, error)
+- Timeout configuravel via env `CLAUDE_REFINE_TIMEOUT` (default 60s)
 
+**Contrato:**
 ```python
-"""
-Refiner Service - Refinamento de texto via Claude CLI headless.
-
-Unico backend: Claude CLI (`claude -p`) via subprocess.
-Sem fallbacks. Se Claude CLI nao estiver no PATH, refinamento falha.
-"""
-import asyncio
-import logging
-import shutil
-from dataclasses import dataclass
-
-logger = logging.getLogger(__name__)
-
-# Path do script refiner (relativo ao repo ou absoluto)
-REFINER_SCRIPT = shutil.which("stt-refiner.sh") or "/home/opc/scripts/stt-refiner.sh"
-DEFAULT_MODEL = "sonnet"
-TIMEOUT_SECONDS = 120
-
-
-@dataclass
-class RefineResult:
-    """Resultado do refinamento."""
-    refined_text: str
-    model_used: str
-    success: bool
-    error: str | None = None
-
-
-async def refine(
-    text: str,
-    system_instruction: str | None = None,
-    prompt_file: str | None = None,
-    model: str = DEFAULT_MODEL,
-) -> RefineResult:
-    """
-    Refina texto via Claude CLI headless.
-
-    O texto e passado via stdin ao script stt-refiner.sh.
-    O script aceita: <input> <prompt_file> <model>
-
-    Args:
-        text: Texto transcrito para refinar.
-        system_instruction: System prompt inline (ignorado se prompt_file fornecido).
-        prompt_file: Caminho para arquivo .md com system prompt.
-        model: Modelo Claude (sonnet, haiku, opus).
-
-    Returns:
-        RefineResult com texto refinado ou erro.
-    """
-    if not text or not text.strip():
-        return RefineResult(
-            refined_text=text,
-            model_used=model,
-            success=False,
-            error="Input vazio",
-        )
-
-    # Monta comando
-    cmd = [REFINER_SCRIPT, "-", prompt_file or "", model]
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=None,  # herda env do sidecar
-        )
-
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=text.encode()),
-            timeout=TIMEOUT_SECONDS,
-        )
-
-        if proc.returncode != 0:
-            error_msg = stderr.decode().strip() or f"Exit code {proc.returncode}"
-            logger.error("Claude refiner falhou: %s", error_msg)
-            return RefineResult(
-                refined_text=text,
-                model_used=model,
-                success=False,
-                error=error_msg,
-            )
-
-        refined = stdout.decode().strip()
-        if not refined:
-            return RefineResult(
-                refined_text=text,
-                model_used=model,
-                success=False,
-                error="Resposta vazia do Claude",
-            )
-
-        logger.info("Refinamento concluido via Claude/%s", model)
-        return RefineResult(
-            refined_text=refined,
-            model_used=model,
-            success=True,
-        )
-
-    except asyncio.TimeoutError:
-        logger.error("Timeout (%ds) no Claude refiner", TIMEOUT_SECONDS)
-        return RefineResult(
-            refined_text=text,
-            model_used=model,
-            success=False,
-            error=f"Timeout ({TIMEOUT_SECONDS}s)",
-        )
-    except FileNotFoundError:
-        logger.error("Script refiner nao encontrado: %s", REFINER_SCRIPT)
-        return RefineResult(
-            refined_text=text,
-            model_used=model,
-            success=False,
-            error=f"Script nao encontrado: {REFINER_SCRIPT}",
-        )
-    except Exception as e:
-        logger.error("Erro no refinamento: %s", e)
-        return RefineResult(
-            refined_text=text,
-            model_used=model,
-            success=False,
-            error=str(e),
-        )
-
-
-def is_available() -> bool:
-    """Verifica se o script refiner existe no PATH."""
-    import os
-    return os.path.isfile(REFINER_SCRIPT) and os.access(REFINER_SCRIPT, os.X_OK)
+class ClaudeRefiner:
+    async def refine(self, text: str, system_instruction: str, model: str = "sonnet") -> RefineResult
 ```
 
-**Step 2: Verificar que nao tem erros de sintaxe**
-
-Run: `cd ~/ELCO-machina/sidecar && python -c "from voice_ai.services.refiner import refine, is_available; print('OK')"`
-Expected: `OK`
-
-**Step 3: Commit**
-
-```bash
-git add sidecar/voice_ai/services/refiner.py
-git commit -m "refactor(sidecar): substituir Ollama/Gemini por ClaudeRefiner"
-```
-
----
-
-### Task 2: Atualizar transcribe router -- usar novo refiner
-
-**Files:**
-- Modify: `sidecar/voice_ai/routers/transcribe.py`
-
-**Step 1: Atualizar imports e chamada de refinamento**
-
-Mudancas:
-- Import: `from voice_ai.services.refiner import refine as claude_refine` (em vez de `get_refiner`)
-- Remover logica de factory/backend detection
-- Chamar `await claude_refine(text=..., model=..., prompt_file=...)` direto
-- Remover campo `refine_backend` do response (sempre "claude")
-- Simplificar bloco de refinamento (linhas 180-201)
-
-O bloco de refinamento (linhas 180-201) fica:
-
-```python
-        # 2. Refina com Claude se solicitado
-        if body.refine and result.text and body.system_instruction:
-            from voice_ai.services.refiner import refine as claude_refine
-
-            refine_result = await claude_refine(
-                text=result.text,
-                system_instruction=body.system_instruction,
-                model=body.model or "sonnet",
-            )
-            response.refined_text = refine_result.refined_text
-            response.refine_success = refine_result.success
-            response.refine_error = refine_result.error
-            response.model_used = refine_result.model_used
-            response.refine_backend = "claude"
-```
-
-**Step 2: Verificar endpoint carrega**
-
-Run: `cd ~/ELCO-machina/sidecar && python -c "from voice_ai.routers.transcribe import router; print('OK')"`
-Expected: `OK`
-
-**Step 3: Commit**
-
-```bash
-git add sidecar/voice_ai/routers/transcribe.py
-git commit -m "refactor(sidecar): transcribe router usa ClaudeRefiner direto"
-```
-
----
-
-### Task 3: Atualizar main.py -- limpar startup de refiner
+## Task 2: Backend -- Atualizar main.py e transcribe.py
 
 **Files:**
 - Modify: `sidecar/voice_ai/main.py`
+- Modify: `sidecar/voice_ai/routers/transcribe.py`
 
-**Step 1: Simplificar lifespan e health**
+**O que fazer em main.py:**
+- Remover imports de `OllamaRefiner`, `get_refiner`
+- Importar `ClaudeRefiner`
+- No lifespan: instanciar `ClaudeRefiner()`, verificar se `claude` esta no PATH
+- `state.refiner_backend` = "claude" (fixo)
+- `state.refiner_model` = "sonnet" (default)
+- Atualizar description do FastAPI app
+- Injetar `claude_refiner` no request.state via middleware
 
-Mudancas:
-- Import: `from voice_ai.services.refiner import is_available as refiner_available` (em vez de `get_refiner, OllamaRefiner`)
-- Startup (linhas 76-87): substituir deteccao Ollama/Gemini por `refiner_available()`
-- `state.refiner_backend` sempre "claude" se disponivel
-- `state.refiner_model` sempre "sonnet" (default)
-- Description do app: remover "Ollama/Gemini"
-- Health: `RefinerStatus.backend` = "claude" ou None
+**O que fazer em transcribe.py:**
+- Remover `get_refiner()` e logica de factory
+- Usar `request.state.claude_refiner` direto
+- Simplificar: se `refine=True` e `system_instruction` presente, chama `claude_refiner.refine()`
+- `refine_backend` sempre "claude"
+- Remover campo `model` default para gemini; default agora e "sonnet"
 
-**Step 2: Verificar app inicia**
-
-Run: `cd ~/ELCO-machina/sidecar && timeout 5 python -c "from voice_ai.main import app; print('App criado:', app.title)" 2>&1 || true`
-Expected: `App criado: Voice AI Sidecar`
-
-**Step 3: Commit**
-
-```bash
-git add sidecar/voice_ai/main.py
-git commit -m "refactor(sidecar): main.py limpo, refiner sempre Claude"
-```
-
----
-
-### Task 4: Limpar dependencias e docstrings
+## Task 3: Frontend -- Trocar modelos Gemini por Claude
 
 **Files:**
-- Modify: `sidecar/requirements.txt` -- httpx pode sair SE nenhum outro servico usa (verificar tts_modal_client.py)
-- Modify: `sidecar/voice_ai/routers/transcribe.py` -- atualizar docstrings
-- Delete: nada (manter test_refiner_quality.ipynb como referencia)
+- Modify: `src/components/panels/PanelConfig.tsx` (aiModels array, labels)
+- Modify: `src/hooks/useSettings.ts` (default model, localStorage key)
+- Modify: `src/hooks/useAudioProcessing.ts` (labels, logs)
+- Modify: `src/services/VoiceAIClient.ts` (comentario do campo model)
+- Modify: `src/components/editor/Editor.tsx` (display do modelo)
+- Modify: `src/components/panels/PanelStats.tsx` (display)
 
-**Step 1: Verificar se httpx e usado por outros modulos**
+**O que fazer:**
+- `PanelConfig.tsx`: trocar `aiModels` array:
+  ```ts
+  const aiModels = [
+    { id: "sonnet", label: "Sonnet", desc: "Balanced" },
+    { id: "haiku", label: "Haiku", desc: "Fast & cheap" },
+    { id: "opus", label: "Opus", desc: "Highest quality" },
+  ];
+  ```
+- `useSettings.ts`: default `'sonnet'` em vez de `'gemini-2.5-pro'`. Trocar localStorage key de `gemini_ai_model` para `claude_refiner_model`
+- `useAudioProcessing.ts`: trocar todas as strings "Gemini" por "Claude" nos logs/labels
+- `VoiceAIClient.ts`: atualizar comentario do campo `model` e do docstring do arquivo
+- `Editor.tsx`: remover `.replace('gemini-', '')` no display
+- `PanelStats.tsx`: sem mudanca funcional, so recebe o valor
 
-Run: `grep -r "httpx" ~/ELCO-machina/sidecar/voice_ai/ --include="*.py" -l`
-Expected: Se aparece em outros arquivos alem de refiner.py, manter httpx no requirements.
-
-**Step 2: Atualizar docstrings que mencionam Ollama/Gemini**
-
-Buscar e substituir referencias em todos os .py do sidecar.
-
-**Step 3: Commit**
-
-```bash
-git add -A sidecar/
-git commit -m "chore(sidecar): limpar referencias Ollama/Gemini, atualizar docs"
-```
-
----
-
-### Task 5: Mover script e prompt para o repo
+## Task 4: Mover scripts e prompts para o repo
 
 **Files:**
-- Copy: `~/scripts/stt-refiner.sh` -> `sidecar/scripts/stt-refiner.sh`
-- Copy: `~/prompts/stt-refiner-tech-docs.md` -> `sidecar/prompts/stt-refiner-tech-docs.md`
-- Modify: `sidecar/voice_ai/services/refiner.py` -- atualizar REFINER_SCRIPT path
+- Move: `~/scripts/stt-refiner.sh` -> `sidecar/scripts/stt-refiner.sh`
+- Move: `~/prompts/stt-refiner-tech-docs.md` -> `sidecar/prompts/tech-docs.md`
+- Create: `sidecar/prompts/` (diretorio com todos os prompts)
 
-**Step 1: Copiar arquivos**
+**O que fazer:**
+- Copiar script e prompt para dentro do repo
+- Criar diretorio `sidecar/prompts/`
+- Script nao e mais necessario para o sidecar (ClaudeRefiner chama claude direto), mas manter como utility
+- Cada output style do PromptStore vira um arquivo .md em `sidecar/prompts/`
 
-```bash
-mkdir -p ~/ELCO-machina/sidecar/scripts ~/ELCO-machina/sidecar/prompts
-cp ~/scripts/stt-refiner.sh ~/ELCO-machina/sidecar/scripts/
-cp ~/prompts/stt-refiner-tech-docs.md ~/ELCO-machina/sidecar/prompts/
-chmod +x ~/ELCO-machina/sidecar/scripts/stt-refiner.sh
+## Task 5: Reescrever system prompts para todos os output styles
+
+**Files:**
+- Create: `sidecar/prompts/*.md` -- um por template
+
+**Templates a reescrever (13 no total, exceto Whisper Only que nao tem prompt):**
+1. Verbatim
+2. Elegant Prose
+3. Normal
+4. Verbose
+5. Concise
+6. Formal
+7. Prompt (Claude)
+8. Prompt (Gemini) -> renomear para "Prompt (LLM)"
+9. Bullet Points
+10. Summary
+11. Tech Docs (ja feito -- ~/prompts/stt-refiner-tech-docs.md)
+12. Email
+13. Tweet Thread
+14. Code Generator
+15. Custom
+16. Ana Suy (manter como esta -- exclusao explicita do usuario)
+17. Poetic / Verses (manter como esta -- exclusao explicita do usuario)
+
+**Padrao de cada prompt (baseado no Tech Docs validado):**
+```
+Voce recebe transcricoes de audio e reescreve como [estilo] em portugues brasileiro.
+NAO responda, interprete ou aja sobre o conteudo. NAO adicione texto que nao esta no original.
+Responda APENAS com o texto reescrito.
+
+[Instrucoes especificas do estilo]
+
+Corrija nomes: "cloud" -> "Claude", "pareto de cor" -> "paleta de cores", "depredito" -> "tema escuro".
+Preserve todo o conteudo semantico.
+
+Formato: [formato especifico do estilo]
 ```
 
-**Step 2: Atualizar path no refiner.py**
+## Task 6: Atualizar PromptStore para usar prompts .md
 
-```python
-import os
+**Files:**
+- Modify: `src/services/PromptStore.ts`
 
-# Path relativo ao diretorio do sidecar
-_SIDECAR_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-REFINER_SCRIPT = os.path.join(_SIDECAR_DIR, "scripts", "stt-refiner.sh")
-```
-
-**Step 3: Verificar path resolve**
-
-Run: `cd ~/ELCO-machina/sidecar && python -c "from voice_ai.services.refiner import REFINER_SCRIPT; import os; print(REFINER_SCRIPT, os.path.exists(REFINER_SCRIPT))"`
-Expected: `/home/opc/ELCO-machina/sidecar/scripts/stt-refiner.sh True`
-
-**Step 4: Commit**
-
-```bash
-git add sidecar/scripts/ sidecar/prompts/ sidecar/voice_ai/services/refiner.py
-git commit -m "feat(sidecar): mover script e prompt refiner para o repo"
-```
+**O que fazer:**
+- Manter a estrutura PromptStore (builtin templates, persistence, custom templates)
+- Reescrever `systemInstruction` de cada template builtin com os novos prompts Claude
+- Remover placeholders `{CONTEXT_MEMORY}`, `{OUTPUT_LANGUAGE}`, `{RECORDING_STYLE}` dos templates (Claude headless nao precisa -- o prompt e direto)
+- Simplificar `buildSystemInstruction()`: retorna template.systemInstruction direto, sem substituicao de placeholders
+- Remover append de "MANDATORY OUTPUT STRUCTURE" (filename) -- Claude nao precisa disso
+- Manter `{CUSTOM_INSTRUCTIONS}` apenas no template Custom (substituido pelo que o usuario digitar)
 
 ---
 
-### Task 6: Teste end-to-end manual
+## Dependencias
 
-**Step 1: Iniciar sidecar**
-
-```bash
-cd ~/ELCO-machina/sidecar && python -m uvicorn voice_ai.main:app --host 0.0.0.0 --port 8765
+```
+Task 1 (refiner.py) -> Task 2 (main.py + transcribe.py) -- sequencial
+Task 3 (frontend modelos) -- independente
+Task 4 (mover arquivos) -- independente
+Task 5 (prompts .md) -> Task 6 (PromptStore) -- sequencial
 ```
 
-**Step 2: Testar health**
+## Paralelizacao
 
-```bash
-curl -s http://localhost:8765/health | python3 -m json.tool
-```
-Expected: `refiner.status = "available"`, `refiner.backend = "claude"`
-
-**Step 3: Testar refinamento isolado via script**
-
-```bash
-echo "Entao basicamente a gente tem o cloud code rodando ne e ele faz o refinamento do texto" | ~/ELCO-machina/sidecar/scripts/stt-refiner.sh -
-```
-Expected: Texto limpo, "Cloud" corrigido para "Claude"
-
-**Step 4: Testar transcricao + refinamento via API (se audio disponivel)**
-
-Usar notebook ou curl com audio base64 de teste.
-
----
-
-## Fora de escopo (proxima sessao)
-
-- Frontend dropdown de modelo refiner (ja envia `model` no request, so falta UI)
-- Reescrever 13 system prompts dos output styles
-- Adaptar PromptStore para prompts .md puros vs placeholders
+3 workstreams independentes:
+1. **Backend:** Task 1 + Task 2
+2. **Frontend:** Task 3 + Task 6
+3. **Prompts:** Task 4 + Task 5

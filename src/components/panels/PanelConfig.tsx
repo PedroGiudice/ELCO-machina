@@ -58,16 +58,15 @@ interface PanelConfigProps {
 }
 
 const aiModels = [
-    { id: "gemini-2.5-flash", label: "2.5 Flash", desc: "Fastest" },
-    { id: "gemini-2.5-pro", label: "2.5 Pro", desc: "Balanced" },
-    { id: "gemini-3-flash-preview", label: "3.0 Flash", desc: "Next Gen" },
-    { id: "gemini-3-pro-preview", label: "3.0 Pro", desc: "Max Quality" },
+    { id: "haiku", label: "Haiku", desc: "Fastest" },
+    { id: "sonnet", label: "Sonnet", desc: "Balanced" },
+    { id: "opus", label: "Opus", desc: "Max Quality" },
 ];
 
 const transcriptionModes = [
     { id: "auto" as const, label: "Auto", desc: "Best available" },
     { id: "local" as const, label: "Local", desc: "Whisper" },
-    { id: "cloud" as const, label: "Cloud", desc: "Gemini" },
+    { id: "cloud" as const, label: "Cloud", desc: "Claude" },
 ];
 
 export function PanelConfig({
@@ -129,7 +128,7 @@ export function PanelConfig({
                 <div className="flex items-center justify-between">
                     <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
                         <Key className="w-3 h-3" />
-                        Gemini API Key
+                        Claude API Key
                     </label>
                     <span
                         className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${apiKey ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
@@ -169,7 +168,7 @@ export function PanelConfig({
                     </Button>
                 </div>
                 <p className="text-[9px] text-[var(--text-secondary)]">
-                    Obtenha em: aistudio.google.com/apikey
+                    Obtenha em: console.anthropic.com/settings/keys
                 </p>
             </section>
 
@@ -237,10 +236,10 @@ export function PanelConfig({
                     Intelligence Model
                 </label>
 
-                {/* Gemini Version */}
+                {/* Claude Version */}
                 <div>
                     <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
-                        Gemini Version
+                        Claude Version
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                         {aiModels.map((model) => (

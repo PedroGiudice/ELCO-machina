@@ -3,9 +3,8 @@
  *
  * Funcionalidades:
  * - Transcricao local via Faster-Whisper
- * - Refinamento opcional via Gemini
+ * - Refinamento opcional via Claude
  * - Health check do sidecar
- * - Fallback para Gemini direto se sidecar indisponivel
  *
  * NOTA: Usa safeFetch que tenta tauriFetch (plugin-http) e faz fallback
  * para fetch nativo. O tauriFetch pode falhar com "url not allowed on
@@ -66,7 +65,7 @@ export interface TranscribeRequest {
   language?: string | null; // null = auto-detect
   refine?: boolean;
   system_instruction?: string | null; // Prompt do PromptStore
-  model?: string; // default "gemini-2.5-flash"
+  model?: string; // default "sonnet"
   temperature?: number; // default 0.4, range 0.0-2.0
 }
 

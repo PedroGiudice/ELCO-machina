@@ -1,28 +1,27 @@
 """
-Refiner Service - Refinamento de texto via LLM
+Refiner Service - Refinamento de texto via Claude CLI headless
 
-Backends:
-1. OllamaRefiner - Ollama local (default, gratuito)
-2. GeminiRestRefiner - Gemini REST API (fallback, pago)
+Unico backend: ClaudeRefiner via `claude` CLI com asyncio.create_subprocess_exec.
+Sem Ollama, sem Gemini, sem fallbacks.
 
-Papel:
-- NAO faz STT (Whisper faz localmente)
-- SO formata/refina texto transcrito
-- Aplica system_instruction fornecido pelo chamador
-- OPCIONAL - sistema funciona 100% offline sem ele
-
-Factory get_refiner() tenta Ollama primeiro, depois Gemini, ou None.
+Invocacao equivalente ao script validado stt-refiner.sh:
+    env -u CLAUDECODE claude -p "$INPUT" \
+        --system-prompt "$SYSTEM" \
+        --model "$MODEL" \
+        --effort low \
+        --output-format text \
+        --no-session-persistence \
+        --tools "" \
+        --disable-slash-commands
 """
+import asyncio
 import logging
 import os
-import time
 from dataclasses import dataclass
-
-import httpx
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+CLAUDE_REFINE_TIMEOUT = int(os.environ.get("CLAUDE_REFINE_TIMEOUT", "60"))
 
 
 @dataclass
@@ -35,265 +34,123 @@ class RefineResult:
     error: str | None = None
 
 
-class GeminiRestRefiner:
+class ClaudeRefiner:
     """
-    Cliente REST para refinamento de texto via Gemini API.
+    Refinador de texto via Claude CLI headless.
 
-    Nao usa SDK. Faz POST direto para a API REST do Gemini.
-    A api_key vem da env var GEMINI_API_KEY do sidecar.
+    Invoca `claude` como subprocess com stdin para o input e captura stdout.
+    Usa env -u CLAUDECODE para evitar deteccao de contexto Claude Code.
     """
 
-    def __init__(self, api_key: str | None = None):
-        self._api_key = api_key or os.environ.get("GEMINI_API_KEY")
-
-    @property
-    def is_available(self) -> bool:
-        """Verifica se o refinador esta disponivel (tem api_key)."""
-        return bool(self._api_key)
+    def __init__(self):
+        self._timeout = CLAUDE_REFINE_TIMEOUT
 
     async def refine(
         self,
         text: str,
         system_instruction: str,
-        model: str = "gemini-2.5-flash",
-        temperature: float = 0.4,
+        model: str = "sonnet",
     ) -> RefineResult:
         """
-        Refina texto transcrito usando a API REST do Gemini.
+        Refina texto transcrito via Claude CLI.
 
         Args:
             text: Texto transcrito para refinar
             system_instruction: Prompt do sistema (estilo de output)
-            model: ID do modelo Gemini
-            temperature: Temperatura de geracao (0.0 - 1.0)
+            model: Modelo Claude (sonnet, opus, haiku, ou ID completo)
 
         Returns:
             RefineResult com texto refinado ou erro
         """
-        if not self.is_available:
-            return RefineResult(
-                refined_text=text,
-                model_used=model,
-                success=False,
-                error="GEMINI_API_KEY nao configurada.",
-            )
-
-        url = f"{GEMINI_API_BASE}/{model}:generateContent"
-
-        payload = {
-            "systemInstruction": {
-                "parts": [{"text": system_instruction}],
-            },
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": text}],
-                },
-            ],
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": 8192,
-                "responseMimeType": "text/plain",
-            },
-        }
+        cmd = [
+            "env",
+            "-u",
+            "CLAUDECODE",
+            "claude",
+            "-p",
+            text,
+            "--system-prompt",
+            system_instruction,
+            "--model",
+            model,
+            "--effort",
+            "low",
+            "--output-format",
+            "text",
+            "--no-session-persistence",
+            "--tools",
+            "",
+            "--disable-slash-commands",
+        ]
 
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                response = await client.post(
-                    url,
-                    params={"key": self._api_key},
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=self._timeout,
                 )
-
-                if response.status_code != 200:
-                    error_detail = response.text[:500]
-                    logger.error(
-                        "Gemini API erro %d: %s",
-                        response.status_code,
-                        error_detail,
-                    )
-                    return RefineResult(
-                        refined_text=text,
-                        model_used=model,
-                        success=False,
-                        error=f"HTTP {response.status_code}: {error_detail}",
-                    )
-
-                data = response.json()
-                candidates = data.get("candidates", [])
-                if not candidates:
-                    return RefineResult(
-                        refined_text=text,
-                        model_used=model,
-                        success=False,
-                        error="Resposta sem candidates",
-                    )
-
-                parts = candidates[0].get("content", {}).get("parts", [])
-                refined = "".join(p.get("text", "") for p in parts).strip()
-
-                if not refined:
-                    return RefineResult(
-                        refined_text=text,
-                        model_used=model,
-                        success=False,
-                        error="Resposta vazia do Gemini",
-                    )
-
-                logger.info("Refinamento concluido via %s", model)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                logger.error("Timeout (%ds) ao chamar Claude CLI", self._timeout)
                 return RefineResult(
-                    refined_text=refined,
+                    refined_text=text,
                     model_used=model,
-                    success=True,
+                    success=False,
+                    error=f"Timeout ({self._timeout}s) na chamada ao Claude CLI",
                 )
 
-        except httpx.TimeoutException:
-            logger.error("Timeout ao chamar Gemini API")
-            return RefineResult(
-                refined_text=text,
-                model_used=model,
-                success=False,
-                error="Timeout na chamada ao Gemini",
-            )
-        except Exception as e:
-            logger.error("Erro no refinamento: %s", e)
-            return RefineResult(
-                refined_text=text,
-                model_used=model,
-                success=False,
-                error=str(e),
-            )
-
-
-class OllamaRefiner:
-    """
-    Cliente REST para refinamento de texto via Ollama local.
-
-    Faz POST para /api/generate. Sem SDK, sem dependencias extras.
-    """
-
-    def __init__(self, base_url: str | None = None):
-        self._base_url = base_url or os.environ.get(
-            "OLLAMA_URL", "http://127.0.0.1:11434"
-        )
-        self._default_model = os.environ.get("OLLAMA_REFINE_MODEL", "qwen2.5:3b")
-        self._timeout = int(os.environ.get("OLLAMA_REFINE_TIMEOUT", "120"))
-        self._available: bool | None = None
-        self._available_checked_at: float = 0
-
-    @property
-    def is_available(self) -> bool:
-        """Verifica se Ollama esta acessivel (GET /api/tags, cached 60s)."""
-        now = time.monotonic()
-        if self._available is not None and (now - self._available_checked_at) < 60:
-            return self._available
-
-        try:
-            resp = httpx.get(f"{self._base_url}/api/tags", timeout=5)
-            self._available = resp.status_code == 200
-        except Exception:
-            self._available = False
-
-        self._available_checked_at = now
-        return self._available
-
-    @property
-    def model(self) -> str:
-        return self._default_model
-
-    async def refine(
-        self,
-        text: str,
-        system_instruction: str,
-        model: str | None = None,
-        temperature: float = 0.3,
-    ) -> RefineResult:
-        """Refina texto via Ollama /api/generate."""
-        used_model = model or self._default_model
-
-        if not self.is_available:
-            return RefineResult(
-                refined_text=text,
-                model_used=used_model,
-                success=False,
-                error="Ollama nao disponivel",
-            )
-
-        url = f"{self._base_url}/api/generate"
-        payload = {
-            "model": used_model,
-            "system": system_instruction,
-            "prompt": text,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-            },
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(url, json=payload)
-
-                if response.status_code != 200:
-                    error_detail = response.text[:500]
-                    logger.error(
-                        "Ollama API erro %d: %s", response.status_code, error_detail
-                    )
-                    return RefineResult(
-                        refined_text=text,
-                        model_used=used_model,
-                        success=False,
-                        error=f"HTTP {response.status_code}: {error_detail}",
-                    )
-
-                data = response.json()
-                refined = data.get("response", "").strip()
-
-                if not refined:
-                    return RefineResult(
-                        refined_text=text,
-                        model_used=used_model,
-                        success=False,
-                        error="Resposta vazia do Ollama",
-                    )
-
-                logger.info("Refinamento concluido via Ollama/%s", used_model)
+            if proc.returncode != 0:
+                error_output = stderr.decode("utf-8", errors="replace").strip()
+                logger.error(
+                    "Claude CLI saiu com codigo %d: %s",
+                    proc.returncode,
+                    error_output[:500],
+                )
                 return RefineResult(
-                    refined_text=refined,
-                    model_used=used_model,
-                    success=True,
+                    refined_text=text,
+                    model_used=model,
+                    success=False,
+                    error=f"Claude CLI erro (exit {proc.returncode}): {error_output[:200]}",
                 )
 
-        except httpx.TimeoutException:
-            logger.error("Timeout ao chamar Ollama (%ds)", self._timeout)
+            refined = stdout.decode("utf-8", errors="replace").strip()
+
+            if not refined:
+                logger.warning("Claude CLI retornou output vazio")
+                return RefineResult(
+                    refined_text=text,
+                    model_used=model,
+                    success=False,
+                    error="Resposta vazia do Claude CLI",
+                )
+
+            logger.info("Refinamento concluido via claude/%s", model)
+            return RefineResult(
+                refined_text=refined,
+                model_used=model,
+                success=True,
+            )
+
+        except FileNotFoundError:
+            logger.error("claude CLI nao encontrado no PATH")
             return RefineResult(
                 refined_text=text,
-                model_used=used_model,
+                model_used=model,
                 success=False,
-                error=f"Timeout ({self._timeout}s) na chamada ao Ollama",
+                error="claude CLI nao encontrado. Verifique se esta instalado e no PATH.",
             )
         except Exception as e:
-            logger.error("Erro no refinamento Ollama: %s", e)
+            logger.error("Erro ao executar Claude CLI: %s", e)
             return RefineResult(
                 refined_text=text,
-                model_used=used_model,
+                model_used=model,
                 success=False,
                 error=str(e),
             )
-
-
-def get_refiner() -> OllamaRefiner | GeminiRestRefiner | None:
-    """Factory: retorna o primeiro refiner disponivel (Ollama > Gemini > None)."""
-    ollama = OllamaRefiner()
-    if ollama.is_available:
-        logger.info("Refiner: Ollama (%s)", ollama.model)
-        return ollama
-
-    gemini = GeminiRestRefiner()
-    if gemini.is_available:
-        logger.info("Refiner: Gemini REST")
-        return gemini
-
-    logger.warning("Nenhum refiner disponivel")
-    return None

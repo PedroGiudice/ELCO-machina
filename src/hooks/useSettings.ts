@@ -19,7 +19,7 @@ export type OutputStyle =
   | 'Concise'
   | 'Formal'
   | 'Prompt (Claude)'
-  | 'Prompt (Gemini)'
+  | 'Prompt (LLM)'
   | 'Bullet Points'
   | 'Summary'
   | 'Tech Docs'
@@ -94,7 +94,7 @@ export function useSettings(): UseSettingsReturn {
 
   // AI config
   const [aiModel, setAiModel] = useState<string>(() => {
-    return localStorage.getItem('gemini_ai_model') || 'gemini-2.5-pro';
+    return localStorage.getItem('claude_refiner_model') || 'sonnet';
   });
 
   // Transcription mode
@@ -113,7 +113,7 @@ export function useSettings(): UseSettingsReturn {
   useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
   useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
   useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
-  useEffect(() => localStorage.setItem('gemini_ai_model', aiModel), [aiModel]);
+  useEffect(() => localStorage.setItem('claude_refiner_model', aiModel), [aiModel]);
   useEffect(() => localStorage.setItem('voice_ai_mode', transcriptionMode), [transcriptionMode]);
 
   // Fetch app version

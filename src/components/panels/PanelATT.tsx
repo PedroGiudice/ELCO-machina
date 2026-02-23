@@ -55,7 +55,7 @@ interface PanelATTProps {
 // Fallback caso templates ainda nao tenham carregado
 const FALLBACK_STYLES = [
   'Whisper Only', 'Verbatim', 'Elegant Prose', 'Ana Suy', 'Poetic / Verses',
-  'Normal', 'Verbose', 'Concise', 'Formal', 'Prompt (Claude)', 'Prompt (Gemini)',
+  'Normal', 'Verbose', 'Concise', 'Formal', 'Prompt (Claude)', 'Prompt (LLM)',
   'Bullet Points', 'Summary', 'Tech Docs', 'Email', 'Tweet Thread',
   'Code Generator', 'Custom',
 ];

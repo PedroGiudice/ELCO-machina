@@ -136,7 +136,7 @@ export function PanelStats({
     : sidecarAvailable
       ? 'inactive'
       : 'warning';
-  const geminiStatus = hasApiKey ? 'healthy' : 'warning';
+  const claudeStatus = hasApiKey ? 'healthy' : 'warning';
   const audioStatus = isRecording ? 'healthy' : (isProcessing ? 'warning' : 'inactive');
 
   return (
@@ -195,8 +195,8 @@ export function PanelStats({
             )}
           </ServiceCard>
 
-          {/* Gemini */}
-          <ServiceCard icon={Sparkles} label="Gemini" status={geminiStatus}>
+          {/* Claude Refiner */}
+          <ServiceCard icon={Sparkles} label="Claude" status={claudeStatus}>
             <InfoLine label="Model" value={aiModel} />
             <InfoLine label="API Key" value={hasApiKey ? 'configurada' : 'ausente'} />
           </ServiceCard>

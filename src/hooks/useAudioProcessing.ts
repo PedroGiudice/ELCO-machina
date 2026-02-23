@@ -3,9 +3,9 @@
  *
  * Pipeline unificado via sidecar:
  * 1. Whisper STT (transcricao bruta)
- * 2. Gemini REST refinement (via sidecar, nao via SDK direto)
+ * 2. Claude REST refinement (via sidecar, nao via SDK direto)
  *
- * O frontend NAO chama Gemini diretamente.
+ * O frontend NAO chama Claude diretamente.
  * Tudo passa pelo sidecar via POST /transcribe.
  */
 
@@ -99,17 +99,17 @@ export function useAudioProcessing(
     // Estados
     const [isProcessing, setIsProcessing] = useState(false);
     const [transcription, setTranscription] = useState<string>(() => {
-        return localStorage.getItem("gemini_current_work") || "";
+        return localStorage.getItem("elco_current_work") || "";
     });
     const [lastStats, setLastStats] = useState<ProcessingStats | null>(null);
 
     // Persistir transcricao em localStorage
     useEffect(() => {
-        localStorage.setItem("gemini_current_work", transcription);
+        localStorage.setItem("elco_current_work", transcription);
     }, [transcription]);
 
     /**
-     * Processa audio via sidecar (Whisper STT + Gemini REST refinement)
+     * Processa audio via sidecar (Whisper STT + Claude REST refinement)
      */
     const processAudio = useCallback(async () => {
         if (!audioBlob) return;
@@ -160,7 +160,7 @@ export function useAudioProcessing(
                 addLog("Transcrevendo com Whisper...", "info");
             }
 
-            // Chamada unica ao sidecar - ele faz Whisper + Gemini REST
+            // Chamada unica ao sidecar - ele faz Whisper + Claude REST
             const result = await voiceAIClient.transcribe({
                 audio: base64Audio,
                 format,
@@ -180,7 +180,7 @@ export function useAudioProcessing(
             if (shouldRefine) {
                 if (result.refine_success) {
                     addLog(
-                        `Refinado com ${result.model_used || aiModel}`,
+                        `Refinado com Claude (${result.model_used || aiModel})`,
                         "success",
                     );
                 } else if (result.refine_error) {
@@ -244,7 +244,7 @@ export function useAudioProcessing(
             );
 
             const mode = shouldRefine
-                ? `Whisper + Gemini (${result.model_used || aiModel})`
+                ? `Whisper + Claude (${result.model_used || aiModel})`
                 : "Whisper";
             addLog(`Processo finalizado via ${mode}.`, "success");
         } catch (err: unknown) {
