@@ -77,6 +77,7 @@ Causas identificadas via pesquisa:
 2. **Decisao whisper-server vs faster-whisper** -- dados de pesquisa indicam faster-whisper superior em CPU, mas nao ha decisao tomada
 3. **`sidecar/test_refiner_quality.ipynb`** -- redundante com testbench, pode deletar
 4. **`proatt.keystore`** -- untracked na main, nao deve ser commitado (adicionar ao .gitignore)
+5. **Benchmark isolado** -- resultados do benchmark STT ficam imprecisos com whisper-servers rodando simultaneamente (CPU saturada ~812%/800%). Reexecutar com servers parados para dados limpos
 
 ## Decisoes tomadas
 
