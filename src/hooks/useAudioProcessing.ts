@@ -9,10 +9,34 @@
  * Tudo passa pelo sidecar via POST /transcribe.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
     VoiceAIClient,
 } from "../services/VoiceAIClient";
+
+// ============================================================================
+// Wake Lock - impede suspensao da tela durante processamento
+// ============================================================================
+
+async function acquireWakeLock(): Promise<WakeLockSentinel | null> {
+    try {
+        if ("wakeLock" in navigator) {
+            const sentinel = await navigator.wakeLock.request("screen");
+            console.log("[WakeLock] acquired");
+            return sentinel;
+        }
+    } catch (err) {
+        console.warn("[WakeLock] failed to acquire:", err);
+    }
+    return null;
+}
+
+async function releaseWakeLock(sentinel: WakeLockSentinel | null): Promise<void> {
+    if (sentinel && !sentinel.released) {
+        await sentinel.release();
+        console.log("[WakeLock] released");
+    }
+}
 import {
     type PromptTemplate,
     buildSystemInstruction,
@@ -125,6 +149,7 @@ export function useAudioProcessing(
 
         setIsProcessing(true);
         const startTime = performance.now();
+        const wakeLock = await acquireWakeLock();
 
         try {
             // Converte blob para base64
@@ -252,6 +277,7 @@ export function useAudioProcessing(
             console.error(err);
             addLog(`Erro no processamento: ${message}`, "error");
         } finally {
+            await releaseWakeLock(wakeLock);
             setIsProcessing(false);
         }
     }, [
