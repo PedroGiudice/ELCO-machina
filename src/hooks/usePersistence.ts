@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { LogEntry, LogCategory } from '../types';
+import { migrateKey, storeSet, storeGet } from '../services/TauriStore';
 
 // ============================================================================
 // TYPES
@@ -216,11 +217,12 @@ const loadApiKey = async (): Promise<string> => {
     return process.env.API_KEY;
   }
 
+  // Fallback: migrar de localStorage via TauriStore
   try {
-    const saved = localStorage.getItem('gemini_api_key');
-    if (saved) return saved;
+    const migrated = await migrateKey<string>('settings.json', 'gemini_api_key', '');
+    if (migrated) return migrated;
   } catch (e) {
-    console.error('Failed to load API key from localStorage:', e);
+    console.error('Failed to migrate API key:', e);
   }
 
   return '';
@@ -238,10 +240,11 @@ const saveApiKeyToStore = async (key: string): Promise<void> => {
     }
   }
 
+  // Fallback via TauriStore (que ja tem fallback localStorage interno)
   try {
-    localStorage.setItem('gemini_api_key', key);
+    await storeSet('settings.json', 'gemini_api_key', key);
   } catch (e) {
-    console.error('Failed to save API key to localStorage:', e);
+    console.error('Failed to save API key via TauriStore:', e);
   }
 };
 
@@ -266,17 +269,17 @@ const loadHistory = async (): Promise<HistoryItem[]> => {
     return indexedDBHistory;
   }
 
+  // Fallback: migrar de localStorage via TauriStore
   try {
-    const saved = localStorage.getItem('gemini_history_v2');
-    if (saved) {
-      const parsed = JSON.parse(saved) as HistoryItem[];
-      return parsed.map((item) => ({
+    const migrated = await migrateKey<HistoryItem[]>('data.json', 'gemini_history_v2', []);
+    if (migrated.length > 0) {
+      return migrated.map((item) => ({
         ...item,
         id: item.id || generateHistoryId(),
       }));
     }
   } catch (e) {
-    console.error('Failed to load from localStorage:', e);
+    console.error('Failed to migrate history:', e);
   }
   return [];
 };
@@ -295,10 +298,11 @@ const saveHistory = async (history: HistoryItem[]): Promise<void> => {
 
   await saveHistoryToIndexedDB(history);
 
+  // Fallback via TauriStore
   try {
-    localStorage.setItem('gemini_history_v2', JSON.stringify(history));
+    await storeSet('data.json', 'gemini_history_v2', history);
   } catch (e) {
-    console.error('Failed to save to localStorage:', e);
+    console.error('Failed to save history via TauriStore:', e);
   }
 };
 
@@ -377,9 +381,7 @@ export function usePersistence(): UsePersistenceReturn {
 
   // Context
   const [contextPools, setContextPools] = useState<string[]>(['General']);
-  const [activeContext, setActiveContext] = useState<string>(() => {
-    return localStorage.getItem('gemini_active_context') || 'General';
-  });
+  const [activeContext, setActiveContext] = useState<string>('General');
   const [contextMemory, setContextMemory] = useState<Record<string, string>>({});
 
   // Add Context Modal
@@ -406,6 +408,13 @@ export function usePersistence(): UsePersistenceReturn {
     });
   }, []);
 
+  // Load active context
+  useEffect(() => {
+    migrateKey<string>('settings.json', 'gemini_active_context', 'General').then((ctx) => {
+      setActiveContext(ctx);
+    });
+  }, []);
+
   // Load History
   useEffect(() => {
     loadHistory().then((loaded) => {
@@ -422,10 +431,9 @@ export function usePersistence(): UsePersistenceReturn {
   }, [history, historyLoaded]);
 
   // Persist active context
-  useEffect(
-    () => localStorage.setItem('gemini_active_context', activeContext),
-    [activeContext],
-  );
+  useEffect(() => {
+    storeSet('settings.json', 'gemini_active_context', activeContext);
+  }, [activeContext]);
 
   // Load contexts and audio from IndexedDB
   useEffect(() => {
@@ -441,9 +449,9 @@ export function usePersistence(): UsePersistenceReturn {
           initialPools.push(ctx.name);
         });
       } else {
-        // Migration from localStorage
-        const lsPools = localStorage.getItem('gemini_context_pools');
-        const lsMemory = localStorage.getItem('gemini_context_memory');
+        // Migration from localStorage/TauriStore
+        const lsPools = await storeGet<string | null>('data.json', 'gemini_context_pools', null) as string | null;
+        const lsMemory = await storeGet<string | null>('data.json', 'gemini_context_memory', null) as string | null;
 
         if (lsPools && lsMemory) {
           try {
