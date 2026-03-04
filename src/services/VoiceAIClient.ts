@@ -16,68 +16,12 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
 
 // Detect Android (WebView blocks HTTP to private IPs via Private Network Access)
-export const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
-
-// Detect NativeAudio bridge (Foreground Service para background processing)
-function hasNativeAudio(): boolean {
-  return isAndroid && typeof (window as any).NativeAudio?.startProcessing === 'function';
-}
-
-/**
- * Envia processamento para o Foreground Service Android nativo.
- * O Service faz o HTTP POST para o sidecar independentemente do WebView,
- * sobrevivendo a tela bloqueada. Retorna resultado via callback global.
- */
-function nativeBackgroundTranscribe(url: string, body: string): Promise<TranscribeResponse> {
-  return new Promise((resolve, reject) => {
-    // Registrar callbacks ANTES de iniciar (o Service pode terminar rapido)
-    (window as any).__onProcessingComplete = (data: TranscribeResponse) => {
-      delete (window as any).__onProcessingComplete;
-      delete (window as any).__onProcessingError;
-      resolve(data);
-    };
-    (window as any).__onProcessingError = (error: string) => {
-      delete (window as any).__onProcessingComplete;
-      delete (window as any).__onProcessingError;
-      reject(new Error(error));
-    };
-
-    const started = (window as any).NativeAudio.startProcessing(body, url);
-    if (!started) {
-      delete (window as any).__onProcessingComplete;
-      delete (window as any).__onProcessingError;
-      reject(new Error("Processamento ja em andamento"));
-    }
-  });
-}
-
-/**
- * Verifica se ha resultado pendente de processamento anterior
- * (ex: app foi fechado e reaberto enquanto Service processava).
- */
-export function checkPendingNativeResult(): {
-  status: 'idle' | 'processing' | 'completed' | 'error';
-  result?: string;
-  error?: string;
-} {
-  if (!hasNativeAudio()) return { status: 'idle' };
-  const status = (window as any).NativeAudio.getStatus() as string;
-  if (status === 'completed') {
-    const result = (window as any).NativeAudio.getResult();
-    return { status: 'completed', result: result || undefined };
-  }
-  if (status === 'error') {
-    const error = (window as any).NativeAudio.getError();
-    return { status: 'error', error: error || undefined };
-  }
-  return { status: status as 'idle' | 'processing' };
-}
+const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 
 /**
  * Proxy HTTP via Tauri IPC (Rust-side reqwest).
  * Contorna Private Network Access do Chrome Android que bloqueia
  * fetch/XHR para IPs no range 100.x.x.x (Tailscale CGNAT).
- * Usado como fallback quando NativeAudio nao esta disponivel (ex: health check).
  */
 async function proxyFetch(
   url: string,
@@ -94,7 +38,6 @@ async function proxyFetch(
 
 /**
  * Wrapper HTTP: Android usa proxy IPC (Rust), desktop usa tauriFetch/fetch.
- * NOTA: Para transcricao no Android, usar nativeBackgroundTranscribe() em vez disto.
  */
 async function safeFetch(
   url: string,
@@ -124,6 +67,7 @@ export interface TranscribeRequest {
   system_instruction?: string | null; // Prompt do PromptStore
   model?: string; // default "sonnet"
   temperature?: number; // default 0.4, range 0.0-2.0
+  stt_backend?: "vm" | "modal";
 }
 
 // Segmento de transcricao
@@ -283,16 +227,10 @@ export class VoiceAIClient {
     if (request.temperature !== undefined) {
       body.temperature = request.temperature;
     }
-
-    const bodyJson = JSON.stringify(body);
-
-    // Android com NativeAudio: usa Foreground Service (sobrevive a tela bloqueada)
-    if (hasNativeAudio()) {
-      console.log("[VoiceAIClient] Usando Foreground Service nativo para transcricao");
-      return nativeBackgroundTranscribe(`${this.baseUrl}/transcribe`, bodyJson);
+    if (request.stt_backend) {
+      body.stt_backend = request.stt_backend;
     }
 
-    // Desktop ou Android sem bridge: HTTP direto (comportamento original)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -302,7 +240,7 @@ export class VoiceAIClient {
         headers: {
           "Content-Type": "application/json",
         },
-        body: bodyJson,
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 

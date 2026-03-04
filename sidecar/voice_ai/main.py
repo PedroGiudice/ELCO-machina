@@ -18,6 +18,7 @@ from voice_ai.routers import transcribe, synthesize
 from voice_ai.services.refiner import ClaudeRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
+from voice_ai.services.stt_modal_client import STTModalClient
 from voice_ai.services.tts_modal_client import TTSModalClient
 
 # Configura logging estruturado para todo o sidecar
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 # Estado global do aplicativo
 class AppState:
     stt_service: STTService | None = None
+    stt_modal_client: STTModalClient | None = None
     tts_service: TTSService | None = None
     modal_client: TTSModalClient | None = None
     models_loaded: bool = False
@@ -56,6 +58,13 @@ async def lifespan(app: FastAPI):
         # Inicializa STT Service (Whisper)
         # Modelo sera carregado lazy na primeira requisicao
         state.stt_service = STTService()
+
+        # Inicializa STT Modal Client
+        state.stt_modal_client = STTModalClient()
+        if state.stt_modal_client.is_available:
+            logger.info("STT (Modal/faster-whisper) disponivel")
+        else:
+            logger.info("STT (Modal) nao disponivel")
 
         # Inicializa TTS Service (Kokoro)
         state.tts_service = TTSService()
@@ -255,6 +264,7 @@ app.include_router(synthesize.router, prefix="/synthesize", tags=["TTS"])
 async def inject_services(request, call_next):
     """Injeta servicos no request state para uso nos endpoints."""
     request.state.stt_service = state.stt_service
+    request.state.stt_modal_client = state.stt_modal_client
     request.state.tts_service = state.tts_service
     request.state.modal_client = state.modal_client
     response = await call_next(request)

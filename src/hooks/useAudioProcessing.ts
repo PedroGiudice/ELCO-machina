@@ -7,18 +7,36 @@
  *
  * O frontend NAO chama Claude diretamente.
  * Tudo passa pelo sidecar via POST /transcribe.
- *
- * No Android, o processamento usa Foreground Service nativo para
- * sobreviver a tela bloqueada (ver AudioProcessingService.kt).
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
     VoiceAIClient,
-    isAndroid,
-    checkPendingNativeResult,
 } from "../services/VoiceAIClient";
-import type { TranscribeResponse } from "../services/VoiceAIClient";
+
+// ============================================================================
+// Wake Lock - impede suspensao da tela durante processamento
+// ============================================================================
+
+async function acquireWakeLock(): Promise<WakeLockSentinel | null> {
+    try {
+        if ("wakeLock" in navigator) {
+            const sentinel = await navigator.wakeLock.request("screen");
+            console.log("[WakeLock] acquired");
+            return sentinel;
+        }
+    } catch (err) {
+        console.warn("[WakeLock] failed to acquire:", err);
+    }
+    return null;
+}
+
+async function releaseWakeLock(sentinel: WakeLockSentinel | null): Promise<void> {
+    if (sentinel && !sentinel.released) {
+        await sentinel.release();
+        console.log("[WakeLock] released");
+    }
+}
 import {
     type PromptTemplate,
     buildSystemInstruction,
@@ -48,6 +66,7 @@ export interface UseAudioProcessingConfig {
     customStylePrompt: string;
     activeContext: string;
     contextMemory: Record<string, string>;
+    sttBackend: string;
     selectedTemplate: PromptTemplate | undefined;
     addLog: (
         msg: string,
@@ -100,6 +119,7 @@ export function useAudioProcessing(
         addToHistory,
         updateContextMemory,
         saveContextToDB,
+        sttBackend,
     } = config;
 
     // Estados
@@ -114,35 +134,8 @@ export function useAudioProcessing(
         localStorage.setItem("elco_current_work", transcription);
     }, [transcription]);
 
-    // ========================================================================
-    // Reconciliacao: verificar resultado pendente ao montar (Android)
-    // ========================================================================
-    useEffect(() => {
-        if (!isAndroid) return;
-
-        const pending = checkPendingNativeResult();
-        if (pending.status === 'completed' && pending.result) {
-            try {
-                const data: TranscribeResponse = JSON.parse(pending.result);
-                const finalText = data.refined_text || data.text;
-                if (finalText?.trim()) {
-                    setTranscription(finalText.trim());
-                    addLog("Resultado recuperado de processamento anterior.", "success");
-                }
-            } catch (e) {
-                console.error("[Reconciliacao] Erro ao parsear resultado pendente:", e);
-            }
-        } else if (pending.status === 'error') {
-            addLog(`Erro em processamento anterior: ${pending.error}`, "warning");
-        } else if (pending.status === 'processing') {
-            setIsProcessing(true);
-            addLog("Processamento em andamento (iniciado antes de bloquear tela)...", "info");
-        }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
     /**
-     * Processa audio via sidecar (Whisper STT + Claude REST refinement).
-     * No Android, usa Foreground Service nativo para sobreviver a tela bloqueada.
+     * Processa audio via sidecar (Whisper STT + Claude REST refinement)
      */
     const processAudio = useCallback(async () => {
         if (!audioBlob) return;
@@ -158,6 +151,7 @@ export function useAudioProcessing(
 
         setIsProcessing(true);
         const startTime = performance.now();
+        const wakeLock = await acquireWakeLock();
 
         try {
             // Converte blob para base64
@@ -193,13 +187,7 @@ export function useAudioProcessing(
                 addLog("Transcrevendo com Whisper...", "info");
             }
 
-            if (isAndroid) {
-                addLog("Usando processamento em background (pode bloquear a tela).", "info");
-            }
-
             // Chamada unica ao sidecar - ele faz Whisper + Claude REST
-            // No Android: usa Foreground Service via NativeAudio bridge
-            // No Desktop: usa HTTP direto via safeFetch
             const result = await voiceAIClient.transcribe({
                 audio: base64Audio,
                 format,
@@ -210,6 +198,7 @@ export function useAudioProcessing(
                 system_instruction: systemInstruction,
                 model: aiModel,
                 temperature,
+                stt_backend: sttBackend as "vm" | "modal",
             });
 
             // Usa texto refinado se disponivel, senao o bruto
@@ -291,6 +280,7 @@ export function useAudioProcessing(
             console.error(err);
             addLog(`Erro no processamento: ${message}`, "error");
         } finally {
+            await releaseWakeLock(wakeLock);
             setIsProcessing(false);
         }
     }, [
@@ -303,6 +293,7 @@ export function useAudioProcessing(
         customStylePrompt,
         activeContext,
         contextMemory,
+        sttBackend,
         selectedTemplate,
         addLog,
         addToHistory,
