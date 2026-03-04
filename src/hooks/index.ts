@@ -7,7 +7,7 @@ export { useUpdater, type UseUpdaterReturn } from './useUpdater';
 export { useSidecar, type UseSidecarReturn } from './useSidecar';
 
 // Hooks de dominio
-export { useTTS, type UseTTSReturn } from './useTTS';
+export { useTTS, type UseTTSReturn, type TTSStatus, DEFAULT_XTTS_PARAMS } from './useTTS';
 export {
   useAudioProcessing,
   type UseAudioProcessingConfig,
