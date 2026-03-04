@@ -7,6 +7,10 @@ Filosofia: "Whisper transcreve, Claude refina."
 import logging
 import os
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+
+load_dotenv()  # Carrega .env do sidecar (Modal credentials, etc.)
 from typing import Literal
 
 from fastapi import FastAPI
