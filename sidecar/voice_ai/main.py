@@ -18,7 +18,6 @@ from voice_ai.routers import transcribe, synthesize, refine
 from voice_ai.services.refiner import ClaudeRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
-from voice_ai.services.tts_modal_client import TTSModalClient
 
 # Configura logging estruturado para todo o sidecar
 logging.basicConfig(
@@ -33,7 +32,7 @@ logger = logging.getLogger(__name__)
 class AppState:
     stt_service: STTService | None = None
     tts_service: TTSService | None = None
-    modal_client: TTSModalClient | None = None
+    # Modal client removido -- frontend chama XTTS v2 no Modal diretamente
     models_loaded: bool = False
     startup_error: str | None = None
     refiner_backend: str | None = None
@@ -63,15 +62,6 @@ async def lifespan(app: FastAPI):
             logger.info("TTS (Kokoro) disponivel")
         else:
             logger.info("TTS (Kokoro) nao instalado - sintese local desabilitada")
-
-        # Inicializa Modal Client (Chatterbox - clonagem de voz)
-        state.modal_client = TTSModalClient()
-        if state.modal_client.is_available:
-            logger.info("TTS (Modal/Chatterbox) disponivel")
-        elif state.modal_client.is_enabled:
-            logger.warning("TTS (Modal) habilitado mas credenciais ausentes")
-        else:
-            logger.info("TTS (Modal) desabilitado (MODAL_ENABLED=false)")
 
         # Inicializa Claude refiner
         state.refiner_backend = "claude"
@@ -136,7 +126,7 @@ class TTSModelStatus(BaseModel):
 
 class ModalModelStatus(BaseModel):
     status: Literal["available", "credentials_missing", "disabled"]
-    engine: str = "chatterbox"
+    engine: str = "xtts-v2"
 
 
 class RefinerStatus(BaseModel):
@@ -197,13 +187,8 @@ async def health_check() -> HealthResponse:
         else:
             tts_status = "not_installed"
 
-    # Status do Modal (Chatterbox)
+    # Status do Modal (XTTS v2) -- frontend chama diretamente
     modal_status = "disabled"
-    if state.modal_client:
-        if state.modal_client.is_available:
-            modal_status = "available"
-        elif state.modal_client.is_enabled:
-            modal_status = "credentials_missing"
 
     return HealthResponse(
         status="healthy" if state.models_loaded else "degraded",
@@ -257,7 +242,7 @@ async def inject_services(request, call_next):
     """Injeta servicos no request state para uso nos endpoints."""
     request.state.stt_service = state.stt_service
     request.state.tts_service = state.tts_service
-    request.state.modal_client = state.modal_client
+    request.state.modal_client = None  # Removido -- frontend chama XTTS v2 diretamente
     response = await call_next(request)
     return response
 

@@ -1,48 +1,43 @@
-"""Schemas para TTS Chatterbox."""
+"""Schemas para XTTS v2 TTS."""
 from typing import Optional
 from pydantic import BaseModel, Field
 
 
 class TTSParameters(BaseModel):
-    """Parametros do Chatterbox TTS."""
+    """Parametros do XTTS v2."""
 
-    # Tier 1 - Essenciais (com UI)
-    exaggeration: float = Field(default=0.5, ge=0.0, le=2.0)
+    # Parametros de inferencia
+    temperature: float = Field(default=0.75, ge=0.1, le=0.8)
+    top_k: int = Field(default=20, ge=1, le=100)
+    top_p: float = Field(default=0.75, ge=0.1, le=1.0)
+    repetition_penalty: float = Field(default=2.0, ge=1.0, le=5.0)
+    length_penalty: float = Field(default=1.0, ge=0.5, le=2.0)
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
-    stability: float = Field(default=0.5, ge=0.0, le=1.0)
-    steps: int = Field(default=10, ge=4, le=20)
-    sentence_silence: float = Field(default=0.2, ge=0.0, le=1.0)
-
-    # Tier 2 - Avancados (ocultos)
-    cfg_weight: float = Field(default=0.5, ge=0.0, le=1.0)
-    embedding_scale: float = Field(default=1.0, ge=0.0, le=2.0)
-    temperature: float = Field(default=0.1, ge=0.0, le=1.0)
-    repetition_penalty: float = Field(default=1.1, ge=1.0, le=2.0)
-    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
-    seed: Optional[int] = Field(default=None)
+    language: str = Field(default="pt")
 
 
 # Profiles pre-definidos
 BUILTIN_PROFILES: dict[str, TTSParameters] = {
     "standard": TTSParameters(),
     "legal": TTSParameters(
-        exaggeration=0.35,
-        cfg_weight=0.85,
-        stability=0.8,
-        steps=12,
-        repetition_penalty=1.2,
-        sentence_silence=0.4,
+        temperature=0.5,
+        top_k=10,
+        top_p=0.6,
+        repetition_penalty=2.5,
+        speed=0.9,
     ),
     "expressive": TTSParameters(
-        exaggeration=0.9,
-        cfg_weight=0.3,
-        stability=0.3,
-        steps=15,
-        temperature=0.5,
+        temperature=0.8,
+        top_k=50,
+        top_p=0.9,
+        repetition_penalty=1.5,
+        speed=1.0,
     ),
     "fast_preview": TTSParameters(
-        speed=1.2,
-        steps=4,
+        temperature=0.5,
+        top_k=10,
+        top_p=0.5,
+        speed=1.3,
     ),
 }
 
@@ -54,15 +49,11 @@ def get_profile(name: str) -> TTSParameters:
 
 # Descricoes dos parametros para UI
 PARAM_DESCRIPTIONS: dict[str, str] = {
-    "exaggeration": "Expressividade (0=monotono, 2=dramatico)",
-    "speed": "Velocidade de fala (0.5=lento, 2=rapido)",
-    "stability": "Consistencia (0=variavel, 1=uniforme)",
-    "steps": "Qualidade (4=rapido, 20=alta qualidade)",
-    "sentence_silence": "Pausa entre frases (segundos)",
-    "cfg_weight": "Fidelidade ao texto (0=criativo, 1=literal)",
-    "embedding_scale": "Intensidade da voz clonada",
-    "temperature": "Variabilidade (0=deterministico, 1=aleatorio)",
-    "repetition_penalty": "Penalidade para repeticoes",
-    "top_p": "Nucleus sampling",
-    "seed": "Seed para reproducao",
+    "temperature": "Variabilidade (0.1=deterministico, 0.8=criativo)",
+    "top_k": "Top-K sampling (1=conservador, 100=diverso)",
+    "top_p": "Nucleus sampling (0.1=focado, 1.0=amplo)",
+    "repetition_penalty": "Penalidade para repeticoes (1.0=nenhuma, 5.0=severa)",
+    "length_penalty": "Penalidade de comprimento (0.5=curto, 2.0=longo)",
+    "speed": "Velocidade de fala (0.5=lento, 2.0=rapido)",
+    "language": "Idioma (pt, en, es, etc.)",
 }
