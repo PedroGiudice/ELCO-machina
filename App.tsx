@@ -206,6 +206,7 @@ export default function App() {
         aiModel: settings.aiModel,
         recordingStyle,
         customStylePrompt: settings.customStylePrompt,
+        sttBackend: settings.sttBackend,
         activeContext: persistence.activeContext,
         contextMemory: persistence.contextMemory,
         selectedTemplate,
@@ -693,15 +694,8 @@ export default function App() {
                         onAutoGainControlChange={setAutoGainControl}
                         aiModel={settings.aiModel}
                         onAiModelChange={settings.setAiModel}
-                        transcriptionMode={settings.transcriptionMode}
-                        onTranscriptionModeChange={settings.setTranscriptionMode}
-                        sidecarAvailable={sidecar.sidecarAvailable}
-                        sidecarStatus={sidecar.sidecarStatus}
-                        whisperServerUrl={sidecar.whisperServerUrl}
-                        onWhisperServerUrlChange={sidecar.setWhisperServerUrl}
-                        onTestWhisperServer={sidecar.testWhisperServer}
-                        whisperTestStatus={sidecar.whisperTestStatus}
-                        whisperTestMessage={sidecar.whisperTestMessage}
+                        sttBackend={settings.sttBackend}
+                        onSttBackendChange={settings.setSttBackend}
                     />
                 }
                 panelStats={
@@ -711,6 +705,7 @@ export default function App() {
                         sidecarStatus={sidecar.sidecarStatus}
                         whisperServerUrl={sidecar.whisperServerUrl}
                         transcriptionMode={settings.transcriptionMode}
+                        sttBackend={settings.sttBackend}
                         ttsEngine={tts.ttsEngine}
                         ttsProfile={tts.ttsProfile}
                         isSpeaking={tts.isSpeaking}
