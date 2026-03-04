@@ -29,8 +29,7 @@ interface PanelStatsProps {
   aiModel: string;
   hasApiKey: boolean;
   audioMetrics: AudioMetrics | null;
-  ttsEngine: string;
-  ttsProfile: string;
+  ttsStatus?: string;
   isRecording: boolean;
   isProcessing: boolean;
   selectedMicLabel: string;
@@ -109,8 +108,7 @@ export function PanelStats({
   aiModel,
   hasApiKey,
   audioMetrics,
-  ttsEngine,
-  ttsProfile,
+  ttsStatus: ttsStatusLabel,
   isRecording,
   isProcessing,
   selectedMicLabel,
@@ -189,8 +187,8 @@ export function PanelStats({
 
           {/* TTS */}
           <ServiceCard icon={Volume2} label="TTS" status={ttsStatus}>
-            <InfoLine label="Motor" value={ttsEngine} />
-            <InfoLine label="Perfil" value={ttsProfile} />
+            <InfoLine label="Motor" value="XTTS v2" />
+            {ttsStatusLabel && <InfoLine label="Status" value={ttsStatusLabel} />}
             <InfoLine label="Falando" value={isSpeaking ? 'sim' : 'nao'} />
             {!sidecarAvailable && !isSpeaking && (
               <InfoLine label="Nota" value="health check pendente" />

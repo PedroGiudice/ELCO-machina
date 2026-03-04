@@ -655,19 +655,17 @@ export default function App() {
                 }
                 panelTTS={
                     <PanelTTS
-                        isSpeaking={tts.isSpeaking}
-                        canSpeak={sidecar.sidecarAvailable}
+                        ttsStatus={tts.ttsStatus}
+                        statusMessage={tts.statusMessage}
                         hasText={!!processing.transcription}
                         onReadText={handleReadText}
                         onStopReading={tts.stopReading}
-                        ttsEngine={tts.ttsEngine}
-                        onEngineChange={tts.setTtsEngine}
-                        ttsProfile={tts.ttsProfile}
-                        onProfileChange={tts.setTtsProfile}
-                        ttsCustomParams={tts.ttsCustomParams}
-                        onCustomParamsChange={tts.setTtsCustomParams}
+                        xttsParams={tts.xttsParams}
+                        onXttsParamsChange={tts.setXttsParams}
                         voiceRefAudio={tts.voiceRefAudio}
                         onVoiceRefChange={tts.setVoiceRefAudio}
+                        modalEndpointUrl={tts.modalEndpointUrl}
+                        onEndpointChange={tts.setModalEndpointUrl}
                     />
                 }
                 panelConfig={
@@ -710,8 +708,7 @@ export default function App() {
                         aiModel={settings.aiModel}
                         hasApiKey={!!persistence.apiKey}
                         audioMetrics={null}
-                        ttsEngine={tts.ttsEngine}
-                        ttsProfile={tts.ttsProfile}
+                        ttsStatus={tts.ttsStatus}
                         isRecording={isRecording}
                         isProcessing={processing.isProcessing}
                         selectedMicLabel={
