@@ -15,7 +15,6 @@ from pydantic import BaseModel
 
 # Configura logging estruturado para todo o sidecar
 from voice_ai.routers import transcribe, synthesize, refine
-from voice_ai.services.refiner import ClaudeRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
 
@@ -124,11 +123,6 @@ class TTSModelStatus(BaseModel):
     voice: str | None = None
 
 
-class ModalModelStatus(BaseModel):
-    status: Literal["available", "credentials_missing", "disabled"]
-    engine: str = "xtts-v2"
-
-
 class RefinerStatus(BaseModel):
     status: Literal["available", "unavailable"]
     backend: str | None = None
@@ -138,7 +132,6 @@ class RefinerStatus(BaseModel):
 class ModelsStatus(BaseModel):
     whisper: WhisperModelStatus
     tts: TTSModelStatus
-    modal: ModalModelStatus
     refiner: RefinerStatus
 
 
@@ -187,9 +180,6 @@ async def health_check() -> HealthResponse:
         else:
             tts_status = "not_installed"
 
-    # Status do Modal (XTTS v2) -- frontend chama diretamente
-    modal_status = "disabled"
-
     return HealthResponse(
         status="healthy" if state.models_loaded else "degraded",
         version="0.2.0",
@@ -202,9 +192,6 @@ async def health_check() -> HealthResponse:
             tts=TTSModelStatus(
                 status=tts_status,
                 voice=tts_voice,
-            ),
-            modal=ModalModelStatus(
-                status=modal_status,
             ),
             refiner=RefinerStatus(
                 status="available" if state.refiner_backend else "unavailable",
@@ -242,7 +229,6 @@ async def inject_services(request, call_next):
     """Injeta servicos no request state para uso nos endpoints."""
     request.state.stt_service = state.stt_service
     request.state.tts_service = state.tts_service
-    request.state.modal_client = None  # Removido -- frontend chama XTTS v2 diretamente
     response = await call_next(request)
     return response
 
