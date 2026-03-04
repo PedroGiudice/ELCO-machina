@@ -1,82 +1,5 @@
-// ============================================================
-// Comandos stub para desktop (sidecar roda como servico remoto)
-// ============================================================
-
 #[cfg(desktop)]
 mod audio;
-
-#[cfg(desktop)]
-mod sidecar {
-    /// Comando Tauri: iniciar sidecar (stub - servico roda na VM)
-    #[tauri::command]
-    pub async fn start_sidecar() -> Result<String, String> {
-        // Sidecar roda como servico na VM, nao gerenciado localmente
-        Ok("remote_service".to_string())
-    }
-
-    /// Comando Tauri: parar sidecar (stub - servico roda na VM)
-    #[tauri::command]
-    pub async fn stop_sidecar() -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Comando Tauri: verificar status do sidecar (stub - servico roda na VM)
-    #[tauri::command]
-    pub async fn sidecar_status() -> Result<bool, String> {
-        // Sempre retorna true - o servico na VM deve estar rodando
-        Ok(true)
-    }
-
-    /// Comando Tauri: definir URL do servidor Whisper remoto (stub - sempre remoto)
-    #[tauri::command]
-    pub async fn set_whisper_url(_url: Option<String>) -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Comando Tauri: verificar se esta usando servidor remoto (stub - sempre remoto)
-    #[tauri::command]
-    pub async fn is_remote_whisper() -> Result<bool, String> {
-        // Sempre remoto agora
-        Ok(true)
-    }
-}
-
-// ============================================================
-// Comandos stub para mobile (sidecar nao disponivel)
-// ============================================================
-
-#[cfg(mobile)]
-mod sidecar {
-    /// Comando Tauri: iniciar sidecar (stub para mobile)
-    #[tauri::command]
-    pub async fn start_sidecar() -> Result<String, String> {
-        Err("Sidecar not available on mobile".to_string())
-    }
-
-    /// Comando Tauri: parar sidecar (stub para mobile)
-    #[tauri::command]
-    pub async fn stop_sidecar() -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Comando Tauri: verificar status do sidecar (stub para mobile)
-    #[tauri::command]
-    pub async fn sidecar_status() -> Result<bool, String> {
-        Ok(false)
-    }
-
-    /// Comando Tauri: definir URL do servidor Whisper remoto (stub para mobile)
-    #[tauri::command]
-    pub async fn set_whisper_url(_url: Option<String>) -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Comando Tauri: verificar se esta usando servidor remoto (stub para mobile)
-    #[tauri::command]
-    pub async fn is_remote_whisper() -> Result<bool, String> {
-        Ok(true)
-    }
-}
 
 /// Proxy HTTP via Rust -- contorna restricao de Private Network Access do WebView Android
 #[tauri::command]
@@ -136,17 +59,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init());
 
-    // Desktop: comandos de áudio CPAL + sidecar stubs
+    // Desktop: comandos de audio CPAL + proxy
     #[cfg(desktop)]
     {
         builder = builder
             .manage(audio::AudioState::new())
             .invoke_handler(tauri::generate_handler![
-                sidecar::start_sidecar,
-                sidecar::stop_sidecar,
-                sidecar::sidecar_status,
-                sidecar::set_whisper_url,
-                sidecar::is_remote_whisper,
                 proxy_fetch,
                 audio::enumerate_audio_devices,
                 audio::start_audio_recording,
@@ -154,16 +72,11 @@ pub fn run() {
             ]);
     }
 
-    // Mobile: sidecar stubs + proxy_fetch (contorna Private Network Access)
+    // Mobile: proxy_fetch (contorna Private Network Access)
     #[cfg(mobile)]
     {
         builder = builder
             .invoke_handler(tauri::generate_handler![
-                sidecar::start_sidecar,
-                sidecar::stop_sidecar,
-                sidecar::sidecar_status,
-                sidecar::set_whisper_url,
-                sidecar::is_remote_whisper,
                 proxy_fetch,
             ]);
     }
