@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { safeFetch } from "../services/safeFetch";
+import { migrateKey, storeSet } from "../services/TauriStore";
 import type { XTTSParams, TTSSynthesizeRequest } from "../types";
 
 // ============================================================================
@@ -107,23 +108,20 @@ export function useTTS(
 
     // Load settings on mount + recarregar base64 do path salvo
     useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            try {
-                const settings: TTSSettings = JSON.parse(saved);
-                if (settings.xttsParams) setXttsParams(settings.xttsParams);
-                if (settings.modalEndpointUrl) setModalEndpointUrl(settings.modalEndpointUrl);
-                // Recarregar base64 do path salvo
-                if (settings.voiceRefPath) {
-                    const path = settings.voiceRefPath;
-                    fileToBase64(path)
-                        .then((b64) => setVoiceRef({ path, base64: b64 }))
-                        .catch((err) => console.warn("Falha ao recarregar audio de referencia:", err));
-                }
-            } catch (e) {
-                console.warn("Falha ao carregar configuracoes TTS:", e);
+        migrateKey<TTSSettings | null>("settings.json", STORAGE_KEY, null).then((settings) => {
+            if (!settings) return;
+            if (settings.xttsParams) setXttsParams(settings.xttsParams);
+            if (settings.modalEndpointUrl) setModalEndpointUrl(settings.modalEndpointUrl);
+            // Recarregar base64 do path salvo
+            if (settings.voiceRefPath) {
+                const path = settings.voiceRefPath;
+                fileToBase64(path)
+                    .then((b64) => setVoiceRef({ path, base64: b64 }))
+                    .catch((err) => console.warn("Falha ao recarregar audio de referencia:", err));
             }
-        }
+        }).catch((e) => {
+            console.warn("Falha ao carregar configuracoes TTS:", e);
+        });
     }, []);
 
     // Persist settings on change (SEM base64 -- apenas path)
@@ -133,7 +131,7 @@ export function useTTS(
             voiceRefPath: voiceRef?.path ?? null,
             modalEndpointUrl,
         };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        storeSet("settings.json", STORAGE_KEY, settings);
     }, [xttsParams, voiceRef, modalEndpointUrl]);
 
     // Cleanup audio URL on unmount
