@@ -18,10 +18,13 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 CLAUDE_REFINE_TIMEOUT = int(os.environ.get("CLAUDE_REFINE_TIMEOUT", "60"))
+REFINER_OUTPUT_DIR = Path(__file__).resolve().parents[3] / "refiner-output"
 
 
 @dataclass
@@ -132,6 +135,14 @@ class ClaudeRefiner:
                 )
 
             logger.info("Refinamento concluido via claude/%s", model)
+
+            await self._save_output(
+                original_text=text,
+                refined_text=refined,
+                model=model,
+                system_instruction=system_instruction,
+            )
+
             return RefineResult(
                 refined_text=refined,
                 model_used=model,
@@ -154,3 +165,39 @@ class ClaudeRefiner:
                 success=False,
                 error=str(e),
             )
+
+    async def _save_output(
+        self,
+        original_text: str,
+        refined_text: str,
+        model: str,
+        system_instruction: str,
+    ) -> None:
+        """Salva output refinado em disco. Fire-and-forget, nunca falha o request."""
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            timestamp = datetime.now().strftime("%H-%M-%S")
+            day_dir = REFINER_OUTPUT_DIR / today
+            day_dir.mkdir(parents=True, exist_ok=True)
+
+            slug = "-".join(refined_text.split()[:5]).lower()
+            slug = "".join(c for c in slug if c.isalnum() or c == "-")[:50]
+            filename = f"{timestamp}_{slug}.md"
+
+            content = f"""---
+timestamp: {datetime.now().isoformat()}
+model: {model}
+---
+
+{refined_text}
+
+---
+
+## Texto original
+
+{original_text}
+"""
+            (day_dir / filename).write_text(content, encoding="utf-8")
+            logger.info("Refiner output salvo: %s/%s", today, filename)
+        except Exception as e:
+            logger.warning("Falha ao salvar refiner output: %s", e)
