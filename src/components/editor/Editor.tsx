@@ -152,7 +152,7 @@ export function Editor({
           spellCheck={false}
           style={{ fontSize: `${fontSize}px` }}
           className={`
-            w-full h-full bg-transparent border-0 overflow-y-auto
+            absolute inset-0 w-full h-full bg-transparent border-0 overflow-y-auto
             p-4 md:p-8 resize-none
             focus:ring-0 focus:outline-none
             leading-relaxed placeholder:opacity-30
