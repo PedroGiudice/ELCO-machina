@@ -1,6 +1,7 @@
 import * as React from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { Volume2, VolumeX, Upload, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
+import { Volume2, VolumeX, Upload, RotateCcw, Loader2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
 import type { XTTSParams } from '../../types';
@@ -239,18 +240,139 @@ export function PanelTTS({
       <div className="w-full h-px bg-[var(--border-subtle)]" />
 
       {/* Endpoint URL */}
-      <section className="space-y-2">
-        <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-          Endpoint Modal
-        </label>
-        <input
-          type="url"
-          value={modalEndpointUrl}
-          onChange={(e) => onEndpointChange(e.target.value)}
-          className="w-full px-3 py-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[11px] font-mono focus:outline-none focus:border-[var(--accent)] transition-colors"
-          placeholder="https://..."
-        />
-      </section>
+      <EndpointSection
+        modalEndpointUrl={modalEndpointUrl}
+        onEndpointChange={onEndpointChange}
+      />
     </div>
+  );
+}
+
+// ============================================================================
+// Endpoint Section com Health Check
+// ============================================================================
+
+type HealthStatus = 'unknown' | 'checking' | 'connected' | 'starting' | 'offline';
+
+const HEALTH_LABELS: Record<HealthStatus, string> = {
+  unknown: '',
+  checking: 'Verificando...',
+  connected: 'Conectado',
+  starting: 'Inicializando...',
+  offline: 'Offline',
+};
+
+const HEALTH_COLORS: Record<HealthStatus, string> = {
+  unknown: '',
+  checking: 'text-blue-400',
+  connected: 'text-green-400',
+  starting: 'text-yellow-400',
+  offline: 'text-red-400',
+};
+
+function deriveHealthUrl(synthesizeUrl: string): string {
+  // https://pedrogiudice--xtts-serve-xttsserver-synthesize.modal.run
+  // -> https://pedrogiudice--xtts-serve-xttsserver-health.modal.run
+  return synthesizeUrl.replace(/-synthesize\./, '-health.');
+}
+
+function EndpointSection({
+  modalEndpointUrl,
+  onEndpointChange,
+}: {
+  modalEndpointUrl: string;
+  onEndpointChange: (url: string) => void;
+}) {
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>('unknown');
+  const [healthDetail, setHealthDetail] = useState<string | null>(null);
+
+  const testConnection = useCallback(async () => {
+    if (!modalEndpointUrl.trim()) return;
+
+    setHealthStatus('checking');
+    setHealthDetail(null);
+
+    const healthUrl = deriveHealthUrl(modalEndpointUrl);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s para cold start
+
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        setHealthStatus('connected');
+        const gpu = data.gpu || 'desconhecida';
+        const loadTime = data.model_load_s ? `${data.model_load_s}s` : '?';
+        setHealthDetail(`GPU: ${gpu} | Modelo carregado em ${loadTime}`);
+      } else if (response.status === 503 || response.status === 502) {
+        setHealthStatus('starting');
+        setHealthDetail('Servidor em cold start. Aguarde e tente novamente.');
+      } else {
+        setHealthStatus('offline');
+        setHealthDetail(`HTTP ${response.status}`);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setHealthStatus('starting');
+        setHealthDetail('Timeout -- servidor pode estar em cold start (ate 70s).');
+      } else {
+        setHealthStatus('offline');
+        setHealthDetail('Servidor inacessivel. Verifique a URL.');
+      }
+    }
+  }, [modalEndpointUrl]);
+
+  return (
+    <section className="space-y-2">
+      <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+        Servidor TTS (XTTS v2)
+      </label>
+      <input
+        type="url"
+        value={modalEndpointUrl}
+        onChange={(e) => {
+          onEndpointChange(e.target.value);
+          setHealthStatus('unknown');
+          setHealthDetail(null);
+        }}
+        className="w-full px-3 py-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[11px] font-mono focus:outline-none focus:border-[var(--accent)] transition-colors"
+        placeholder="https://..."
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={testConnection}
+          disabled={healthStatus === 'checking' || !modalEndpointUrl.trim()}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] hover:bg-[var(--accent-dim)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {healthStatus === 'checking' ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : healthStatus === 'connected' ? (
+            <Wifi className="w-3 h-3 text-green-400" />
+          ) : healthStatus === 'offline' ? (
+            <WifiOff className="w-3 h-3 text-red-400" />
+          ) : (
+            <Wifi className="w-3 h-3" />
+          )}
+          Testar Conexao
+        </button>
+        {healthStatus !== 'unknown' && (
+          <span className={`text-[10px] ${HEALTH_COLORS[healthStatus]}`}>
+            {HEALTH_LABELS[healthStatus]}
+          </span>
+        )}
+      </div>
+      {healthDetail && (
+        <p className="text-[9px] text-[var(--text-secondary)]">
+          {healthDetail}
+        </p>
+      )}
+    </section>
   );
 }
