@@ -13,6 +13,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import {
     VoiceAIClient,
 } from "../services/VoiceAIClient";
+import { migrateKey, storeSet } from "../services/TauriStore";
 
 // ============================================================================
 // Wake Lock - impede suspensao da tela durante processamento
@@ -127,14 +128,19 @@ export function useAudioProcessing(
     // Estados
     const [isProcessing, setIsProcessing] = useState(false);
     const [isRefining, setIsRefining] = useState(false);
-    const [transcription, setTranscription] = useState<string>(() => {
-        return localStorage.getItem("elco_current_work") || "";
-    });
+    const [transcription, setTranscription] = useState<string>("");
     const [lastStats, setLastStats] = useState<ProcessingStats | null>(null);
 
-    // Persistir transcricao em localStorage
+    // Carregar transcricao do store no mount
     useEffect(() => {
-        localStorage.setItem("elco_current_work", transcription);
+        migrateKey<string>("data.json", "elco_current_work", "").then((v) => {
+            if (v) setTranscription(v);
+        });
+    }, []);
+
+    // Persistir transcricao no store
+    useEffect(() => {
+        storeSet("data.json", "elco_current_work", transcription);
     }, [transcription]);
 
     /**
