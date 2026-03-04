@@ -217,7 +217,7 @@ export default function App() {
     });
 
     // --- TTS ---
-    const tts = useTTS(sidecar.whisperServerUrl, persistence.addLog);
+    const tts = useTTS(persistence.addLog);
 
     // --- Load mics ---
     useEffect(() => {
@@ -662,8 +662,8 @@ export default function App() {
                         onStopReading={tts.stopReading}
                         xttsParams={tts.xttsParams}
                         onXttsParamsChange={tts.setXttsParams}
-                        voiceRefAudio={tts.voiceRefAudio}
-                        onVoiceRefChange={tts.setVoiceRefAudio}
+                        voiceRef={tts.voiceRef}
+                        onVoiceRefChange={tts.setVoiceRef}
                         modalEndpointUrl={tts.modalEndpointUrl}
                         onEndpointChange={tts.setModalEndpointUrl}
                     />
