@@ -320,7 +320,12 @@ export interface UsePersistenceReturn {
   setActiveContext: (ctx: string) => void;
   contextMemory: Record<string, string>;
   updateContextMemory: (ctx: string, memory: string) => void;
-  handleAddContext: () => Promise<void>;
+  isAddContextModalOpen: boolean;
+  newContextName: string;
+  setNewContextName: (v: string) => void;
+  openAddContextModal: () => void;
+  cancelAddContext: () => void;
+  confirmAddContext: () => Promise<void>;
 
   // Memory Editor
   isMemoryModalOpen: boolean;
@@ -376,6 +381,10 @@ export function usePersistence(): UsePersistenceReturn {
     return localStorage.getItem('gemini_active_context') || 'General';
   });
   const [contextMemory, setContextMemory] = useState<Record<string, string>>({});
+
+  // Add Context Modal
+  const [isAddContextModalOpen, setIsAddContextModalOpen] = useState(false);
+  const [newContextName, setNewContextName] = useState('');
 
   // Memory Editor
   const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
@@ -496,19 +505,29 @@ export function usePersistence(): UsePersistenceReturn {
     setContextMemory((prev) => ({ ...prev, [ctx]: memory }));
   }, []);
 
-  const handleAddContext = useCallback(async () => {
-    const name = prompt(
-      "Name your new Context Pool (e.g. 'Project Alpha', 'React Docs'):",
-    );
-    if (name && !contextPools.includes(name)) {
-      setContextPools((prev) => [...prev, name]);
-      setActiveContext(name);
-      setContextMemory((prev) => ({ ...prev, [name]: '' }));
+  const openAddContextModal = useCallback(() => {
+    setNewContextName('');
+    setIsAddContextModalOpen(true);
+  }, []);
 
-      await saveContextToDB({ name, memory: '', lastUpdated: Date.now() });
-      addLog(`Contexto '${name}' criado e persistido.`, 'success', 'app');
-    }
-  }, [contextPools, addLog]);
+  const cancelAddContext = useCallback(() => {
+    setIsAddContextModalOpen(false);
+    setNewContextName('');
+  }, []);
+
+  const confirmAddContext = useCallback(async () => {
+    const name = newContextName.trim();
+    if (!name || contextPools.includes(name)) return;
+
+    setContextPools((prev) => [...prev, name]);
+    setActiveContext(name);
+    setContextMemory((prev) => ({ ...prev, [name]: '' }));
+    setIsAddContextModalOpen(false);
+    setNewContextName('');
+
+    await saveContextToDB({ name, memory: '', lastUpdated: Date.now() });
+    addLog(`Contexto '${name}' criado e persistido.`, 'success', 'app');
+  }, [newContextName, contextPools, addLog]);
 
   const openMemoryEditor = useCallback(() => {
     setTempMemoryEdit(contextMemory[activeContext] || '');
@@ -551,7 +570,12 @@ export function usePersistence(): UsePersistenceReturn {
     setActiveContext,
     contextMemory,
     updateContextMemory,
-    handleAddContext,
+    isAddContextModalOpen,
+    newContextName,
+    setNewContextName,
+    openAddContextModal,
+    cancelAddContext,
+    confirmAddContext,
 
     // Memory Editor
     isMemoryModalOpen,
@@ -582,7 +606,8 @@ export function usePersistence(): UsePersistenceReturn {
     addLog,
   }), [
     history, historyLoaded, addToHistory, deleteHistoryItemFn, clearAllHistoryFn,
-    contextPools, activeContext, contextMemory, updateContextMemory, handleAddContext,
+    contextPools, activeContext, contextMemory, updateContextMemory,
+    isAddContextModalOpen, newContextName, openAddContextModal, cancelAddContext, confirmAddContext,
     isMemoryModalOpen, tempMemoryEdit, isSavingContext, openMemoryEditor, saveMemoryFn,
     apiKey, apiKeyInput, isApiKeyVisible, saveApiKeyFn,
     logs, addLog,
