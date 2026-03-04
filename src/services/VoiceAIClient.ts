@@ -91,6 +91,22 @@ export interface TranscribeResponse {
   model_used: string | null;
 }
 
+// Request para refinamento (alinhado com backend POST /refine)
+export interface RefineRequest {
+  text: string;
+  system_instruction: string;
+  model?: string;
+  temperature?: number;
+}
+
+// Response do refinamento (alinhado com backend)
+export interface RefineResponse {
+  refined_text: string;
+  success: boolean;
+  model_used: string;
+  error: string | null;
+}
+
 // Response do health check (piper/modal, nao xtts)
 export interface HealthResponse {
   status: "healthy" | "degraded";
@@ -260,6 +276,60 @@ export class VoiceAIClient {
 
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Timeout na transcricao. Tente com audio mais curto.");
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Refina texto usando Claude CLI via sidecar
+   *
+   * @param request Dados do refinamento (texto, system_instruction, modelo)
+   * @returns Texto refinado com metadados
+   */
+  async refine(request: RefineRequest): Promise<RefineResponse> {
+    const body: Record<string, unknown> = {
+      text: request.text,
+      system_instruction: request.system_instruction,
+    };
+
+    if (request.model !== undefined) {
+      body.model = request.model;
+    }
+    if (request.temperature !== undefined) {
+      body.temperature = request.temperature;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await safeFetch(`${this.baseUrl}/refine`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+        );
+      }
+
+      const data: RefineResponse = await response.json();
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Timeout no refinamento.");
       }
 
       throw error;

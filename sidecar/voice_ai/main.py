@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Configura logging estruturado para todo o sidecar
-from voice_ai.routers import transcribe, synthesize
+from voice_ai.routers import transcribe, synthesize, refine
 from voice_ai.services.refiner import ClaudeRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
@@ -247,6 +247,7 @@ async def root():
 
 # Registra routers
 app.include_router(transcribe.router, prefix="/transcribe", tags=["STT"])
+app.include_router(refine.router, prefix="/refine", tags=["Refine"])
 app.include_router(synthesize.router, prefix="/synthesize", tags=["TTS"])
 
 

@@ -83,10 +83,12 @@ export interface UseAudioProcessingConfig {
 
 export interface UseAudioProcessingReturn {
     isProcessing: boolean;
+    isRefining: boolean;
     transcription: string;
     setTranscription: (text: string) => void;
     lastStats: ProcessingStats | null;
     processAudio: () => Promise<void>;
+    refineText: () => Promise<void>;
 }
 
 // ============================================================================
@@ -124,6 +126,7 @@ export function useAudioProcessing(
 
     // Estados
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isRefining, setIsRefining] = useState(false);
     const [transcription, setTranscription] = useState<string>(() => {
         return localStorage.getItem("elco_current_work") || "";
     });
@@ -177,46 +180,62 @@ export function useAudioProcessing(
                 temperature = selectedTemplate.temperature;
             }
 
-            // Log do estagio
-            if (shouldRefine) {
-                addLog(
-                    `Processando: Whisper + ${selectedTemplate?.name || 'refinamento'}...`,
-                    "info",
-                );
-            } else {
-                addLog("Transcrevendo com Whisper...", "info");
-            }
+            // === Etapa 1: Transcricao (STT) ===
+            addLog(
+                `[1/2] Transcrevendo com Whisper (${sttBackend})...`,
+                "info",
+            );
+            const sttStart = performance.now();
 
-            // Chamada unica ao sidecar - ele faz Whisper + Claude REST
             const result = await voiceAIClient.transcribe({
                 audio: base64Audio,
                 format,
                 language:
                     outputLanguage === "Portuguese" ? "pt" :
                     outputLanguage === "Spanish" ? "es" : "en",
-                refine: shouldRefine,
-                system_instruction: systemInstruction,
-                model: aiModel,
-                temperature,
+                refine: false,
                 stt_backend: sttBackend as "vm" | "modal",
             });
 
-            // Usa texto refinado se disponivel, senao o bruto
-            let finalText = result.refined_text || result.text;
+            const sttTime = ((performance.now() - sttStart) / 1000).toFixed(1);
+            addLog(
+                `[1/2] Transcricao concluida (${sttTime}s)`,
+                "success",
+            );
 
-            // Log de resultado do refinamento
-            if (shouldRefine) {
-                if (result.refine_success) {
+            let finalText = result.text;
+
+            // === Etapa 2: Refinamento (Claude) ===
+            if (shouldRefine && result.text && systemInstruction) {
+                addLog(
+                    `[2/2] Refinando com Claude (${aiModel})...`,
+                    "info",
+                );
+                const refineStart = performance.now();
+
+                const refineResult = await voiceAIClient.refine({
+                    text: result.text,
+                    system_instruction: systemInstruction,
+                    model: aiModel,
+                    temperature,
+                });
+
+                const refineTime = ((performance.now() - refineStart) / 1000).toFixed(1);
+
+                if (refineResult.success) {
+                    finalText = refineResult.refined_text;
                     addLog(
-                        `Refinado com Claude (${result.model_used || aiModel})`,
+                        `[2/2] Refinado com Claude/${refineResult.model_used} (${refineTime}s)`,
                         "success",
                     );
-                } else if (result.refine_error) {
+                } else {
                     addLog(
-                        `Refinamento falhou: ${result.refine_error}. Usando texto bruto.`,
+                        `[2/2] Refinamento falhou: ${refineResult.error}. Usando texto bruto.`,
                         "warning",
                     );
                 }
+            } else if (!shouldRefine) {
+                addLog("Whisper Only -- sem refinamento.", "info");
             }
 
             // Adiciona filename se nao presente
@@ -272,7 +291,7 @@ export function useAudioProcessing(
             );
 
             const mode = shouldRefine
-                ? `Whisper + Claude (${result.model_used || aiModel})`
+                ? `Whisper + Claude (${aiModel})`
                 : "Whisper";
             addLog(`Processo finalizado via ${mode}.`, "success");
         } catch (err: unknown) {
@@ -301,12 +320,85 @@ export function useAudioProcessing(
         saveContextToDB,
     ]);
 
+    /**
+     * Refina o texto atual do editor usando Claude CLI (independente do STT)
+     */
+    const refineText = useCallback(async () => {
+        if (!transcription.trim()) return;
+
+        if (!sidecarAvailable || !voiceAIClient) {
+            addLog("Sidecar indisponivel para refinamento.", "error");
+            return;
+        }
+
+        if (!selectedTemplate || selectedTemplate.name === 'Whisper Only') {
+            addLog("Selecione um template de refinamento (nao Whisper Only).", "warning");
+            return;
+        }
+
+        const currentMemory = contextMemory[activeContext] || "No previous context.";
+        const systemInstruction = buildSystemInstruction(
+            selectedTemplate,
+            currentMemory,
+            outputLanguage,
+            recordingStyle,
+            customStylePrompt,
+        );
+
+        setIsRefining(true);
+        addLog(`Refinando com Claude (${aiModel})...`, "info");
+        const refineStart = performance.now();
+
+        try {
+            const result = await voiceAIClient.refine({
+                text: transcription,
+                system_instruction: systemInstruction,
+                model: aiModel,
+                temperature: selectedTemplate.temperature,
+            });
+
+            const refineTime = ((performance.now() - refineStart) / 1000).toFixed(1);
+
+            if (result.success) {
+                setTranscription(result.refined_text);
+                addLog(
+                    `Refinado com Claude/${result.model_used} (${refineTime}s)`,
+                    "success",
+                );
+            } else {
+                addLog(
+                    `Refinamento falhou: ${result.error}`,
+                    "error",
+                );
+            }
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            addLog(`Erro no refinamento: ${message}`, "error");
+        } finally {
+            setIsRefining(false);
+        }
+    }, [
+        transcription,
+        sidecarAvailable,
+        voiceAIClient,
+        selectedTemplate,
+        contextMemory,
+        activeContext,
+        outputLanguage,
+        recordingStyle,
+        customStylePrompt,
+        aiModel,
+        addLog,
+    ]);
+
     return {
         isProcessing,
+        isRefining,
         transcription,
         setTranscription,
         lastStats,
         processAudio,
+        refineText,
     };
 }
 

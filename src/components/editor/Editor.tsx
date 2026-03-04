@@ -9,6 +9,7 @@ import {
   VolumeX,
   Terminal,
   Feather,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 
@@ -25,6 +26,8 @@ interface EditorProps {
   onExportMd?: () => void;
   onReadText?: () => void;
   onStopReading?: () => void;
+  onRefine?: () => void;
+  isRefining?: boolean;
   canRead?: boolean;
   outputStyle?: string;
   activeContext?: string;
@@ -44,6 +47,8 @@ export function Editor({
   onExportMd,
   onReadText,
   onStopReading,
+  onRefine,
+  isRefining = false,
   canRead = false,
   outputStyle = 'Verbatim',
   activeContext = 'General',
@@ -113,6 +118,20 @@ export function Editor({
           {onExportMd && value && (
             <Button variant="ghost" size="sm" onClick={onExportMd}>
               <span className="text-[10px]">MD</span>
+            </Button>
+          )}
+
+          {/* Refine */}
+          {onRefine && value && (
+            <Button
+              variant={isRefining ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={onRefine}
+              disabled={isRefining || isProcessing}
+              className={isRefining ? 'animate-pulse' : ''}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span className="hidden md:inline">{isRefining ? 'Refinando...' : 'Refinar'}</span>
             </Button>
           )}
 

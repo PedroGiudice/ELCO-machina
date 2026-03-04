@@ -610,6 +610,8 @@ export default function App() {
                         onExportMd={() => handleDownloadText("md")}
                         onReadText={handleReadText}
                         onStopReading={tts.stopReading}
+                        onRefine={processing.refineText}
+                        isRefining={processing.isRefining}
                         canRead={!!processing.transcription}
                         outputStyle={settings.outputStyle}
                         activeContext={persistence.activeContext}
