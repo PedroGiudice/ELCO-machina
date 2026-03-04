@@ -1,11 +1,13 @@
-import * as React from 'react';
 import { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Volume2, VolumeX, Upload, RotateCcw, Loader2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
+import { safeFetch } from '../../services/safeFetch';
 import type { XTTSParams } from '../../types';
-import { DEFAULT_XTTS_PARAMS, type TTSStatus } from '../../hooks/useTTS';
+import { DEFAULT_XTTS_PARAMS, type TTSStatus, type VoiceRef } from '../../hooks/useTTS';
 
 interface PanelTTSProps {
   // State
@@ -22,8 +24,8 @@ interface PanelTTSProps {
   onXttsParamsChange: (params: XTTSParams) => void;
 
   // Voice Cloning
-  voiceRefAudio: File | null;
-  onVoiceRefChange: (file: File | null) => void;
+  voiceRef: VoiceRef | null;
+  onVoiceRefChange: (ref: VoiceRef | null) => void;
 
   // Endpoint
   modalEndpointUrl: string;
@@ -57,7 +59,7 @@ export function PanelTTS({
   onStopReading,
   xttsParams,
   onXttsParamsChange,
-  voiceRefAudio,
+  voiceRef,
   onVoiceRefChange,
   modalEndpointUrl,
   onEndpointChange,
@@ -65,12 +67,21 @@ export function PanelTTS({
   const isSpeaking = ttsStatus === 'playing';
   const isBusy = ttsStatus === 'cold_start' || ttsStatus === 'synthesizing';
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onVoiceRefChange(file);
+  const handleSelectAudio = useCallback(async () => {
+    const selected = await open({
+      filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'ogg', 'flac', 'webm'] }],
+      multiple: false,
+    });
+    if (selected) {
+      const bytes = await readFile(selected);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      onVoiceRefChange({ path: selected, base64 });
     }
-  };
+  }, [onVoiceRefChange]);
 
   const updateParam = <K extends keyof XTTSParams>(key: K, value: XTTSParams[K]) => {
     onXttsParamsChange({ ...xttsParams, [key]: value });
@@ -96,7 +107,7 @@ export function PanelTTS({
         variant={isSpeaking ? 'secondary' : 'primary'}
         className={`w-full h-14 text-base ${isSpeaking ? 'text-red-400 border-red-500/50' : ''}`}
         onClick={isSpeaking || isBusy ? onStopReading : onReadText}
-        disabled={(!hasText || !voiceRefAudio) && !isSpeaking && !isBusy}
+        disabled={(!hasText || !voiceRef) && !isSpeaking && !isBusy}
       >
         {isSpeaking || isBusy ? (
           <>
@@ -117,7 +128,7 @@ export function PanelTTS({
         </p>
       )}
 
-      {hasText && !voiceRefAudio && (
+      {hasText && !voiceRef && (
         <p className="text-[10px] text-yellow-400 text-center">
           Envie um audio de referencia para clonagem de voz
         </p>
@@ -131,23 +142,21 @@ export function PanelTTS({
           Clonagem de Voz
         </label>
         <p className="text-[9px] text-[var(--text-secondary)]">
-          {voiceRefAudio
-            ? `Amostra: ${voiceRefAudio.name}`
-            : 'Envie um audio de referencia (obrigatorio para XTTS v2).'}
+          {voiceRef
+            ? `Amostra: ${voiceRef.path.split('/').pop() ?? voiceRef.path}`
+            : 'Selecione um audio de referencia (obrigatorio para XTTS v2).'}
         </p>
-        <label className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group">
+        <button
+          type="button"
+          onClick={handleSelectAudio}
+          className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group"
+        >
           <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] flex items-center gap-2">
             <Upload className="w-3 h-3" />
-            {voiceRefAudio ? 'Trocar amostra de voz' : 'Enviar amostra de voz'}
+            {voiceRef ? 'Trocar amostra de voz' : 'Selecionar amostra de voz'}
           </span>
-          <input
-            type="file"
-            className="hidden"
-            accept="audio/*"
-            onChange={handleFileChange}
-          />
-        </label>
-        {voiceRefAudio && (
+        </button>
+        {voiceRef && (
           <button
             onClick={() => onVoiceRefChange(null)}
             className="text-[10px] text-red-400 hover:text-red-300"
@@ -298,7 +307,7 @@ function EndpointSection({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s para cold start
 
-      const response = await fetch(healthUrl, {
+      const response = await safeFetch(healthUrl, {
         method: 'GET',
         signal: controller.signal,
       });

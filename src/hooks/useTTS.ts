@@ -1,28 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { readFile } from "@tauri-apps/plugin-fs";
+import { safeFetch } from "../services/safeFetch";
 import type { XTTSParams, TTSSynthesizeRequest } from "../types";
-
-/**
- * Wrapper que tenta tauriFetch e faz fallback para fetch nativo.
- * Resolve "url not allowed on the configured scope" no AppImage.
- */
-async function safeFetch(
-    url: string,
-    init?: RequestInit & { signal?: AbortSignal },
-): Promise<Response> {
-    try {
-        return await tauriFetch(url, init);
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("url not allowed") || msg.includes("scope")) {
-            console.warn(
-                `[safeFetch] tauriFetch bloqueado, usando fetch nativo: ${msg}`,
-            );
-            return await fetch(url, init);
-        }
-        throw err;
-    }
-}
 
 // ============================================================================
 // TYPES
@@ -32,9 +11,15 @@ export type { XTTSParams, TTSSynthesizeRequest };
 
 export type TTSStatus = "idle" | "cold_start" | "synthesizing" | "playing" | "error";
 
+/** Referencia de voz: path no filesystem + base64 para envio. */
+export interface VoiceRef {
+    path: string;
+    base64: string;
+}
+
 interface TTSSettings {
     xttsParams: XTTSParams;
-    voiceRefAudioBase64: string | null;
+    voiceRefPath: string | null;
     modalEndpointUrl: string;
 }
 
@@ -47,9 +32,8 @@ export interface UseTTSReturn {
     // Config
     xttsParams: XTTSParams;
     setXttsParams: (params: XTTSParams) => void;
-    voiceRefAudio: File | null;
-    setVoiceRefAudio: (file: File | null) => void;
-    voiceRefAudioBase64: string | null;
+    voiceRef: VoiceRef | null;
+    setVoiceRef: (ref: VoiceRef | null) => void;
     modalEndpointUrl: string;
     setModalEndpointUrl: (url: string) => void;
 
@@ -80,17 +64,15 @@ export const DEFAULT_XTTS_PARAMS: XTTSParams = {
 // HELPERS
 // ============================================================================
 
-async function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const result = reader.result as string;
-            const base64Data = result.split(",")[1] || result;
-            resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
+/** Le arquivo do filesystem Tauri e retorna base64. */
+async function fileToBase64(path: string): Promise<string> {
+    const bytes = await readFile(path);
+    // Converte Uint8Array para base64
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
 }
 
 // ============================================================================
@@ -98,7 +80,6 @@ async function fileToBase64(file: File): Promise<string> {
 // ============================================================================
 
 export function useTTS(
-    _whisperServerUrl: string,
     addLog?: (msg: string, type: "info" | "success" | "error") => void,
 ): UseTTSReturn {
     const log = useCallback(
@@ -121,47 +102,39 @@ export function useTTS(
 
     // Config
     const [xttsParams, setXttsParams] = useState<XTTSParams>(DEFAULT_XTTS_PARAMS);
-    const [voiceRefAudio, setVoiceRefAudio] = useState<File | null>(null);
-    const [voiceRefAudioBase64, setVoiceRefAudioBase64] = useState<string | null>(null);
+    const [voiceRef, setVoiceRef] = useState<VoiceRef | null>(null);
     const [modalEndpointUrl, setModalEndpointUrl] = useState(DEFAULT_MODAL_URL);
 
-    // Converter File para base64 quando muda
-    useEffect(() => {
-        if (!voiceRefAudio) {
-            setVoiceRefAudioBase64(null);
-            return;
-        }
-        let cancelled = false;
-        fileToBase64(voiceRefAudio).then((b64) => {
-            if (!cancelled) setVoiceRefAudioBase64(b64);
-        });
-        return () => { cancelled = true; };
-    }, [voiceRefAudio]);
-
-    // Load settings on mount
+    // Load settings on mount + recarregar base64 do path salvo
     useEffect(() => {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
             try {
                 const settings: TTSSettings = JSON.parse(saved);
                 if (settings.xttsParams) setXttsParams(settings.xttsParams);
-                if (settings.voiceRefAudioBase64) setVoiceRefAudioBase64(settings.voiceRefAudioBase64);
                 if (settings.modalEndpointUrl) setModalEndpointUrl(settings.modalEndpointUrl);
+                // Recarregar base64 do path salvo
+                if (settings.voiceRefPath) {
+                    const path = settings.voiceRefPath;
+                    fileToBase64(path)
+                        .then((b64) => setVoiceRef({ path, base64: b64 }))
+                        .catch((err) => console.warn("Falha ao recarregar audio de referencia:", err));
+                }
             } catch (e) {
                 console.warn("Falha ao carregar configuracoes TTS:", e);
             }
         }
     }, []);
 
-    // Persist settings on change
+    // Persist settings on change (SEM base64 -- apenas path)
     useEffect(() => {
         const settings: TTSSettings = {
             xttsParams,
-            voiceRefAudioBase64,
+            voiceRefPath: voiceRef?.path ?? null,
             modalEndpointUrl,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    }, [xttsParams, voiceRefAudioBase64, modalEndpointUrl]);
+    }, [xttsParams, voiceRef, modalEndpointUrl]);
 
     // Cleanup audio URL on unmount
     useEffect(() => {
@@ -180,7 +153,7 @@ export function useTTS(
                 return;
             }
 
-            if (!voiceRefAudioBase64) {
+            if (!voiceRef?.base64) {
                 log("Audio de referencia necessario para clonagem de voz. Faca upload na aba TTS.", "error");
                 return;
             }
@@ -203,7 +176,7 @@ export function useTTS(
             try {
                 const requestBody: TTSSynthesizeRequest = {
                     text,
-                    ref_audio_base64: voiceRefAudioBase64,
+                    ref_audio_base64: voiceRef!.base64,
                     language: "pt",
                     speed: xttsParams.speed,
                     temperature: xttsParams.temperature,
@@ -306,7 +279,7 @@ export function useTTS(
         [
             modalEndpointUrl,
             xttsParams,
-            voiceRefAudioBase64,
+            voiceRef,
             ttsAudioUrl,
             log,
         ],
@@ -334,9 +307,8 @@ export function useTTS(
         // Config
         xttsParams,
         setXttsParams,
-        voiceRefAudio,
-        setVoiceRefAudio,
-        voiceRefAudioBase64,
+        voiceRef,
+        setVoiceRef,
         modalEndpointUrl,
         setModalEndpointUrl,
 
