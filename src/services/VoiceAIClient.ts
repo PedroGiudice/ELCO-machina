@@ -389,23 +389,8 @@ export async function ensureSidecarRunning(): Promise<boolean> {
   return await client.isAvailable();
 }
 
-/**
- * Para o sidecar - no-op para servidor remoto
- */
-export async function stopSidecar(): Promise<void> {
-  // Servidor remoto - nao gerenciado pelo cliente
-}
-
-/**
- * Verifica status do servidor via health check HTTP
- */
-export async function getSidecarStatus(): Promise<boolean> {
-  const client = getVoiceAIClient();
-  return await client.isAvailable();
-}
-
 // ============================================================
-// Singleton e Hook
+// Singleton
 // ============================================================
 
 // Instancia singleton para uso global
@@ -449,20 +434,3 @@ export function getVoiceAIClient(): VoiceAIClient {
   return clientInstance;
 }
 
-/**
- * Hook para uso em componentes React
- * Verifica disponibilidade do sidecar e fornece metodos de transcricao
- */
-export function useVoiceAI() {
-  const client = getVoiceAIClient();
-
-  return {
-    client,
-    transcribe: client.transcribe.bind(client),
-    health: client.health.bind(client),
-    isAvailable: client.isAvailable.bind(client),
-    getStatus: client.getStatus.bind(client),
-    blobToBase64: VoiceAIClient.blobToBase64,
-    getFormatFromMimeType: VoiceAIClient.getFormatFromMimeType,
-  };
-}

@@ -4,30 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 // TYPES
 // ============================================================================
 
-export type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
-export type TranscriptionMode = 'auto' | 'local' | 'cloud';
-export type OutputLanguage = 'English' | 'Portuguese' | 'Spanish';
+import type { OutputStyle, TranscriptionMode, FontStyle, OutputLanguage } from '../types';
+export type { OutputStyle, TranscriptionMode, FontStyle, OutputLanguage };
 export type SttBackend = 'vm' | 'modal';
-
-export type OutputStyle =
-  | 'Whisper Only'
-  | 'Verbatim'
-  | 'Elegant Prose'
-  | 'Ana Suy'
-  | 'Poetic / Verses'
-  | 'Normal'
-  | 'Verbose'
-  | 'Concise'
-  | 'Formal'
-  | 'Prompt (Claude)'
-  | 'Prompt (LLM)'
-  | 'Bullet Points'
-  | 'Summary'
-  | 'Tech Docs'
-  | 'Email'
-  | 'Tweet Thread'
-  | 'Code Generator'
-  | 'Custom';
 
 export interface UseSettingsReturn {
   // Theme

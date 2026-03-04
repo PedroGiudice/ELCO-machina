@@ -1,20 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 // --- TYPES ---
 
-export type RecordingStyle = 'Dictation' | 'Interview';
-
-export type AudioMetrics = {
-  duration: number;
-  sampleRate: number;
-  channels: number;
-  rmsDB: number;
-  peakDB: number;
-  silenceRatio: number;
-  zeroCrossingRate: number;
-  avgPitchHz: number;
-  clarityScore: number;
-};
+import type { AudioMetrics, RecordingStyle } from '../types';
+export type { AudioMetrics, RecordingStyle };
 
 export interface UseAudioRecordingReturn {
   // State
@@ -41,7 +30,7 @@ export interface UseAudioRecordingReturn {
   // Actions
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleFileUpload: () => void;
   clearAudio: () => void;
   setAudioBlob: (blob: Blob | null) => void;
 }
@@ -380,16 +369,37 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
     }
   }, [isNativeRecording, mediaRecorder, addLog]);
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setUploadError("Max 10MB");
+  const handleFileUpload = useCallback(async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const { readFile } = await import('@tauri-apps/plugin-fs');
+
+      const filePath = await open({
+        filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'webm', 'ogg', 'm4a', 'flac'] }],
+        multiple: false,
+      });
+
+      if (!filePath || typeof filePath !== 'string') return;
+
+      const data = await readFile(filePath);
+      if (data.byteLength > 10 * 1024 * 1024) {
+        setUploadError('Max 10MB');
         return;
       }
+
+      const ext = filePath.split('.').pop()?.toLowerCase() || 'wav';
+      const mimeMap: Record<string, string> = {
+        mp3: 'audio/mpeg', wav: 'audio/wav', webm: 'audio/webm',
+        ogg: 'audio/ogg', m4a: 'audio/mp4', flac: 'audio/flac',
+      };
+      const blob = new Blob([data], { type: mimeMap[ext] || 'audio/wav' });
       setUploadError(null);
-      setAudioBlob(file);
-      addLog(`Arquivo carregado: ${file.name}`, 'success', 'audio');
+      setAudioBlob(blob);
+      const fileName = filePath.split('/').pop() || filePath;
+      addLog(`Arquivo carregado: ${fileName}`, 'success', 'audio');
+    } catch (e) {
+      console.error('File upload failed:', e);
+      setUploadError('Erro ao abrir arquivo');
     }
   }, [addLog]);
 

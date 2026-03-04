@@ -1,19 +1,7 @@
 import * as React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { Activity, Mic, Volume2, Sparkles, Radio, Box } from 'lucide-react';
-import type { LogEntry, LogCategory } from '../../types';
-
-type AudioMetrics = {
-  duration: number;
-  sampleRate: number;
-  channels: number;
-  rmsDB: number;
-  peakDB: number;
-  silenceRatio: number;
-  zeroCrossingRate: number;
-  avgPitchHz: number;
-  clarityScore: number;
-};
+import type { LogEntry, LogCategory, AudioMetrics } from '../../types';
 
 interface PanelStatsProps {
   logs: LogEntry[];

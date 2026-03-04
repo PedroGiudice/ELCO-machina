@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { safeFetch } from '../services/safeFetch';
 
 // ============================================================================
 // TYPES
@@ -120,7 +121,7 @@ export function useUpdater(): UseUpdaterReturn {
         const localVersion = await getVersion();
         console.log(`[Updater-Android] Versao local: ${localVersion}`);
 
-        const resp = await fetch(ANDROID_UPDATE_URL);
+        const resp = await safeFetch(ANDROID_UPDATE_URL);
         if (!resp.ok) {
           console.log(`[Updater-Android] Servidor retornou ${resp.status}`);
           setUpdateStatus('idle');

@@ -81,12 +81,6 @@ export type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
 export type TranscriptionMode = 'auto' | 'local' | 'cloud';
 export type OutputLanguage = 'English' | 'Portuguese' | 'Spanish';
 
-export type AppTheme = {
-  bg: string;
-  text: string;
-  accent: string;
-};
-
 // ============================================================================
 // TTS (XTTS v2)
 // ============================================================================

@@ -13,7 +13,7 @@ interface PanelATTProps {
 
   // Audio
   audioBlob: Blob | null;
-  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onFileUpload: () => void;
   uploadError?: string | null;
 
   // Recording Config
@@ -224,20 +224,15 @@ export function PanelATT({
         <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
           Importar Arquivo
         </label>
-        <label className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group">
+        <button
+          onClick={onFileUpload}
+          className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group"
+        >
           <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] truncate max-w-[180px]">
-            {audioBlob && 'name' in audioBlob
-              ? (audioBlob as File).name
-              : 'Selecione MP3, WAV...'}
+            {audioBlob ? `${(audioBlob.size / 1024).toFixed(1)} KB` : 'Selecione MP3, WAV...'}
           </span>
           <ChevronRight className="w-3 h-3 text-[var(--text-secondary)]" />
-          <input
-            type="file"
-            className="hidden"
-            accept="audio/*"
-            onChange={onFileUpload}
-          />
-        </label>
+        </button>
         {uploadError && (
           <p className="text-[10px] text-red-400 pl-1">{uploadError}</p>
         )}

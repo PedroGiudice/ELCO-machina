@@ -387,20 +387,44 @@ export default function App() {
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
             mediaRecorder.stop();
             setIsRecording(false);
-            persistence.addLog("Recording captured.", "success");
+            persistence.addLog("Gravacao capturada.", "success");
         }
     }, [isNativeRecording, mediaRecorder, audioStream, persistence]);
 
-    const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 10 * 1024 * 1024) {
+    const handleFileUpload = useCallback(async () => {
+        try {
+            const { open } = await import("@tauri-apps/plugin-dialog");
+            const { readFile } = await import("@tauri-apps/plugin-fs");
+
+            const filePath = await open({
+                filters: [{ name: "Audio", extensions: ["mp3", "wav", "webm", "ogg", "m4a", "flac"] }],
+                multiple: false,
+            });
+
+            if (!filePath || typeof filePath !== "string") return;
+
+            const data = await readFile(filePath);
+            if (data.byteLength > 10 * 1024 * 1024) {
                 setUploadError("Max 10MB");
                 return;
             }
+
+            // Detectar MIME type pelo nome do arquivo
+            const ext = filePath.split(".").pop()?.toLowerCase() || "wav";
+            const mimeMap: Record<string, string> = {
+                mp3: "audio/mpeg", wav: "audio/wav", webm: "audio/webm",
+                ogg: "audio/ogg", m4a: "audio/mp4", flac: "audio/flac",
+            };
+            const mime = mimeMap[ext] || "audio/wav";
+
+            const blob = new Blob([data], { type: mime });
             setUploadError(null);
-            setAudioBlob(file);
-            persistence.addLog(`Loaded: ${file.name}`, "success");
+            setAudioBlob(blob);
+            const fileName = filePath.split("/").pop() || filePath;
+            persistence.addLog(`Arquivo carregado: ${fileName}`, "success");
+        } catch (e) {
+            console.error("File upload failed:", e);
+            setUploadError("Erro ao abrir arquivo");
         }
     }, [persistence]);
 
@@ -602,9 +626,15 @@ export default function App() {
                             persistence.saveAudioToDB(null);
                             setAudioBlob(null);
                         }}
-                        onCopy={() => {
-                            navigator.clipboard.writeText(processing.transcription);
-                            persistence.addLog("Copied", "success");
+                        onCopy={async () => {
+                            try {
+                                const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+                                await writeText(processing.transcription);
+                            } catch {
+                                // Fallback para ambientes sem o plugin
+                                await navigator.clipboard.writeText(processing.transcription);
+                            }
+                            persistence.addLog("Copiado", "success");
                         }}
                         onExportTxt={() => handleDownloadText("txt")}
                         onExportMd={() => handleDownloadText("md")}

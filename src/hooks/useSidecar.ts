@@ -4,6 +4,7 @@ import {
   setVoiceAIUrl,
   getVoiceAIClient,
 } from '../services/VoiceAIClient';
+import { safeFetch } from '../services/safeFetch';
 
 // ============================================================================
 // TYPES
@@ -109,7 +110,7 @@ export function useSidecar(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${url}/health`, {
+      const response = await safeFetch(`${url}/health`, {
         method: 'GET',
         signal: controller.signal,
       });
