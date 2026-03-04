@@ -29,6 +29,8 @@ interface PanelStatsProps {
   aiModel: string;
   hasApiKey: boolean;
   audioMetrics: AudioMetrics | null;
+  ttsEngine: string;
+  ttsProfile: string;
   isRecording: boolean;
   isProcessing: boolean;
   selectedMicLabel: string;
@@ -79,7 +81,7 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LogLine({ entry }: { entry: LogEntry }) {
+const LogLine: React.FC<{ entry: LogEntry }> = ({ entry }) => {
   const time = entry.time
     ? entry.time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '--:--:--';
@@ -96,7 +98,7 @@ function LogLine({ entry }: { entry: LogEntry }) {
       <span className={`${typeColors[entry.type]} break-all`}>{entry.msg}</span>
     </div>
   );
-}
+};
 
 export function PanelStats({
   logs,
@@ -107,6 +109,8 @@ export function PanelStats({
   aiModel,
   hasApiKey,
   audioMetrics,
+  ttsEngine,
+  ttsProfile,
   isRecording,
   isProcessing,
   selectedMicLabel,
@@ -185,6 +189,8 @@ export function PanelStats({
 
           {/* TTS */}
           <ServiceCard icon={Volume2} label="TTS" status={ttsStatus}>
+            <InfoLine label="Motor" value={ttsEngine} />
+            <InfoLine label="Perfil" value={ttsProfile} />
             <InfoLine label="Falando" value={isSpeaking ? 'sim' : 'nao'} />
             {!sidecarAvailable && !isSpeaking && (
               <InfoLine label="Nota" value="health check pendente" />

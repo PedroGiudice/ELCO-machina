@@ -660,6 +660,14 @@ export default function App() {
                         hasText={!!processing.transcription}
                         onReadText={handleReadText}
                         onStopReading={tts.stopReading}
+                        ttsEngine={tts.ttsEngine}
+                        onEngineChange={tts.setTtsEngine}
+                        ttsProfile={tts.ttsProfile}
+                        onProfileChange={tts.setTtsProfile}
+                        ttsCustomParams={tts.ttsCustomParams}
+                        onCustomParamsChange={tts.setTtsCustomParams}
+                        voiceRefAudio={tts.voiceRefAudio}
+                        onVoiceRefChange={tts.setVoiceRefAudio}
                     />
                 }
                 panelConfig={
@@ -702,6 +710,8 @@ export default function App() {
                         aiModel={settings.aiModel}
                         hasApiKey={!!persistence.apiKey}
                         audioMetrics={null}
+                        ttsEngine={tts.ttsEngine}
+                        ttsProfile={tts.ttsProfile}
                         isRecording={isRecording}
                         isProcessing={processing.isProcessing}
                         selectedMicLabel={

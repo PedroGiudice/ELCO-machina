@@ -84,7 +84,7 @@ export function PromptManagerModal({
 
   if (!isOpen) return null;
 
-  const TemplateRow = ({ t, showDelete }: { t: PromptTemplate; showDelete: boolean }) => (
+  const TemplateRow: React.FC<{ t: PromptTemplate; showDelete: boolean }> = ({ t, showDelete }) => (
     <div className="flex items-center justify-between py-2 px-3 hover:bg-white/5 rounded transition-colors group">
       <div className="flex-1 min-w-0">
         <span className="text-xs text-white/80 truncate block">{t.name}</span>
