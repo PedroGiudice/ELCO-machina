@@ -82,7 +82,7 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LogLine({ entry }: { entry: LogEntry }) {
+function LogLine({ entry }: { key?: number; entry: LogEntry }) {
   const time = entry.time
     ? entry.time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '--:--:--';

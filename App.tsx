@@ -206,6 +206,7 @@ export default function App() {
         aiModel: settings.aiModel,
         recordingStyle,
         customStylePrompt: settings.customStylePrompt,
+        sttBackend: settings.sttBackend,
         activeContext: persistence.activeContext,
         contextMemory: persistence.contextMemory,
         selectedTemplate,
@@ -693,6 +694,8 @@ export default function App() {
                         onAutoGainControlChange={setAutoGainControl}
                         aiModel={settings.aiModel}
                         onAiModelChange={settings.setAiModel}
+                        sttBackend={settings.sttBackend}
+                        onSttBackendChange={settings.setSttBackend}
                         transcriptionMode={settings.transcriptionMode}
                         onTranscriptionModeChange={settings.setTranscriptionMode}
                         sidecarAvailable={sidecar.sidecarAvailable}

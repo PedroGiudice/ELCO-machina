@@ -49,6 +49,10 @@ interface PanelConfigProps {
     sidecarAvailable: boolean;
     sidecarStatus: string;
 
+    // STT Backend
+    sttBackend: "vm" | "modal";
+    onSttBackendChange: (backend: "vm" | "modal") => void;
+
     // Whisper Server
     whisperServerUrl: string;
     onWhisperServerUrlChange: (url: string) => void;
@@ -61,6 +65,11 @@ const aiModels = [
     { id: "haiku", label: "Haiku", desc: "Fastest" },
     { id: "sonnet", label: "Sonnet", desc: "Balanced" },
     { id: "opus", label: "Opus", desc: "Max Quality" },
+];
+
+const sttBackends = [
+    { id: "vm" as const, label: "VM", desc: "whisper.cpp CPU" },
+    { id: "modal" as const, label: "Modal", desc: "faster-whisper GPU" },
 ];
 
 const transcriptionModes = [
@@ -89,6 +98,8 @@ export function PanelConfig({
     onAutoGainControlChange,
     aiModel,
     onAiModelChange,
+    sttBackend,
+    onSttBackendChange,
     transcriptionMode,
     onTranscriptionModeChange,
     sidecarAvailable,
@@ -305,6 +316,37 @@ export function PanelConfig({
                     <p className="text-[9px] text-[var(--text-secondary)] mt-2">
                         Status: {sidecarStatus}
                     </p>
+                </div>
+
+                {/* STT Backend */}
+                <div>
+                    <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
+                        STT Backend
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {sttBackends.map((backend) => (
+                            <motion.button
+                                key={backend.id}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => onSttBackendChange(backend.id)}
+                                className={`
+                  flex flex-col items-start p-3 rounded-[var(--radius-sm)] border transition-all text-left
+                  ${
+                      sttBackend === backend.id
+                          ? "bg-[var(--accent-dim)] border-[var(--accent)]"
+                          : "bg-[var(--bg-overlay)] border-[var(--border-subtle)] opacity-60 hover:opacity-100"
+                  }
+                `}
+                            >
+                                <span className="text-xs font-bold">
+                                    {backend.label}
+                                </span>
+                                <span className="text-[9px] text-[var(--text-secondary)]">
+                                    {backend.desc}
+                                </span>
+                            </motion.button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Whisper Server URL */}

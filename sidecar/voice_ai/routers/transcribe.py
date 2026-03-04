@@ -5,6 +5,7 @@ POST /transcribe: Transcreve audio para texto
 """
 import asyncio
 import logging
+from types import SimpleNamespace
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -53,6 +54,10 @@ class TranscribeRequest(BaseModel):
         ge=0.0,
         le=2.0,
         description="Temperatura de geracao para refinamento (0.0 - 2.0)",
+    )
+    stt_backend: Literal["vm", "modal"] = Field(
+        default="vm",
+        description="Backend STT: 'vm' (whisper.cpp local) ou 'modal' (faster-whisper GPU)",
     )
 
 
@@ -139,25 +144,43 @@ async def transcribe_audio(
     Returns:
         Transcricao com texto bruto, refinado (opcional) e metadados
     """
-    # Obtem servico STT injetado
+    # Obtem servicos STT injetados
     stt_service = getattr(request.state, "stt_service", None)
 
-    if not stt_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Servico STT nao disponivel",
-        )
-
     try:
-        # 1. Transcreve com Whisper (CPU-bound, roda em thread separada
-        #    para nao bloquear o event loop durante inferencia ~2-5s)
-        result = await asyncio.to_thread(
-            stt_service.transcribe,
-            audio_base64=body.audio,
-            format=body.format,
-            language=body.language,
-            model=body.stt_model,
-        )
+        # 1. Transcreve com backend escolhido pelo usuario
+        if body.stt_backend == "modal":
+            # Modal: faster-whisper GPU (T4)
+            stt_modal = getattr(request.state, "stt_modal_client", None)
+            if not stt_modal or not stt_modal.is_available:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Modal STT nao disponivel (credenciais ou SDK ausentes)",
+                )
+            logger.info("STT via Modal (faster-whisper GPU)")
+            raw = await asyncio.to_thread(
+                stt_modal.transcribe,
+                audio_base64=body.audio,
+                format=body.format,
+                language=body.language,
+            )
+            # raw e dict, converter para objeto com atributos
+            result = SimpleNamespace(**raw)
+        else:
+            # VM: whisper.cpp CLI (default)
+            if not stt_service:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Servico STT nao disponivel",
+                )
+            logger.info("STT via VM (whisper.cpp CLI)")
+            result = await asyncio.to_thread(
+                stt_service.transcribe,
+                audio_base64=body.audio,
+                format=body.format,
+                language=body.language,
+                model=body.stt_model,
+            )
 
         # Prepara resposta base
         response = TranscribeResponse(
