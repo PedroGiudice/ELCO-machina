@@ -24,8 +24,7 @@ interface PanelStatsProps {
   logs: LogEntry[];
   sidecarAvailable: boolean;
   sidecarStatus: string;
-  whisperServerUrl: string;
-  transcriptionMode: 'auto' | 'local' | 'cloud';
+  sttBackend: 'vm' | 'modal';
   ttsEngine: 'piper' | 'chatterbox';
   ttsProfile: string;
   isSpeaking: boolean;
@@ -82,7 +81,7 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LogLine({ entry }: { key?: number; entry: LogEntry }) {
+function LogLine({ entry }: { entry: LogEntry }) {
   const time = entry.time
     ? entry.time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '--:--:--';
@@ -105,8 +104,7 @@ export function PanelStats({
   logs,
   sidecarAvailable,
   sidecarStatus,
-  whisperServerUrl,
-  transcriptionMode,
+  sttBackend,
   ttsEngine,
   ttsProfile,
   isSpeaking,
@@ -176,13 +174,17 @@ export function PanelStats({
           <ServiceCard icon={Mic} label="STT" status={sttStatus}>
             <InfoLine
               label="Engine"
-              value={sidecarAvailable ? 'Whisper' : 'Offline'}
+              value={
+                sttBackend === 'modal'
+                  ? 'faster-whisper large-v3-turbo (GPU)'
+                  : 'whisper.cpp small (CPU)'
+              }
             />
-            <InfoLine label="Mode" value={transcriptionMode} />
-            <InfoLine label="Status" value={sidecarStatus} />
-            {whisperServerUrl && (
-              <InfoLine label="Server" value={whisperServerUrl.replace(/^https?:\/\//, '')} />
-            )}
+            <InfoLine
+              label="Backend"
+              value={sttBackend === 'modal' ? 'Modal' : 'VM'}
+            />
+            <InfoLine label="Status" value={sidecarAvailable ? 'online' : 'offline'} />
           </ServiceCard>
 
           {/* TTS */}
@@ -217,7 +219,7 @@ export function PanelStats({
           {/* App */}
           <ServiceCard icon={Box} label="App" status="healthy">
             <InfoLine label="Version" value={`v${appVersion}`} />
-            <InfoLine label="Trans. Mode" value={transcriptionMode} />
+            <InfoLine label="STT" value={sttBackend === 'modal' ? 'Modal (GPU)' : 'VM (CPU)'} />
             <InfoLine label="Processing" value={isProcessing ? 'sim' : 'nao'} />
           </ServiceCard>
         </div>

@@ -696,15 +696,6 @@ export default function App() {
                         onAiModelChange={settings.setAiModel}
                         sttBackend={settings.sttBackend}
                         onSttBackendChange={settings.setSttBackend}
-                        transcriptionMode={settings.transcriptionMode}
-                        onTranscriptionModeChange={settings.setTranscriptionMode}
-                        sidecarAvailable={sidecar.sidecarAvailable}
-                        sidecarStatus={sidecar.sidecarStatus}
-                        whisperServerUrl={sidecar.whisperServerUrl}
-                        onWhisperServerUrlChange={sidecar.setWhisperServerUrl}
-                        onTestWhisperServer={sidecar.testWhisperServer}
-                        whisperTestStatus={sidecar.whisperTestStatus}
-                        whisperTestMessage={sidecar.whisperTestMessage}
                     />
                 }
                 panelStats={
@@ -712,8 +703,7 @@ export default function App() {
                         logs={persistence.logs}
                         sidecarAvailable={sidecar.sidecarAvailable}
                         sidecarStatus={sidecar.sidecarStatus}
-                        whisperServerUrl={sidecar.whisperServerUrl}
-                        transcriptionMode={settings.transcriptionMode}
+                        sttBackend={settings.sttBackend}
                         ttsEngine={tts.ttsEngine}
                         ttsProfile={tts.ttsProfile}
                         isSpeaking={tts.isSpeaking}

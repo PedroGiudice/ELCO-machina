@@ -8,7 +8,6 @@ import {
     Eye,
     EyeOff,
     ChevronRight,
-    Loader2,
     LogOut,
 } from "lucide-react";
 import { Button } from "../ui/Button";
@@ -43,22 +42,9 @@ interface PanelConfigProps {
     aiModel: string;
     onAiModelChange: (model: string) => void;
 
-    // Transcription Mode
-    transcriptionMode: "auto" | "local" | "cloud";
-    onTranscriptionModeChange: (mode: "auto" | "local" | "cloud") => void;
-    sidecarAvailable: boolean;
-    sidecarStatus: string;
-
     // STT Backend
     sttBackend: "vm" | "modal";
     onSttBackendChange: (backend: "vm" | "modal") => void;
-
-    // Whisper Server
-    whisperServerUrl: string;
-    onWhisperServerUrlChange: (url: string) => void;
-    onTestWhisperServer: () => void;
-    whisperTestStatus: "idle" | "testing" | "success" | "error";
-    whisperTestMessage: string;
 }
 
 const aiModels = [
@@ -68,14 +54,8 @@ const aiModels = [
 ];
 
 const sttBackends = [
-    { id: "vm" as const, label: "VM", desc: "whisper.cpp CPU" },
-    { id: "modal" as const, label: "Modal", desc: "faster-whisper GPU" },
-];
-
-const transcriptionModes = [
-    { id: "auto" as const, label: "Auto", desc: "Best available" },
-    { id: "local" as const, label: "Local", desc: "Whisper" },
-    { id: "cloud" as const, label: "Cloud", desc: "Claude" },
+    { id: "vm" as const, label: "VM", desc: "whisper.cpp small (CPU, ~80s/min)" },
+    { id: "modal" as const, label: "Modal", desc: "large-v3-turbo (GPU, ~8s/min)" },
 ];
 
 export function PanelConfig({
@@ -100,15 +80,6 @@ export function PanelConfig({
     onAiModelChange,
     sttBackend,
     onSttBackendChange,
-    transcriptionMode,
-    onTranscriptionModeChange,
-    sidecarAvailable,
-    sidecarStatus,
-    whisperServerUrl,
-    onWhisperServerUrlChange,
-    onTestWhisperServer,
-    whisperTestStatus,
-    whisperTestMessage,
 }: PanelConfigProps) {
     return (
         <div className="p-5 space-y-6">
@@ -278,46 +249,6 @@ export function PanelConfig({
                     </div>
                 </div>
 
-                {/* Transcription Engine */}
-                <div>
-                    <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
-                        Transcription Engine
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                        {transcriptionModes.map((mode) => (
-                            <motion.button
-                                key={mode.id}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() =>
-                                    onTranscriptionModeChange(mode.id)
-                                }
-                                disabled={
-                                    mode.id === "local" && !sidecarAvailable
-                                }
-                                className={`
-                  flex flex-col items-start p-3 rounded-[var(--radius-sm)] border transition-all text-left
-                  ${
-                      transcriptionMode === mode.id
-                          ? "bg-[var(--accent-dim)] border-[var(--accent)]"
-                          : "bg-[var(--bg-overlay)] border-[var(--border-subtle)] opacity-60 hover:opacity-100"
-                  }
-                  ${mode.id === "local" && !sidecarAvailable ? "cursor-not-allowed opacity-30" : ""}
-                `}
-                            >
-                                <span className="text-xs font-bold">
-                                    {mode.label}
-                                </span>
-                                <span className="text-[9px] text-[var(--text-secondary)]">
-                                    {mode.desc}
-                                </span>
-                            </motion.button>
-                        ))}
-                    </div>
-                    <p className="text-[9px] text-[var(--text-secondary)] mt-2">
-                        Status: {sidecarStatus}
-                    </p>
-                </div>
-
                 {/* STT Backend */}
                 <div>
                     <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
@@ -349,48 +280,6 @@ export function PanelConfig({
                     </div>
                 </div>
 
-                {/* Whisper Server URL */}
-                <div>
-                    <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
-                        Whisper Server
-                    </label>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={whisperServerUrl}
-                            onChange={(e) =>
-                                onWhisperServerUrlChange(e.target.value)
-                            }
-                            placeholder="http://100.123.73.128:8765"
-                            className="flex-1 px-3 py-2 text-xs bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] focus:outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-                        />
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={onTestWhisperServer}
-                            disabled={whisperTestStatus === "testing"}
-                        >
-                            {whisperTestStatus === "testing" ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                                "Testar"
-                            )}
-                        </Button>
-                    </div>
-                    <p
-                        className={`text-[9px] mt-1.5 ${
-                            whisperTestStatus === "success"
-                                ? "text-green-400"
-                                : whisperTestStatus === "error"
-                                  ? "text-red-400"
-                                  : "text-[var(--text-secondary)]"
-                        }`}
-                    >
-                        {whisperTestStatus === "idle"
-                            ? "Deixe vazio para usar sidecar local"
-                            : whisperTestMessage}
-                    </p>
-                </div>
             </section>
         </div>
     );
