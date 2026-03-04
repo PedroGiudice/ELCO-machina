@@ -67,7 +67,7 @@ export function useSidecar(
           setSidecarStatus(
             `STT (Whisper ${health.models?.whisper?.model || 'medium'})`,
           );
-          log('Voice AI Sidecar conectado', 'success');
+          log('Voice AI Sidecar conectado', 'success', 'ipc');
         } else {
           setSidecarAvailable(false);
           setSidecarStatus('Sidecar offline');
@@ -75,7 +75,7 @@ export function useSidecar(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error('[useSidecar] health check failed:', msg, err);
-        log(`Health check falhou: ${msg}`, 'error');
+        log(`Health check falhou: ${msg}`, 'error', 'ipc');
         setSidecarAvailable(false);
         setSidecarStatus(`Sidecar offline: ${msg}`);
       }

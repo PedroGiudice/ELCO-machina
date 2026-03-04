@@ -149,12 +149,12 @@ export function useTTS(
     const readText = useCallback(
         async (text: string): Promise<void> => {
             if (!text.trim()) {
-                log("Nenhum texto para ler", "error");
+                log("Nenhum texto para ler", "error", "tts");
                 return;
             }
 
             if (!voiceRef?.base64) {
-                log("Audio de referencia necessario para clonagem de voz. Faca upload na aba TTS.", "error");
+                log("Audio de referencia necessario para clonagem de voz. Faca upload na aba TTS.", "error", "tts");
                 return;
             }
 
@@ -171,7 +171,7 @@ export function useTTS(
             setIsSpeaking(true);
             setTtsStatus("cold_start");
             setStatusMessage("Sintetizando via XTTS v2 (GPU). Primeira chamada pode levar 40-70s (cold start)...");
-            log("Sintetizando via XTTS v2 (GPU). Primeira chamada pode demorar...", "info");
+            log("Sintetizando via XTTS v2 (GPU). Primeira chamada pode demorar...", "info", "tts");
 
             try {
                 const requestBody: TTSSynthesizeRequest = {
@@ -227,7 +227,7 @@ export function useTTS(
                 const inferenceTime = response.headers.get("X-Inference-Time");
                 const audioDuration = response.headers.get("X-Audio-Duration");
                 if (inferenceTime && audioDuration) {
-                    log(`Inferencia: ${inferenceTime}s, duracao audio: ${audioDuration}s`, "info");
+                    log(`Inferencia: ${inferenceTime}s, duracao audio: ${audioDuration}s`, "info", "tts");
                 }
 
                 // Play audio
@@ -241,18 +241,18 @@ export function useTTS(
                     setIsSpeaking(false);
                     setTtsStatus("idle");
                     setStatusMessage(null);
-                    log("Leitura concluida", "success");
+                    log("Leitura concluida", "success", "tts");
                 };
 
                 audio.onerror = () => {
                     setIsSpeaking(false);
                     setTtsStatus("error");
                     setStatusMessage("Erro ao reproduzir audio");
-                    log("Erro ao reproduzir audio.", "error");
+                    log("Erro ao reproduzir audio.", "error", "tts");
                 };
 
                 await audio.play();
-                log("Reproduzindo...", "success");
+                log("Reproduzindo...", "success", "tts");
             } catch (err: unknown) {
                 let errorMessage = "Erro desconhecido";
 
@@ -270,7 +270,7 @@ export function useTTS(
                 }
 
                 console.error("TTS Error:", err);
-                log(`Erro TTS: ${errorMessage}`, "error");
+                log(`Erro TTS: ${errorMessage}`, "error", "tts");
                 setIsSpeaking(false);
                 setTtsStatus("error");
                 setStatusMessage(errorMessage);
@@ -295,7 +295,7 @@ export function useTTS(
         setIsSpeaking(false);
         setTtsStatus("idle");
         setStatusMessage(null);
-        log("Leitura interrompida", "info");
+        log("Leitura interrompida", "info", "tts");
     }, [log]);
 
     return {

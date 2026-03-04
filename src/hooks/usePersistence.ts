@@ -441,7 +441,7 @@ export function usePersistence(): UsePersistenceReturn {
             const pools = JSON.parse(lsPools) as string[];
             const memory = JSON.parse(lsMemory) as Record<string, string>;
 
-            addLog('Migrating data to secure storage...', 'info');
+            addLog('Migrando dados para armazenamento seguro...', 'info', 'app');
 
             for (const name of pools) {
               const mem = memory[name] || '';
@@ -449,7 +449,7 @@ export function usePersistence(): UsePersistenceReturn {
               initialMemory[name] = mem;
               initialPools.push(name);
             }
-            addLog('Data migration complete.', 'success');
+            addLog('Migracao de dados concluida.', 'success', 'app');
           } catch (e) {
             console.error('Migration failed', e);
           }
@@ -506,7 +506,7 @@ export function usePersistence(): UsePersistenceReturn {
       setContextMemory((prev) => ({ ...prev, [name]: '' }));
 
       await saveContextToDB({ name, memory: '', lastUpdated: Date.now() });
-      addLog(`Context '${name}' created & persisted.`, 'success');
+      addLog(`Contexto '${name}' criado e persistido.`, 'success', 'app');
     }
   }, [contextPools, addLog]);
 
@@ -529,7 +529,7 @@ export function usePersistence(): UsePersistenceReturn {
 
     setIsSavingContext(false);
     setIsMemoryModalOpen(false);
-    addLog('Context memory saved to secure storage.', 'success');
+    addLog('Memoria de contexto salva no armazenamento seguro.', 'success', 'app');
   }, [tempMemoryEdit, activeContext, addLog]);
 
   const saveApiKeyFn = useCallback(async (key: string) => {

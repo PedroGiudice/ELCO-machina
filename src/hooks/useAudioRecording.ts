@@ -232,16 +232,16 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
       }
 
       // Analyze audio
-      addLog("Analyzing audio signal...", 'info');
+      addLog("Analisando sinal de audio...", 'info', 'audio');
       analyzeAudioContent(audioBlob).then(metrics => {
         setAudioMetrics(metrics);
-        addLog("Audio analysis complete.", 'success');
+        addLog("Analise de audio concluida.", 'success', 'audio');
         if (onAudioAnalyzed) {
           onAudioAnalyzed(metrics);
         }
       }).catch(err => {
         console.error("Analysis failed", err);
-        addLog("Audio analysis failed.", 'error');
+        addLog("Falha na analise de audio.", 'error', 'audio');
       });
     } else if (audioBlob === null && !isRecording) {
       // If cleared
@@ -264,7 +264,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
         setIsRecording(true);
         setRecordingStartTime(Date.now());
         setAudioBlob(null);
-        addLog("Gravacao iniciada (nativo)", 'info');
+        addLog("Gravacao iniciada (nativo)", 'info', 'audio');
         return;
       } catch (e: unknown) {
         const errorMsg = e instanceof Error ? e.message : String(e);
@@ -272,12 +272,12 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
 
         // Se o erro indica ausência de dispositivo de audio, mostrar mensagem específica
         if (errorMsg.includes('NoDevice') || errorMsg.includes('no device') || errorMsg.includes('not available')) {
-          addLog("Nenhum microfone detectado no sistema.", 'error');
+          addLog("Nenhum microfone detectado no sistema.", 'error', 'audio');
           return;
         }
 
         // Tentar fallback Web API apenas se o erro não foi de dispositivo
-        addLog("Plugin nativo falhou, tentando Web API...", 'info');
+        addLog("Plugin nativo falhou, tentando Web API...", 'info', 'audio');
       }
     }
 
@@ -287,7 +287,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
     try {
       // Verificar se mediaDevices está disponível
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        addLog("API de midia nao disponivel neste ambiente.", 'error');
+        addLog("API de midia nao disponivel neste ambiente.", 'error', 'audio');
         return;
       }
 
@@ -327,7 +327,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
       setIsRecording(true);
       setRecordingStartTime(Date.now());
       setAudioBlob(null);
-      addLog("Gravacao iniciada (Web API)", 'info');
+      addLog("Gravacao iniciada (Web API)", 'info', 'audio');
     } catch (err: unknown) {
       console.error('getUserMedia error:', err);
       const errorName = err instanceof Error ? err.name : 'Unknown';
@@ -335,11 +335,11 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
 
       if (errorName === 'NotAllowedError') {
         // Erro específico do WebKit2GTK no Linux - permissão negada automaticamente
-        addLog("Permissao de microfone negada. No Linux, use o botao de upload de arquivo como alternativa.", 'error');
+        addLog("Permissao de microfone negada. No Linux, use o botao de upload de arquivo como alternativa.", 'error', 'audio');
       } else if (errorName === 'NotFoundError') {
-        addLog("Nenhum microfone encontrado no sistema.", 'error');
+        addLog("Nenhum microfone encontrado no sistema.", 'error', 'audio');
       } else {
-        addLog(`Erro ao acessar microfone: ${errorMsg}`, 'error');
+        addLog(`Erro ao acessar microfone: ${errorMsg}`, 'error', 'audio');
       }
     }
   }, [selectedMicId, echoCancellation, noiseSuppression, autoGainControl, addLog]);
@@ -353,7 +353,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
 
         // stopRecording retorna o caminho do arquivo WAV
         const filePath = await stopNativeRecording();
-        addLog(`Audio salvo em: ${filePath}`, 'info');
+        addLog(`Audio salvo em: ${filePath}`, 'info', 'audio');
 
         // Ler o arquivo WAV e converter para Blob
         const audioData = await readFile(filePath);
@@ -361,11 +361,11 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
         setAudioBlob(blob);
         setIsRecording(false);
         setIsNativeRecording(false);
-        addLog("Gravacao capturada.", 'success');
+        addLog("Gravacao capturada.", 'success', 'audio');
         return;
       } catch (e) {
         console.error('Native stop failed:', e);
-        addLog("Erro ao parar gravacao nativa.", 'error');
+        addLog("Erro ao parar gravacao nativa.", 'error', 'audio');
         setIsRecording(false);
         setIsNativeRecording(false);
         return;
@@ -376,7 +376,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
       setIsRecording(false);
-      addLog("Recording captured.", 'success');
+      addLog("Gravacao capturada.", 'success', 'audio');
     }
   }, [isNativeRecording, mediaRecorder, addLog]);
 
@@ -389,7 +389,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
       }
       setUploadError(null);
       setAudioBlob(file);
-      addLog(`Loaded: ${file.name}`, 'success');
+      addLog(`Arquivo carregado: ${file.name}`, 'success', 'audio');
     }
   }, [addLog]);
 
@@ -398,7 +398,7 @@ export function useAudioRecording(options: UseAudioRecordingOptions = {}): UseAu
     setAudioMetrics(null);
     setUploadError(null);
     setRecordingStartTime(0);
-    addLog("Audio cleared.", 'info');
+    addLog("Audio removido.", 'info', 'audio');
   }, [addLog]);
 
   return {

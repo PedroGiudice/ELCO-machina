@@ -147,8 +147,9 @@ export function useAudioProcessing(
             addLog(
                 "Whisper indisponivel (Tailscale desconectado ou sidecar offline).",
                 "error",
+                "stt",
             );
-            addLog("Conecte o Tailscale para transcrever audio.", "info");
+            addLog("Conecte o Tailscale para transcrever audio.", "info", "stt");
             return;
         }
 
@@ -184,6 +185,7 @@ export function useAudioProcessing(
             addLog(
                 `[1/2] Transcrevendo com Whisper (${sttBackend})...`,
                 "info",
+                "stt",
             );
             const sttStart = performance.now();
 
@@ -201,6 +203,7 @@ export function useAudioProcessing(
             addLog(
                 `[1/2] Transcricao concluida (${sttTime}s)`,
                 "success",
+                "stt",
             );
 
             let finalText = result.text;
@@ -210,6 +213,7 @@ export function useAudioProcessing(
                 addLog(
                     `[2/2] Refinando com Claude (${aiModel})...`,
                     "info",
+                    "refiner",
                 );
                 const refineStart = performance.now();
 
@@ -227,15 +231,17 @@ export function useAudioProcessing(
                     addLog(
                         `[2/2] Refinado com Claude/${refineResult.model_used} (${refineTime}s)`,
                         "success",
+                        "refiner",
                     );
                 } else {
                     addLog(
                         `[2/2] Refinamento falhou: ${refineResult.error}. Usando texto bruto.`,
                         "warning",
+                        "refiner",
                     );
                 }
             } else if (!shouldRefine) {
-                addLog("Whisper Only -- sem refinamento.", "info");
+                addLog("Whisper Only -- sem refinamento.", "info", "stt");
             }
 
             // Adiciona filename se nao presente
@@ -293,11 +299,11 @@ export function useAudioProcessing(
             const mode = shouldRefine
                 ? `Whisper + Claude (${aiModel})`
                 : "Whisper";
-            addLog(`Processo finalizado via ${mode}.`, "success");
+            addLog(`Processo finalizado via ${mode}.`, "success", "app");
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             console.error(err);
-            addLog(`Erro no processamento: ${message}`, "error");
+            addLog(`Erro no processamento: ${message}`, "error", "app");
         } finally {
             await releaseWakeLock(wakeLock);
             setIsProcessing(false);
@@ -327,12 +333,12 @@ export function useAudioProcessing(
         if (!transcription.trim()) return;
 
         if (!sidecarAvailable || !voiceAIClient) {
-            addLog("Sidecar indisponivel para refinamento.", "error");
+            addLog("Sidecar indisponivel para refinamento.", "error", "ipc");
             return;
         }
 
         if (!selectedTemplate || selectedTemplate.name === 'Whisper Only') {
-            addLog("Selecione um template de refinamento (nao Whisper Only).", "warning");
+            addLog("Selecione um template de refinamento (nao Whisper Only).", "warning", "refiner");
             return;
         }
 
@@ -346,7 +352,7 @@ export function useAudioProcessing(
         );
 
         setIsRefining(true);
-        addLog(`Refinando com Claude (${aiModel})...`, "info");
+        addLog(`Refinando com Claude (${aiModel})...`, "info", "refiner");
         const refineStart = performance.now();
 
         try {
@@ -364,16 +370,18 @@ export function useAudioProcessing(
                 addLog(
                     `Refinado com Claude/${result.model_used} (${refineTime}s)`,
                     "success",
+                    "refiner",
                 );
             } else {
                 addLog(
                     `Refinamento falhou: ${result.error}`,
                     "error",
+                    "refiner",
                 );
             }
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
-            addLog(`Erro no refinamento: ${message}`, "error");
+            addLog(`Erro no refinamento: ${message}`, "error", "refiner");
         } finally {
             setIsRefining(false);
         }
