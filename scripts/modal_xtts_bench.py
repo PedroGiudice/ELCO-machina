@@ -246,9 +246,13 @@ def main(
         length_penalty=length_penalty,
     )
     wall = time.time() - t0
+    model_load = float(result['model_load_s'])
+    inference = float(result['inference_s'])
+    container_overhead = wall - model_load - inference
     print(f"  Wall time:     {wall:.1f}s")
-    print(f"  Model load:    {result['model_load_s']}s")
-    print(f"  Inference:     {result['inference_s']}s")
+    print(f"  Container overhead: {container_overhead:.1f}s (image load + startup)")
+    print(f"  Model load:    {model_load:.1f}s")
+    print(f"  Inference:     {inference:.1f}s")
     print(f"  Audio duration:{result['duration_s']}s")
     print(f"  Text length:   {result['text_len']} chars")
 
