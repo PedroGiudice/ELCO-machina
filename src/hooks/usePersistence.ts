@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { LogEntry, LogCategory } from '../types';
 
 // ============================================================================
 // TYPES
@@ -346,8 +347,8 @@ export interface UsePersistenceReturn {
   saveContextToDB: (item: ContextItem) => Promise<void>;
 
   // Logs
-  logs: { msg: string; type: 'info' | 'success' | 'error'; time?: Date }[];
-  addLog: (msg: string, type: 'info' | 'success' | 'error') => void;
+  logs: LogEntry[];
+  addLog: (msg: string, type: 'info' | 'success' | 'error' | 'warning', category?: LogCategory) => void;
 }
 
 // ============================================================================
@@ -356,11 +357,11 @@ export interface UsePersistenceReturn {
 
 export function usePersistence(): UsePersistenceReturn {
   // Logs
-  const [logs, setLogs] = useState<{ msg: string; type: 'info' | 'success' | 'error'; time?: Date }[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   const addLog = useCallback(
-    (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
-      setLogs((prev) => [...prev.slice(-49), { msg, type, time: new Date() }]);
+    (msg: string, type: 'info' | 'success' | 'error' | 'warning' = 'info', category: LogCategory = 'app') => {
+      setLogs((prev) => [...prev.slice(-99), { msg, type, category, time: new Date() }]);
     },
     [],
   );

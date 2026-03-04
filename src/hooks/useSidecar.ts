@@ -30,10 +30,10 @@ export interface UseSidecarReturn {
 // ============================================================================
 
 export function useSidecar(
-  addLog?: (msg: string, type: 'info' | 'success' | 'error') => void,
+  addLog?: (msg: string, type: 'info' | 'success' | 'error' | 'warning', category?: string) => void,
 ): UseSidecarReturn {
-  const log = (msg: string, type: 'info' | 'success' | 'error') => {
-    if (addLog) addLog(msg, type);
+  const log = (msg: string, type: 'info' | 'success' | 'error' | 'warning', category?: string) => {
+    if (addLog) addLog(msg, type, category);
     else console.log(`[Sidecar ${type}]`, msg);
   };
   const [sidecarAvailable, setSidecarAvailable] = useState<boolean>(false);

@@ -80,12 +80,12 @@ async function fileToBase64(path: string): Promise<string> {
 // ============================================================================
 
 export function useTTS(
-    addLog?: (msg: string, type: "info" | "success" | "error") => void,
+    addLog?: (msg: string, type: "info" | "success" | "error" | "warning", category?: string) => void,
 ): UseTTSReturn {
     const log = useCallback(
-        (msg: string, type: "info" | "success" | "error") => {
+        (msg: string, type: "info" | "success" | "error" | "warning", category?: string) => {
             if (addLog) {
-                addLog(msg, type);
+                addLog(msg, type, category);
             } else {
                 console.log(`[TTS ${type}]`, msg);
             }

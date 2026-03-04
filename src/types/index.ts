@@ -128,8 +128,11 @@ export type WhisperTestStatus = 'idle' | 'testing' | 'success' | 'error';
 // Log
 // ============================================================================
 
+export type LogCategory = 'stt' | 'tts' | 'refiner' | 'audio' | 'app' | 'ipc';
+
 export type LogEntry = {
   msg: string;
-  type: 'info' | 'success' | 'error';
-  time?: Date;
+  type: 'info' | 'success' | 'error' | 'warning';
+  category: LogCategory;
+  time: Date;
 };
