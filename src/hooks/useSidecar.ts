@@ -5,6 +5,7 @@ import {
   getVoiceAIClient,
 } from '../services/VoiceAIClient';
 import { safeFetch } from '../services/safeFetch';
+import { migrateKey, storeSet } from '../services/TauriStore';
 
 // ============================================================================
 // TYPES
@@ -41,15 +42,20 @@ export function useSidecar(
   const [sidecarStatus, setSidecarStatus] = useState<string>('checking');
   const clientRef = useRef<VoiceAIClient | null>(null);
 
-  const [whisperServerUrl, setWhisperServerUrl] = useState<string>(() => {
-    return localStorage.getItem('whisper_server_url') || 'http://100.123.73.128:8765';
-  });
+  const [whisperServerUrl, setWhisperServerUrl] = useState<string>('http://100.123.73.128:8765');
   const [whisperTestStatus, setWhisperTestStatus] = useState<WhisperTestStatus>('idle');
   const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
 
+  // Carregar URL do store no mount
+  useEffect(() => {
+    migrateKey<string>('settings.json', 'whisper_server_url', 'http://100.123.73.128:8765').then((url) => {
+      setWhisperServerUrl(url);
+    });
+  }, []);
+
   // Persist URL and apply on change
   useEffect(() => {
-    localStorage.setItem('whisper_server_url', whisperServerUrl);
+    storeSet('settings.json', 'whisper_server_url', whisperServerUrl);
     setVoiceAIUrl(whisperServerUrl || null);
   }, [whisperServerUrl]);
 
