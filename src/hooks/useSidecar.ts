@@ -65,9 +65,9 @@ export function useSidecar(
         if (health?.status === 'healthy') {
           setSidecarAvailable(true);
           setSidecarStatus(
-            `Local STT (Whisper ${health.models?.whisper?.model || 'medium'})`,
+            `STT (Whisper ${health.models?.whisper?.model || 'medium'})`,
           );
-          log('Voice AI Sidecar conectado - Transcricao local ativada', 'success');
+          log('Voice AI Sidecar conectado', 'success');
         } else {
           setSidecarAvailable(false);
           setSidecarStatus('Sidecar offline');

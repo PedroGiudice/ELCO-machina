@@ -647,7 +647,7 @@ export default function App() {
                         audioVisualizer={<AudioVisualizer stream={audioStream} />}
                         selectedMicLabel={
                             selectedMicId === "default"
-                                ? "Default Mic"
+                                ? "Microfone padrao"
                                 : availableMics.find((m) => m.deviceId === selectedMicId)?.label?.slice(0, 15)
                         }
                         autoGainControl={autoGainControl}
@@ -660,14 +660,6 @@ export default function App() {
                         hasText={!!processing.transcription}
                         onReadText={handleReadText}
                         onStopReading={tts.stopReading}
-                        ttsEngine={tts.ttsEngine}
-                        onEngineChange={tts.setTtsEngine}
-                        ttsProfile={tts.ttsProfile}
-                        onProfileChange={tts.setTtsProfile}
-                        ttsCustomParams={tts.ttsCustomParams}
-                        onCustomParamsChange={tts.setTtsCustomParams}
-                        voiceRefAudio={tts.voiceRefAudio}
-                        onVoiceRefChange={tts.setVoiceRefAudio}
                     />
                 }
                 panelConfig={
@@ -679,7 +671,7 @@ export default function App() {
                         onApiKeyInputChange={persistence.setApiKeyInput}
                         onSaveApiKey={async () => {
                             await persistence.saveApiKey(persistence.apiKeyInput.trim());
-                            persistence.addLog("API Key saved", "success");
+                            persistence.addLog("API Key salva", "success");
                         }}
                         isApiKeyVisible={persistence.isApiKeyVisible}
                         onToggleApiKeyVisibility={() =>
@@ -706,8 +698,6 @@ export default function App() {
                         sidecarAvailable={sidecar.sidecarAvailable}
                         sidecarStatus={sidecar.sidecarStatus}
                         sttBackend={settings.sttBackend}
-                        ttsEngine={tts.ttsEngine}
-                        ttsProfile={tts.ttsProfile}
                         isSpeaking={tts.isSpeaking}
                         aiModel={settings.aiModel}
                         hasApiKey={!!persistence.apiKey}
@@ -716,8 +706,8 @@ export default function App() {
                         isProcessing={processing.isProcessing}
                         selectedMicLabel={
                             selectedMicId === "default"
-                                ? "Default Mic"
-                                : availableMics.find((m) => m.deviceId === selectedMicId)?.label?.slice(0, 20) || "Unknown"
+                                ? "Microfone padrao"
+                                : availableMics.find((m) => m.deviceId === selectedMicId)?.label?.slice(0, 20) || "Desconhecido"
                         }
                         appVersion={settings.appVersion}
                     />

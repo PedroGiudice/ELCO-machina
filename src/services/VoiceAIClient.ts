@@ -2,7 +2,7 @@
  * VoiceAI Client - Abstrai chamadas ao sidecar Python
  *
  * Funcionalidades:
- * - Transcricao local via Faster-Whisper
+ * - Transcricao via Whisper (VM ou Modal)
  * - Refinamento opcional via Claude
  * - Health check do sidecar
  *
@@ -107,7 +107,7 @@ export interface RefineResponse {
   error: string | null;
 }
 
-// Response do health check (piper/modal, nao xtts)
+// Response do health check
 export interface HealthResponse {
   status: "healthy" | "degraded";
   version: string;
@@ -116,9 +116,8 @@ export interface HealthResponse {
       status: "loaded" | "available" | "not_loaded";
       model: string | null;
     };
-    piper: {
-      status: "loaded" | "available" | "not_implemented";
-      model: string | null;
+    tts: {
+      status: "loaded" | "available" | "not_installed" | "not_available";
     };
     modal: {
       status: "loaded" | "available" | "not_implemented";
@@ -219,7 +218,7 @@ export class VoiceAIClient {
   }
 
   /**
-   * Transcreve audio usando o sidecar local
+   * Transcreve audio usando o sidecar
    *
    * @param request Dados da transcricao (audio base64, formato, idioma, etc)
    * @returns Transcricao com texto e metadados
@@ -406,8 +405,8 @@ let clientInstance: VoiceAIClient | null = null;
 let configuredUrl: string | null = null;
 
 /**
- * Define a URL do servidor Whisper (remoto ou local)
- * @param url URL do servidor (ex: http://100.123.73.128:8765) ou null para usar Contabo via Tailscale
+ * Define a URL do servidor Whisper
+ * @param url URL do servidor (ex: http://100.123.73.128:8765) ou null para usar default via Tailscale
  */
 export function setVoiceAIUrl(url: string | null): void {
   configuredUrl = url && url.trim() !== "" ? url.trim() : null;

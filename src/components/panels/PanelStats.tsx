@@ -25,8 +25,6 @@ interface PanelStatsProps {
   sidecarAvailable: boolean;
   sidecarStatus: string;
   sttBackend: 'vm' | 'modal';
-  ttsEngine: 'piper' | 'chatterbox';
-  ttsProfile: string;
   isSpeaking: boolean;
   aiModel: string;
   hasApiKey: boolean;
@@ -105,8 +103,6 @@ export function PanelStats({
   sidecarAvailable,
   sidecarStatus,
   sttBackend,
-  ttsEngine,
-  ttsProfile,
   isSpeaking,
   aiModel,
   hasApiKey,
@@ -173,7 +169,7 @@ export function PanelStats({
           {/* STT */}
           <ServiceCard icon={Mic} label="STT" status={sttStatus}>
             <InfoLine
-              label="Engine"
+              label="Motor"
               value={
                 sttBackend === 'modal'
                   ? 'faster-whisper large-v3-turbo (GPU)'
@@ -189,9 +185,7 @@ export function PanelStats({
 
           {/* TTS */}
           <ServiceCard icon={Volume2} label="TTS" status={ttsStatus}>
-            <InfoLine label="Engine" value={ttsEngine} />
-            <InfoLine label="Profile" value={ttsProfile} />
-            <InfoLine label="Speaking" value={isSpeaking ? 'sim' : 'nao'} />
+            <InfoLine label="Falando" value={isSpeaking ? 'sim' : 'nao'} />
             {!sidecarAvailable && !isSpeaking && (
               <InfoLine label="Nota" value="health check pendente" />
             )}
@@ -199,17 +193,17 @@ export function PanelStats({
 
           {/* Claude Refiner */}
           <ServiceCard icon={Sparkles} label="Claude" status={claudeStatus}>
-            <InfoLine label="Model" value={aiModel} />
+            <InfoLine label="Modelo" value={aiModel} />
             <InfoLine label="API Key" value={hasApiKey ? 'configurada' : 'ausente'} />
           </ServiceCard>
 
           {/* Audio */}
           <ServiceCard icon={Radio} label="Audio" status={audioStatus}>
-            <InfoLine label="Mic" value={selectedMicLabel} />
-            <InfoLine label="Recording" value={isRecording ? 'sim' : 'nao'} />
+            <InfoLine label="Microfone" value={selectedMicLabel} />
+            <InfoLine label="Gravando" value={isRecording ? 'sim' : 'nao'} />
             {audioMetrics && (
               <>
-                <InfoLine label="Duration" value={`${audioMetrics.duration.toFixed(1)}s`} />
+                <InfoLine label="Duracao" value={`${audioMetrics.duration.toFixed(1)}s`} />
                 <InfoLine label="SNR" value={`${audioMetrics.clarityScore}/100`} />
                 <InfoLine label="RMS" value={`${audioMetrics.rmsDB.toFixed(1)} dB`} />
               </>
@@ -218,9 +212,9 @@ export function PanelStats({
 
           {/* App */}
           <ServiceCard icon={Box} label="App" status="healthy">
-            <InfoLine label="Version" value={`v${appVersion}`} />
+            <InfoLine label="Versao" value={`v${appVersion}`} />
             <InfoLine label="STT" value={sttBackend === 'modal' ? 'Modal (GPU)' : 'VM (CPU)'} />
-            <InfoLine label="Processing" value={isProcessing ? 'sim' : 'nao'} />
+            <InfoLine label="Processando" value={isProcessing ? 'sim' : 'nao'} />
           </ServiceCard>
         </div>
       </div>

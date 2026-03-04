@@ -66,7 +66,7 @@ export function Editor({
         {/* Left: Title + Context */}
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-            Output
+            Saida
           </span>
           <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--accent-dim)] text-[var(--text-secondary)]">
             {activeContext}
@@ -105,7 +105,7 @@ export function Editor({
               className="text-red-400 hover:text-red-300"
             >
               <Trash2 className="w-3 h-3" />
-              <span className="hidden md:inline">Clear</span>
+              <span className="hidden md:inline">Limpar</span>
             </Button>
           )}
 
@@ -149,7 +149,7 @@ export function Editor({
               ) : (
                 <Volume2 className="w-3 h-3" />
               )}
-              <span className="hidden md:inline">{isSpeaking ? 'Stop' : 'Read'}</span>
+              <span className="hidden md:inline">{isSpeaking ? 'Parar' : 'Ouvir'}</span>
             </Button>
           )}
 
@@ -157,7 +157,7 @@ export function Editor({
           {onCopy && (
             <Button variant="primary" size="sm" onClick={onCopy}>
               <Copy className="w-3 h-3" />
-              <span className="hidden md:inline">Copy</span>
+              <span className="hidden md:inline">Copiar</span>
             </Button>
           )}
         </div>
@@ -178,7 +178,7 @@ export function Editor({
             ${isCodeMode ? 'font-mono' : 'font-editor'}
             text-[var(--text-primary)]
           `}
-          placeholder={isProcessing ? 'Processando...' : 'Digite ou cole texto aqui...'}
+          placeholder={isProcessing ? 'Processando...' : 'Digite ou cole o texto aqui...'}
         />
 
         {/* Empty State Decoration */}
@@ -206,7 +206,7 @@ export function Editor({
           <span>Ln {lineCount}, Col {charCount}</span>
           <span>UTF-8</span>
           <span className="hidden md:inline opacity-50">
-            Model: {aiModel}
+            Modelo: {aiModel}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -215,7 +215,7 @@ export function Editor({
               isProcessing ? 'bg-yellow-500 animate-pulse' : 'bg-[var(--border-subtle)]'
             }`}
           />
-          <span>{isProcessing ? 'PROCESSING' : 'READY'}</span>
+          <span>{isProcessing ? 'PROCESSANDO' : 'PRONTO'}</span>
         </div>
       </div>
     </div>
