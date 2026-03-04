@@ -66,6 +66,7 @@ export interface UseAudioProcessingConfig {
     customStylePrompt: string;
     activeContext: string;
     contextMemory: Record<string, string>;
+    sttBackend: string;
     selectedTemplate: PromptTemplate | undefined;
     addLog: (
         msg: string,
@@ -118,6 +119,7 @@ export function useAudioProcessing(
         addToHistory,
         updateContextMemory,
         saveContextToDB,
+        sttBackend,
     } = config;
 
     // Estados
@@ -196,6 +198,7 @@ export function useAudioProcessing(
                 system_instruction: systemInstruction,
                 model: aiModel,
                 temperature,
+                stt_backend: sttBackend as "vm" | "modal",
             });
 
             // Usa texto refinado se disponivel, senao o bruto
@@ -290,6 +293,7 @@ export function useAudioProcessing(
         customStylePrompt,
         activeContext,
         contextMemory,
+        sttBackend,
         selectedTemplate,
         addLog,
         addToHistory,

@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 export type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
 export type TranscriptionMode = 'auto' | 'local' | 'cloud';
 export type OutputLanguage = 'English' | 'Portuguese' | 'Spanish';
+export type SttBackend = 'vm' | 'modal';
 
 export type OutputStyle =
   | 'Whisper Only'
@@ -59,6 +60,10 @@ export interface UseSettingsReturn {
   transcriptionMode: TranscriptionMode;
   setTranscriptionMode: (v: TranscriptionMode) => void;
 
+  // STT Backend
+  sttBackend: SttBackend;
+  setSttBackend: (v: SttBackend) => void;
+
   // Modals
   isSettingsOpen: boolean;
   setIsSettingsOpen: (v: boolean) => void;
@@ -102,6 +107,11 @@ export function useSettings(): UseSettingsReturn {
     return (localStorage.getItem('voice_ai_mode') as TranscriptionMode) || 'auto';
   });
 
+  // STT Backend
+  const [sttBackend, setSttBackend] = useState<SttBackend>(() => {
+    return (localStorage.getItem('stt_backend') as SttBackend) || 'vm';
+  });
+
   // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
@@ -115,6 +125,7 @@ export function useSettings(): UseSettingsReturn {
   useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
   useEffect(() => localStorage.setItem('claude_refiner_model', aiModel), [aiModel]);
   useEffect(() => localStorage.setItem('voice_ai_mode', transcriptionMode), [transcriptionMode]);
+  useEffect(() => localStorage.setItem('stt_backend', sttBackend), [sttBackend]);
 
   // Fetch app version
   useEffect(() => {
@@ -147,6 +158,8 @@ export function useSettings(): UseSettingsReturn {
     setAiModel,
     transcriptionMode,
     setTranscriptionMode,
+    sttBackend,
+    setSttBackend,
     isSettingsOpen,
     setIsSettingsOpen,
     isResetConfirmOpen,
@@ -155,7 +168,7 @@ export function useSettings(): UseSettingsReturn {
   }), [
     themeColor, bgColor, textColor, fontFamily, fontSize,
     outputLanguage, outputStyle, customStylePrompt, aiModel,
-    transcriptionMode, isSettingsOpen, isResetConfirmOpen, appVersion,
+    transcriptionMode, sttBackend, isSettingsOpen, isResetConfirmOpen, appVersion,
   ]);
 }
 

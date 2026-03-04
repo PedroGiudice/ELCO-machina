@@ -703,8 +703,6 @@ export default function App() {
                         logs={persistence.logs}
                         sidecarAvailable={sidecar.sidecarAvailable}
                         sidecarStatus={sidecar.sidecarStatus}
-                        whisperServerUrl={sidecar.whisperServerUrl}
-                        transcriptionMode={settings.transcriptionMode}
                         sttBackend={settings.sttBackend}
                         ttsEngine={tts.ttsEngine}
                         ttsProfile={tts.ttsProfile}

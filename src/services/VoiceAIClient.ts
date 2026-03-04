@@ -67,6 +67,7 @@ export interface TranscribeRequest {
   system_instruction?: string | null; // Prompt do PromptStore
   model?: string; // default "sonnet"
   temperature?: number; // default 0.4, range 0.0-2.0
+  stt_backend?: "vm" | "modal";
 }
 
 // Segmento de transcricao
@@ -225,6 +226,9 @@ export class VoiceAIClient {
     }
     if (request.temperature !== undefined) {
       body.temperature = request.temperature;
+    }
+    if (request.stt_backend) {
+      body.stt_backend = request.stt_backend;
     }
 
     const controller = new AbortController();

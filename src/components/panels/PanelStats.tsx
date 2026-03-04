@@ -24,9 +24,7 @@ interface PanelStatsProps {
   logs: LogEntry[];
   sidecarAvailable: boolean;
   sidecarStatus: string;
-  whisperServerUrl: string;
-  transcriptionMode: 'auto' | 'local' | 'cloud';
-  sttBackend?: 'vm' | 'modal';
+  sttBackend: 'vm' | 'modal';
   ttsEngine: 'piper' | 'chatterbox';
   ttsProfile: string;
   isSpeaking: boolean;
@@ -106,8 +104,6 @@ export function PanelStats({
   logs,
   sidecarAvailable,
   sidecarStatus,
-  whisperServerUrl,
-  transcriptionMode,
   sttBackend,
   ttsEngine,
   ttsProfile,
@@ -223,7 +219,7 @@ export function PanelStats({
           {/* App */}
           <ServiceCard icon={Box} label="App" status="healthy">
             <InfoLine label="Version" value={`v${appVersion}`} />
-            <InfoLine label="Trans. Mode" value={transcriptionMode} />
+            <InfoLine label="STT" value={sttBackend === 'modal' ? 'Modal (GPU)' : 'VM (CPU)'} />
             <InfoLine label="Processing" value={isProcessing ? 'sim' : 'nao'} />
           </ServiceCard>
         </div>
