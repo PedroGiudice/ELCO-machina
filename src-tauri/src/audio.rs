@@ -19,7 +19,7 @@ pub struct AudioState {
     stream: Mutex<Option<SafeStream>>,
     writer: WavWriterHandle,
     save_path: Mutex<Option<PathBuf>>,
-    samples_written: AtomicU64,
+    samples_written: Arc<AtomicU64>,
 }
 
 impl AudioState {
@@ -29,7 +29,7 @@ impl AudioState {
             stream: Mutex::new(None),
             writer: Arc::new(Mutex::new(None)),
             save_path: Mutex::new(None),
-            samples_written: AtomicU64::new(0),
+            samples_written: Arc::new(AtomicU64::new(0)),
         }
     }
 }
@@ -119,8 +119,7 @@ pub async fn start_audio_recording<R: Runtime>(
 
     let writer_clone = state.writer.clone();
     state.samples_written.store(0, Ordering::SeqCst);
-    let samples_counter = Arc::new(AtomicU64::new(0));
-    let samples_for_stream = samples_counter.clone();
+    let samples_for_stream = state.samples_written.clone();
 
     let err_fn = move |err: cpal::StreamError| {
         eprintln!("[Audio] ERRO no stream: {}", err);
