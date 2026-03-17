@@ -61,6 +61,8 @@ whisper_image = (
 
 model_volume = modal.Volume.from_name("whisper-vllm-cache", create_if_missing=True)
 vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
+audio_volume = modal.Volume.from_name("audio-uploads", create_if_missing=True)
+AUDIO_VOLUME_PATH = "/audio-uploads"
 
 with whisper_image.imports():
     import requests
@@ -136,6 +138,7 @@ def _wake_up() -> None:
     volumes={
         MODEL_CACHE: model_volume,
         "/root/.cache/vllm": vllm_cache_vol,
+        AUDIO_VOLUME_PATH: audio_volume,
     },
     enable_memory_snapshot=True,
     experimental_options={"enable_gpu_snapshot": True},
@@ -217,13 +220,27 @@ class WhisperService:
             self._vllm_log.close()
 
     @modal.method()
-    def transcribe(self, audio_bytes: bytes, language: str = "pt") -> dict:
-        """Transcribe audio bytes via vLLM Whisper. Returns text + metrics."""
+    def transcribe(self, audio_bytes: bytes, language: str = "pt",
+                   volume_path: str = "") -> dict:
+        """Transcribe audio via vLLM Whisper. Returns text + metrics.
+
+        Args:
+            audio_bytes: Raw audio bytes (used if volume_path is empty)
+            language: Language code (default: pt)
+            volume_path: If set, read audio from volume instead of bytes
+        """
         import base64
         import soundfile as sf
         import io
 
         t0 = time.perf_counter()
+
+        # Read from volume or from bytes
+        if volume_path:
+            full_path = os.path.join(AUDIO_VOLUME_PATH, volume_path)
+            self.logger.info("Reading audio from volume: %s", full_path)
+            with open(full_path, "rb") as f:
+                audio_bytes = f.read()
 
         # Save to temp file to read with soundfile for duration
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -280,6 +297,7 @@ class WhisperService:
                 "duration_audio_s": round(audio_duration, 1),
                 "inference_s": round(elapsed, 2),
                 "rtf": round(elapsed / audio_duration, 3) if audio_duration > 0 else 0,
+                "source": "volume" if volume_path else "bytes",
             }
         finally:
             os.unlink(tmp_path)
@@ -304,10 +322,13 @@ class WhisperService:
 
 if __name__ == "__main__":
     import argparse
+    import hashlib
 
     parser = argparse.ArgumentParser(description="Call deployed Whisper vLLM service")
     parser.add_argument("--audio", required=True, help="Path to audio file")
     parser.add_argument("--language", default="pt", help="Language code")
+    parser.add_argument("--use-volume", action="store_true",
+                        help="Upload audio to Modal Volume first (recommended for large files)")
     args = parser.parse_args()
 
     t0 = time.time()
@@ -316,16 +337,30 @@ if __name__ == "__main__":
         audio_bytes = f.read()
     print(f"  {len(audio_bytes) / 1e6:.1f}MB")
 
+    volume_path = ""
+    if args.use_volume:
+        print("Uploading to Modal Volume...")
+        t_upload = time.time()
+        vol = modal.Volume.from_name("audio-uploads", create_if_missing=True)
+        file_hash = hashlib.sha256(audio_bytes).hexdigest()[:12]
+        volume_name = f"{file_hash}_{os.path.basename(args.audio)}"
+        with vol.batch_upload(force=True) as batch:
+            batch.put_file(args.audio, f"/{volume_name}")
+        print(f"  Uploaded in {time.time() - t_upload:.1f}s")
+        volume_path = volume_name
+        audio_bytes = b""  # Don't send bytes via gRPC
+
     print("Connecting to deployed service...")
     ServiceCls = modal.Cls.from_name(APP_NAME, "WhisperService")
     service = ServiceCls()
 
     print("Transcribing...")
-    result = service.transcribe.remote(audio_bytes, args.language)
+    result = service.transcribe.remote(audio_bytes, args.language, volume_path=volume_path)
     wall = time.time() - t0
 
     print(f"\nWall time:      {wall:.1f}s")
     print(f"Inference:      {result['inference_s']}s")
     print(f"Audio duration: {result['duration_audio_s']}s")
     print(f"RTF:            {result['rtf']}")
+    print(f"Source:         {result['source']}")
     print(f"\nTexto:\n{result['text']}")
