@@ -31,6 +31,8 @@ import tempfile
 import time
 
 import modal
+from fastapi import Response, UploadFile, File, Form
+from pydantic import BaseModel, Field
 
 APP_NAME = "whisper-http"
 app = modal.App(APP_NAME, tags={"project": "elco-machina", "model": "whisper", "engine": "vllm-http"})
@@ -55,6 +57,7 @@ whisper_image = (
         "librosa",
         "soundfile",
         "requests",
+        "fastapi[standard]",
     )
     .env({
         "HF_XET_HIGH_PERFORMANCE": "1",
@@ -263,15 +266,65 @@ class WhisperHTTP:
     @modal.method()
     def transcribe(self, audio_bytes: bytes, language: str = "pt",
                    volume_path: str = "") -> dict:
-        """Transcribe audio via vLLM HTTP /v1/audio/transcriptions. Auto-chunks >30s."""
-        t0 = time.perf_counter()
-
-        # Read from volume or from bytes
+        """Transcribe audio via gRPC (used by python3 client). Auto-chunks >30s."""
         if volume_path:
             full_path = os.path.join(AUDIO_VOLUME_PATH, volume_path)
             self.logger.info("Reading audio from volume: %s", full_path)
             with open(full_path, "rb") as f:
                 audio_bytes = f.read()
+
+        result = self._do_transcribe(audio_bytes, language)
+        result["source"] = "volume" if volume_path else "bytes"
+        return result
+
+    @modal.method()
+    def health(self) -> dict:
+        """Health check (gRPC)."""
+        import torch
+
+        vllm_alive = hasattr(self, "vllm_proc") and self.vllm_proc.poll() is None
+        return {
+            "status": "healthy" if vllm_alive else "degraded",
+            "vllm_alive": vllm_alive,
+            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "model": VLLM_MODEL,
+            "mode": "http-snapshot",
+        }
+
+    # --- Web endpoints (HTTP, callable from Laravel via curl/Guzzle) ---
+
+    @modal.fastapi_endpoint(method="POST")
+    def web_transcribe(
+        self,
+        file: UploadFile = File(...),
+        language: str = Form("pt"),
+    ) -> dict:
+        """Transcribe uploaded audio file. Returns JSON with text + metrics.
+
+        Usage:
+            curl -X POST https://<modal-url>/web_transcribe \
+              -F "file=@audio.wav" -F "language=pt"
+        """
+        audio_bytes = file.file.read()
+        return self._do_transcribe(audio_bytes, language)
+
+    @modal.fastapi_endpoint(method="GET")
+    def web_health(self) -> dict:
+        """Health check via HTTP GET."""
+        import torch
+
+        vllm_alive = hasattr(self, "vllm_proc") and self.vllm_proc.poll() is None
+        return {
+            "status": "healthy" if vllm_alive else "degraded",
+            "vllm_alive": vllm_alive,
+            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "model": VLLM_MODEL,
+            "mode": "http-snapshot",
+        }
+
+    def _do_transcribe(self, audio_bytes: bytes, language: str = "pt") -> dict:
+        """Shared transcription logic for both gRPC and web endpoints."""
+        t0 = time.perf_counter()
 
         # Check vLLM is alive
         if self.vllm_proc.poll() is not None:
@@ -291,7 +344,7 @@ class WhisperHTTP:
         num_chunks = len(chunks_wav)
         self.logger.info("Audio: %.1fs, %d chunk(s)", audio_duration, num_chunks)
 
-        # Transcribe each chunk via HTTP
+        # Transcribe each chunk via internal vLLM HTTP
         texts = []
         t_infer = time.perf_counter()
 
@@ -330,21 +383,6 @@ class WhisperHTTP:
             "total_s": round(elapsed, 2),
             "rtf": round(elapsed / audio_duration, 3) if audio_duration > 0 else 0,
             "chunks": num_chunks,
-            "source": "volume" if volume_path else "bytes",
-            "mode": "http-snapshot",
-        }
-
-    @modal.method()
-    def health(self) -> dict:
-        """Health check."""
-        import torch
-
-        vllm_alive = hasattr(self, "vllm_proc") and self.vllm_proc.poll() is None
-        return {
-            "status": "healthy" if vllm_alive else "degraded",
-            "vllm_alive": vllm_alive,
-            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-            "model": VLLM_MODEL,
             "mode": "http-snapshot",
         }
 
