@@ -249,6 +249,29 @@
         @endif
     </section>
 
+    {{-- Status Bar --}}
+    @if($statusMessage)
+        <div class="flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)] text-xs
+            {{ $statusType === 'success' ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : '' }}
+            {{ $statusType === 'error' ? 'bg-red-500/10 border border-red-500/30 text-red-400' : '' }}
+            {{ $statusType === 'info' ? 'bg-blue-500/10 border border-blue-500/30 text-blue-400' : '' }}
+        ">
+            @if($isProcessing)
+                <svg class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            @elseif($statusType === 'success')
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M20 6 9 17l-5-5"/></svg>
+            @elseif($statusType === 'error')
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+            @endif
+            <span>{{ $statusMessage }}</span>
+            @if($inferenceTime && $statusType === 'success')
+                <span class="ml-auto text-[10px] opacity-70">
+                    {{ $inferenceTime }}s inference | {{ $audioDuration }}s audio
+                </span>
+            @endif
+        </div>
+    @endif
+
     {{-- Process Button --}}
     <x-button
         variant="primary"
@@ -258,24 +281,39 @@
         :isLoading="$isProcessing"
     >
         @if($isProcessing)
-            Processing...
+            <svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            Processando...
         @else
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
-            @if($outputStyle === 'Verbatim' || $outputStyle === 'Whisper Only')
-                Transcribe
-            @elseif($outputStyle === 'Code Generator')
-                Generate Code
-            @else
-                Refine Text
-            @endif
+            Transcrever
         @endif
     </x-button>
 
     {{-- Ready Indicator --}}
-    @if($audioFile && !$isProcessing)
+    @if($audioFile && !$isProcessing && !$resultText)
         <div class="flex items-center gap-2 justify-center text-[10px] text-[var(--text-secondary)]">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-emerald-500"><path d="M20 6 9 17l-5-5"/></svg>
-            Ready: {{ number_format($audioFile->getSize() / 1024, 1) }} KB
+            Pronto: {{ number_format($audioFile->getSize() / 1024, 1) }} KB
         </div>
+    @endif
+
+    {{-- Result --}}
+    @if($resultText)
+        <section class="space-y-2">
+            <div class="flex items-center justify-between">
+                <label class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Resultado
+                </label>
+                <button
+                    wire:click="clearResult"
+                    class="text-[9px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                    Limpar
+                </button>
+            </div>
+            <div class="bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] p-4 text-sm leading-relaxed text-[var(--text-primary)]">
+                {{ $resultText }}
+            </div>
+        </section>
     @endif
 </div>
