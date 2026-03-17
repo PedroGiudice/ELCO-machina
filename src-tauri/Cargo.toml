@@ -1,6 +1,6 @@
 [package]
 name = "pro-att-machine"
-version = "0.2.20"
+version = "0.3.1"
 description = "Pro ATT Machine - Audio Transcription Tool"
 authors = ["you"]
 license = ""

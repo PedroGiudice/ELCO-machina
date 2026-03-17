@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Pro ATT Machine",
-  "version": "0.2.20",
+  "version": "0.3.3",
   "identifier": "com.proatt.machine",
   "build": {
     "frontendDist": "../dist",

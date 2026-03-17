@@ -60,7 +60,7 @@ export function Editor({
   const isCodeMode = outputStyle === 'Code Generator';
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-base)]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-base)]" style={{ height: '100%' }}>
       {/* Toolbar */}
       <div className="h-12 border-b border-[var(--border-subtle)] flex items-center px-4 justify-between bg-[var(--bg-elevated)] shrink-0">
         {/* Left: Title + Context */}
@@ -164,14 +164,14 @@ export function Editor({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-0" style={{ minHeight: '200px' }}>
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           spellCheck={false}
           style={{ fontSize: `${fontSize}px` }}
           className={`
-            w-full h-full bg-transparent border-0 overflow-y-auto
+            absolute inset-0 w-full h-full bg-transparent border-0 overflow-y-auto
             p-4 md:p-8 resize-none
             focus:ring-0 focus:outline-none
             leading-relaxed placeholder:opacity-30

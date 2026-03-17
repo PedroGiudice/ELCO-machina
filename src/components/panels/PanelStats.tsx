@@ -224,7 +224,7 @@ export function PanelStats({
           {/* Claude Refiner */}
           <ServiceCard icon={Sparkles} label="Claude" status={claudeStatus}>
             <InfoLine label="Modelo" value={aiModel} />
-            <InfoLine label="API Key" value={hasApiKey ? 'configurada' : 'ausente'} />
+            <InfoLine label="Backend" value="Claude CLI (sidecar)" />
           </ServiceCard>
 
           {/* Audio */}

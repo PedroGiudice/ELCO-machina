@@ -105,55 +105,6 @@ export function PanelConfig({
                 )}
             </div>
 
-            {/* API Key */}
-            <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
-                        <Key className="w-3 h-3" />
-                        Claude API Key
-                    </label>
-                    <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${apiKey ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
-                    >
-                        {apiKey ? "CONFIGURADA" : "NÃO CONFIGURADA"}
-                    </span>
-                </div>
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <input
-                            type={isApiKeyVisible ? "text" : "password"}
-                            value={apiKeyInput}
-                            onChange={(e) =>
-                                onApiKeyInputChange(e.target.value)
-                            }
-                            placeholder="Cole sua API Key..."
-                            className="w-full px-3 py-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-sm focus:outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-                        />
-                        <button
-                            onClick={onToggleApiKeyVisibility}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                        >
-                            {isApiKeyVisible ? (
-                                <EyeOff className="w-4 h-4" />
-                            ) : (
-                                <Eye className="w-4 h-4" />
-                            )}
-                        </button>
-                    </div>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={onSaveApiKey}
-                        disabled={!apiKeyInput.trim() || apiKeyInput === apiKey}
-                    >
-                        Salvar
-                    </Button>
-                </div>
-                <p className="text-[9px] text-[var(--text-secondary)]">
-                    Obtenha em: console.anthropic.com/settings/keys
-                </p>
-            </section>
-
             <div className="w-full h-px bg-[var(--border-subtle)]" />
 
             {/* Audio Engine */}
