@@ -51,6 +51,16 @@ src-tauri/binaries/voice-ai-sidecar-*
 *.sw?
 sidecar/.env
 
+# Laravel
+/vendor
+.phpunit.result.cache
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/bootstrap/cache/*
+database/database.sqlite
+
 # AppImage build artifacts
 squashfs-root/
 
