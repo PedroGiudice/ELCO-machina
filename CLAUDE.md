@@ -37,11 +37,7 @@ bun run tauri build  # Build produção Tauri (~1-2 min)
 
 **ATENÇÃO:** `bun run tauri build` demora 1-2 minutos. Se rodar em background, SEMPRE verificar o output file para confirmar que terminou antes de declarar conclusão.
 
-### 3. Ambiente
 
-Criar `.env.local` na raiz:
-```
-GEMINI_API_KEY=sua_api_key
 ```
 
 ### 4. ZERO Emojis
