@@ -1,14 +1,14 @@
-<div class="p-5 space-y-4 h-full flex flex-col">
+<div class="p-5 lg:p-8 space-y-4 h-full flex flex-col max-w-5xl mx-auto">
     {{-- Header --}}
     <div class="flex items-center gap-2 flex-shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-[var(--accent)]"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
-        <h2 class="text-sm font-semibold">Sistema</h2>
+        <h2 class="text-sm lg:text-base font-semibold">Sistema</h2>
     </div>
 
     {{-- Split Layout --}}
-    <div class="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+    <div class="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-hidden">
         {{-- Left: Atividade (Logs) --}}
-        <div class="flex-[3] flex flex-col min-h-0 md:border-r md:border-[var(--border-subtle)] md:pr-4">
+        <div class="flex-[3] flex flex-col min-h-0 lg:border-r lg:border-[var(--border-subtle)] lg:pr-4">
             <label class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2 flex-shrink-0">
                 Atividade
             </label>
@@ -77,87 +77,90 @@
                 ];
             @endphp
 
-            {{-- STT --}}
-            <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
-                <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$sttStatus] }}"></div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                    <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">STT</span>
+            {{-- Services grid: 2 columns on large desktop --}}
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                {{-- STT --}}
+                <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$sttStatus] }}"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">STT</span>
+                    </div>
+                    <div class="space-y-1 pl-4">
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Motor</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $sttBackend === 'modal' ? 'faster-whisper large-v3-turbo (GPU)' : 'whisper.cpp small (CPU)' }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Backend</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $sttBackend === 'modal' ? 'Modal' : 'VM' }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Status</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $sidecarAvailable ? 'online' : 'offline' }}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="space-y-1 pl-4">
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Motor</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $sttBackend === 'modal' ? 'faster-whisper large-v3-turbo (GPU)' : 'whisper.cpp small (CPU)' }}</span>
+
+                {{-- TTS --}}
+                <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$ttsStatusVal] }}"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                        <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">TTS</span>
                     </div>
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Backend</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $sttBackend === 'modal' ? 'Modal' : 'VM' }}</span>
+                    <div class="space-y-1 pl-4">
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Motor</span>
+                            <span class="text-[var(--text-primary)] font-mono">XTTS v2</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Falando</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $isSpeaking ? 'sim' : 'nao' }}</span>
+                        </div>
                     </div>
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Status</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $sidecarAvailable ? 'online' : 'offline' }}</span>
+                </div>
+
+                {{-- Claude Refiner --}}
+                <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$claudeStatus] }}"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+                        <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Claude</span>
+                    </div>
+                    <div class="space-y-1 pl-4">
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Modelo</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $aiModel }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Backend</span>
+                            <span class="text-[var(--text-primary)] font-mono">Claude CLI (sidecar)</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Audio --}}
+                <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$audioStatus] }}"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+                        <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Audio</span>
+                    </div>
+                    <div class="space-y-1 pl-4">
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Microfone</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $selectedMicLabel }}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="text-[var(--text-secondary)]">Gravando</span>
+                            <span class="text-[var(--text-primary)] font-mono">{{ $isRecording ? 'sim' : 'nao' }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {{-- TTS --}}
-            <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
-                <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$ttsStatusVal] }}"></div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-                    <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">TTS</span>
-                </div>
-                <div class="space-y-1 pl-4">
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Motor</span>
-                        <span class="text-[var(--text-primary)] font-mono">XTTS v2</span>
-                    </div>
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Falando</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $isSpeaking ? 'sim' : 'nao' }}</span>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Claude Refiner --}}
-            <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
-                <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$claudeStatus] }}"></div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
-                    <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Claude</span>
-                </div>
-                <div class="space-y-1 pl-4">
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Modelo</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $aiModel }}</span>
-                    </div>
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Backend</span>
-                        <span class="text-[var(--text-primary)] font-mono">Claude CLI (sidecar)</span>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Audio --}}
-            <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
-                <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 rounded-full flex-shrink-0 {{ $statusDotColors[$audioStatus] }}"></div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
-                    <span class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Audio</span>
-                </div>
-                <div class="space-y-1 pl-4">
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Microfone</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $selectedMicLabel }}</span>
-                    </div>
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-[var(--text-secondary)]">Gravando</span>
-                        <span class="text-[var(--text-primary)] font-mono">{{ $isRecording ? 'sim' : 'nao' }}</span>
-                    </div>
-                </div>
-            </div>
-
-            {{-- App --}}
+            {{-- App (full width below the grid) --}}
             <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3 space-y-2">
                 <div class="flex items-center gap-2">
                     <div class="w-2 h-2 rounded-full flex-shrink-0 bg-emerald-500"></div>

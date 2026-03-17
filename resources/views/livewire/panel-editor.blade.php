@@ -64,7 +64,7 @@
             wire:model.lazy="value"
             spellcheck="false"
             style="font-size: {{ $fontSize }}px;"
-            class="absolute inset-0 w-full h-full bg-transparent border-0 overflow-y-auto p-4 md:p-8 resize-none focus:ring-0 focus:outline-none leading-relaxed placeholder:opacity-30 {{ $outputStyle === 'Code Generator' ? 'font-mono' : 'font-editor' }} text-[var(--text-primary)]"
+            class="absolute inset-0 w-full h-full bg-transparent border-0 overflow-y-auto p-4 md:p-6 lg:p-8 resize-none focus:ring-0 focus:outline-none leading-relaxed placeholder:opacity-30 {{ $outputStyle === 'Code Generator' ? 'font-mono' : 'font-editor' }} text-[var(--text-primary)]"
             placeholder="{{ $isProcessing ? 'Processando...' : 'Digite ou cole o texto aqui...' }}"
         ></textarea>
 

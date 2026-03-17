@@ -36,12 +36,12 @@
             this.isRecording = false;
         }
     }"
-    class="p-5 space-y-6"
+    class="p-5 lg:p-8 space-y-6 max-w-3xl mx-auto"
 >
     {{-- Header --}}
     <div class="flex items-center gap-2">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-[var(--accent)]"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-        <h2 class="text-sm font-semibold">Audio para Texto</h2>
+        <h2 class="text-sm lg:text-base font-semibold">Audio para Texto</h2>
     </div>
 
     {{-- Context Pool Selector --}}
@@ -73,88 +73,91 @@
 
     <div class="w-full h-px bg-[var(--border-subtle)]"></div>
 
-    {{-- Audio Capture --}}
-    <section class="space-y-3">
-        <label class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-            Audio Input
-        </label>
+    {{-- Audio Capture + File Upload: side by side on desktop --}}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {{-- Audio Capture --}}
+        <section class="space-y-3">
+            <label class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                Audio Input
+            </label>
 
-        {{-- Recording Style Toggle --}}
-        <div class="flex gap-2 bg-[var(--bg-overlay)] p-1 rounded-[var(--radius-sm)] border border-[var(--border-subtle)]">
-            @foreach(['Dictation', 'Interview'] as $style)
-                <button
-                    wire:click="setRecordingStyle('{{ $style }}')"
-                    class="flex-1 py-1.5 text-[10px] rounded-[var(--radius-sm)] transition-all flex items-center justify-center gap-1.5 {{ $recordingStyle === $style ? 'bg-[var(--accent-dim)] text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]' }}"
-                >
-                    @if($style === 'Dictation')
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            {{-- Recording Style Toggle --}}
+            <div class="flex gap-2 bg-[var(--bg-overlay)] p-1 rounded-[var(--radius-sm)] border border-[var(--border-subtle)]">
+                @foreach(['Dictation', 'Interview'] as $style)
+                    <button
+                        wire:click="setRecordingStyle('{{ $style }}')"
+                        class="flex-1 py-1.5 text-[10px] rounded-[var(--radius-sm)] transition-all flex items-center justify-center gap-1.5 {{ $recordingStyle === $style ? 'bg-[var(--accent-dim)] text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]' }}"
+                    >
+                        @if($style === 'Dictation')
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        @else
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        @endif
+                        {{ $style }}
+                    </button>
+                @endforeach
+            </div>
+
+            {{-- Recording Controls --}}
+            <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3">
+                <div class="flex items-center gap-2 mb-3">
+                    <template x-if="!isRecording">
+                        <x-button variant="secondary" class="flex-1 h-10" x-on:click="startRecording()">
+                            <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                            Gravar
+                        </x-button>
+                    </template>
+                    <template x-if="isRecording">
+                        <x-button variant="secondary" class="flex-1 h-10 text-red-400 border-red-500/30 bg-red-500/10" x-on:click="stopRecording()">
+                            <div class="w-3 h-3 bg-red-500 rounded-sm"></div>
+                            Parar
+                        </x-button>
+                    </template>
+                </div>
+
+                {{-- Visualizer Area --}}
+                <div class="h-12 bg-[var(--bg-base)] rounded-[var(--radius-sm)] border border-[var(--border-subtle)] flex items-center justify-center overflow-hidden relative">
+                    <span class="text-[10px] text-[var(--text-secondary)]" x-text="isRecording ? 'Gravando...' : 'Pronto'"></span>
+                    <template x-if="isRecording">
+                        <div class="absolute top-1 right-2 flex items-center gap-1.5">
+                            <div class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                            <span class="text-[9px] text-red-400 font-mono tracking-tighter">LIVE</span>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Mic Info --}}
+                <div class="mt-2 text-[9px] text-[var(--text-secondary)] flex justify-between">
+                    <span>Usando: <span x-text="selectedMicLabel"></span></span>
+                    <span class="opacity-50">AGC <span x-text="autoGainControl ? 'ON' : 'OFF'"></span></span>
+                </div>
+            </div>
+        </section>
+
+        {{-- File Upload --}}
+        <section class="space-y-3">
+            <label class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
+                Importar Arquivo
+            </label>
+            <label
+                class="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group"
+            >
+                <span class="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] truncate">
+                    @if($audioFile)
+                        {{ number_format($audioFile->getSize() / 1024, 1) }} KB
                     @else
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        Selecione MP3, WAV...
                     @endif
-                    {{ $style }}
-                </button>
-            @endforeach
-        </div>
-
-        {{-- Recording Controls --}}
-        <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3">
-            <div class="flex items-center gap-2 mb-3">
-                <template x-if="!isRecording">
-                    <x-button variant="secondary" class="flex-1 h-10" x-on:click="startRecording()">
-                        <div class="w-2 h-2 rounded-full bg-red-500"></div>
-                        Gravar
-                    </x-button>
-                </template>
-                <template x-if="isRecording">
-                    <x-button variant="secondary" class="flex-1 h-10 text-red-400 border-red-500/30 bg-red-500/10" x-on:click="stopRecording()">
-                        <div class="w-3 h-3 bg-red-500 rounded-sm"></div>
-                        Parar
-                    </x-button>
-                </template>
-            </div>
-
-            {{-- Visualizer Area --}}
-            <div class="h-12 bg-[var(--bg-base)] rounded-[var(--radius-sm)] border border-[var(--border-subtle)] flex items-center justify-center overflow-hidden relative">
-                <span class="text-[10px] text-[var(--text-secondary)]" x-text="isRecording ? 'Gravando...' : 'Pronto'"></span>
-                <template x-if="isRecording">
-                    <div class="absolute top-1 right-2 flex items-center gap-1.5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-                        <span class="text-[9px] text-red-400 font-mono tracking-tighter">LIVE</span>
-                    </div>
-                </template>
-            </div>
-
-            {{-- Mic Info --}}
-            <div class="mt-2 text-[9px] text-[var(--text-secondary)] flex justify-between">
-                <span>Usando: <span x-text="selectedMicLabel"></span></span>
-                <span class="opacity-50">AGC <span x-text="autoGainControl ? 'ON' : 'OFF'"></span></span>
-            </div>
-        </div>
-    </section>
-
-    {{-- File Upload --}}
-    <section class="space-y-3">
-        <label class="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
-            Importar Arquivo
-        </label>
-        <label
-            class="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group"
-        >
-            <span class="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] truncate max-w-[180px]">
-                @if($audioFile)
-                    {{ number_format($audioFile->getSize() / 1024, 1) }} KB
-                @else
-                    Selecione MP3, WAV...
-                @endif
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="m9 18 6-6-6-6"/></svg>
-            <input type="file" wire:model="audioFile" accept=".mp3,.wav,.webm,.ogg,.flac" class="hidden">
-        </label>
-        @if($uploadError)
-            <p class="text-[10px] text-red-400 pl-1">{{ $uploadError }}</p>
-        @endif
-    </section>
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-[var(--text-secondary)]"><path d="m9 18 6-6-6-6"/></svg>
+                <input type="file" wire:model="audioFile" accept=".mp3,.wav,.webm,.ogg,.flac" class="hidden">
+            </label>
+            @if($uploadError)
+                <p class="text-[10px] text-red-400 pl-1">{{ $uploadError }}</p>
+            @endif
+        </section>
+    </div>
 
     <div class="w-full h-px bg-[var(--border-subtle)]"></div>
 
@@ -164,7 +167,7 @@
             Configuracoes de Saida
         </label>
 
-        <div class="space-y-3">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {{-- Language --}}
             <div>
                 <label class="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
@@ -207,31 +210,31 @@
                     @endif
                 </div>
             </div>
-
-            {{-- Custom Style Input --}}
-            @if($outputStyle === 'Custom')
-                <div
-                    x-data
-                    x-show="true"
-                    x-transition:enter="transition ease-out duration-200"
-                    x-transition:enter-start="opacity-0"
-                    x-transition:enter-end="opacity-100"
-                >
-                    <label class="text-[10px] text-[var(--text-secondary)] mb-1.5 flex justify-between">
-                        <span>Instrucoes</span>
-                        <span class="{{ strlen($customStylePrompt) > 150 ? 'text-red-400' : 'opacity-50' }}">
-                            {{ strlen($customStylePrompt) }}/150
-                        </span>
-                    </label>
-                    <textarea
-                        wire:model="customStylePrompt"
-                        maxlength="150"
-                        placeholder="E.g. Explain like I'm five..."
-                        class="w-full h-20 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-3 text-xs focus:outline-none resize-none placeholder:opacity-30 text-[var(--text-primary)]"
-                    ></textarea>
-                </div>
-            @endif
         </div>
+
+        {{-- Custom Style Input --}}
+        @if($outputStyle === 'Custom')
+            <div
+                x-data
+                x-show="true"
+                x-transition:enter="transition ease-out duration-200"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+            >
+                <label class="text-[10px] text-[var(--text-secondary)] mb-1.5 flex justify-between">
+                    <span>Instrucoes</span>
+                    <span class="{{ strlen($customStylePrompt) > 150 ? 'text-red-400' : 'opacity-50' }}">
+                        {{ strlen($customStylePrompt) }}/150
+                    </span>
+                </label>
+                <textarea
+                    wire:model="customStylePrompt"
+                    maxlength="150"
+                    placeholder="E.g. Explain like I'm five..."
+                    class="w-full h-20 lg:h-24 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-3 text-xs focus:outline-none resize-none placeholder:opacity-30 text-[var(--text-primary)]"
+                ></textarea>
+            </div>
+        @endif
     </section>
 
     {{-- Process Button --}}
