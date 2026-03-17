@@ -7,8 +7,6 @@ use App\Models\Transcription;
 use App\Services\ModalService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use RuntimeException;
-
 class ProcessTranscription implements ShouldQueue
 {
     use Queueable;
@@ -28,24 +26,17 @@ class ProcessTranscription implements ShouldQueue
         $transcription->update(['status' => TranscriptionStatus::Processing]);
 
         try {
-            $sttModel = $modalService->defaultModel('stt');
+            $audioPath = storage_path("app/{$transcription->audio_path}");
 
-            $response = $modalService->run($sttModel, [
-                'audio' => $transcription->audio_volume_path,
-                'language' => $transcription->language,
-                'use_volume' => true,
-            ]);
-
-            $result = $response['result'];
-
-            if ($result === null) {
-                throw new RuntimeException('Modal returned no result');
-            }
+            $result = $modalService->transcribe(
+                audioPath: $audioPath,
+                language: $transcription->language,
+            );
 
             $transcription->update([
                 'status' => TranscriptionStatus::Completed,
                 'text' => $result['text'] ?? null,
-                'inference_time_s' => $result['inference_s'] ?? $result['inference_time_s'] ?? null,
+                'inference_time_s' => $result['inference_s'] ?? null,
                 'rtf' => $result['rtf'] ?? null,
                 'metadata' => $result,
             ]);

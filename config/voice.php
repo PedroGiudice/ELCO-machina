@@ -3,11 +3,8 @@
 return [
     'scripts_path' => env('VOICE_SCRIPTS_PATH', base_path('scripts')),
 
-    // whisper: faster-whisper CTranslate2. T4. `modal run` (benchmark).
-    // whisper-http: vLLM serve + GPU snapshot. L4. `python3` (deployed).
-    // whisper-offline: vLLM offline batch. L4. `modal run` (benchmark/debug).
-    // xtts: XTTS v2 voice cloning. L4. `modal run` (benchmark).
-    // xtts-serve: XTTS v2 endpoint HTTP. L4. `modal deploy`.
+    // Models with web endpoints use HTTP directly (no subprocess).
+    // Models without endpoints fall back to subprocess (modal run / python3).
     'models' => [
         'whisper' => [
             'script' => 'modal_whisper_bench.py',
@@ -18,6 +15,8 @@ return [
             'script' => 'modal_whisper_http.py',
             'gpu' => 'L4',
             'deployed' => true,
+            'endpoint' => env('WHISPER_HTTP_ENDPOINT'),
+            'health' => env('WHISPER_HTTP_HEALTH'),
         ],
         'whisper-offline' => [
             'script' => 'modal_whisper_offline.py',
@@ -33,6 +32,8 @@ return [
             'script' => 'modal_xtts_serve.py',
             'gpu' => 'L4',
             'deployed' => true,
+            'endpoint' => env('XTTS_SERVE_ENDPOINT'),
+            'health' => env('XTTS_SERVE_HEALTH'),
         ],
     ],
 
