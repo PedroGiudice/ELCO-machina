@@ -88,6 +88,7 @@ Ver `~/.claude/rules/git-workflow.md` para detalhes completos.
 | 2026-02-05 | Declarar tarefa finalizada sem fazer build | NUNCA alegar conclusão sem rodar `bun run tauri build` e confirmar sucesso. Mesmo que a alteração pareça só backend/docs, o build valida tudo. Sem build = sem conclusão. |
 | 2026-02-05 | Publicar build sem bumpar versão (0.2.6 repetida em vez de 0.2.7) | SEMPRE verificar a versão atual em `tauri.conf.json` e `package.json` E a última publicada em `latest.json` ANTES de buildar. Bumpar para a próxima sequencial. Manter histórico de versões na MEMORY.md. |
 | 2026-02-07 | AppImage build falha com `failed to run linuxdeploy` | SEMPRE usar `NO_STRIP=1` antes de `bun run tauri build` no Oracle Linux. Sem isso, o `strip` do binário causa falha no linuxdeploy. Comando correto: `NO_STRIP=1 bun run tauri build --bundles appimage` |
+| 2026-03-04 | Texto default de TTS não correspondia ao áudio de referência | Em voice cloning TTS, o texto de teste DEVE ser a transcrição literal do áudio de referência. Se ref_audio e gen_text não são um match, a qualidade do áudio gerado será ruim. NUNCA usar texto genérico quando há áudio de referência com transcrição conhecida. |
 
 <!--
 Formato para adicionar:
