@@ -81,24 +81,29 @@ export type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
 export type TranscriptionMode = 'auto' | 'local' | 'cloud';
 export type OutputLanguage = 'English' | 'Portuguese' | 'Spanish';
 
-export type AppTheme = {
-  bg: string;
+// ============================================================================
+// TTS (XTTS v2)
+// ============================================================================
+
+export interface XTTSParams {
+  speed: number;           // 0.5-2.0, default 1.0
+  temperature: number;     // 0.1-0.8, default 0.75
+  top_k: number;           // 1-100, default 20
+  top_p: number;           // 0.1-1.0, default 0.75
+  repetition_penalty: number; // 1.0-5.0, default 2.0
+  length_penalty: number;     // 0.5-2.0, default 1.0
+}
+
+export interface TTSSynthesizeRequest {
   text: string;
-  accent: string;
-};
-
-// ============================================================================
-// TTS
-// ============================================================================
-
-export type TTSEngine = 'piper' | 'chatterbox';
-
-export interface TTSCustomParams {
-  exaggeration: number;
-  speed: number;
-  stability: number;
-  steps: number;
-  sentence_silence: number;
+  ref_audio_base64: string;
+  language?: string;
+  speed?: number;
+  temperature?: number;
+  top_k?: number;
+  top_p?: number;
+  repetition_penalty?: number;
+  length_penalty?: number;
 }
 
 // ============================================================================
@@ -117,8 +122,11 @@ export type WhisperTestStatus = 'idle' | 'testing' | 'success' | 'error';
 // Log
 // ============================================================================
 
+export type LogCategory = 'stt' | 'tts' | 'refiner' | 'audio' | 'app' | 'ipc';
+
 export type LogEntry = {
   msg: string;
-  type: 'info' | 'success' | 'error';
-  time?: Date;
+  type: 'info' | 'success' | 'error' | 'warning';
+  category: LogCategory;
+  time: Date;
 };

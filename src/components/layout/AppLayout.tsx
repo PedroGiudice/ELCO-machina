@@ -61,7 +61,8 @@ export function AppLayout({
             animate="animate"
             exit="exit"
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className={activePanel === 'editor' ? 'h-full flex flex-col min-h-0' : 'min-h-full pb-32'}
+            style={activePanel === 'editor' ? { height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 } : undefined}
+            className={activePanel === 'editor' ? '' : 'min-h-full pb-32'}
           >
             {currentPanel}
           </motion.div>

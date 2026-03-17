@@ -7,10 +7,6 @@ Filosofia: "Whisper transcreve, Claude refina."
 import logging
 import os
 from contextlib import asynccontextmanager
-
-from dotenv import load_dotenv
-
-load_dotenv()  # Carrega .env do sidecar (Modal credentials, etc.)
 from typing import Literal
 
 from fastapi import FastAPI
@@ -19,11 +15,8 @@ from pydantic import BaseModel
 
 # Configura logging estruturado para todo o sidecar
 from voice_ai.routers import transcribe, synthesize, refine
-from voice_ai.services.refiner import ClaudeRefiner
 from voice_ai.services.stt_service import STTService
 from voice_ai.services.tts_service import TTSService
-from voice_ai.services.stt_modal_client import STTModalClient
-from voice_ai.services.tts_modal_client import TTSModalClient
 
 # Configura logging estruturado para todo o sidecar
 logging.basicConfig(
@@ -37,9 +30,8 @@ logger = logging.getLogger(__name__)
 # Estado global do aplicativo
 class AppState:
     stt_service: STTService | None = None
-    stt_modal_client: STTModalClient | None = None
     tts_service: TTSService | None = None
-    modal_client: TTSModalClient | None = None
+    # Modal client removido -- frontend chama XTTS v2 no Modal diretamente
     models_loaded: bool = False
     startup_error: str | None = None
     refiner_backend: str | None = None
@@ -63,28 +55,12 @@ async def lifespan(app: FastAPI):
         # Modelo sera carregado lazy na primeira requisicao
         state.stt_service = STTService()
 
-        # Inicializa STT Modal Client
-        state.stt_modal_client = STTModalClient()
-        if state.stt_modal_client.is_available:
-            logger.info("STT (Modal/faster-whisper) disponivel")
-        else:
-            logger.info("STT (Modal) nao disponivel")
-
         # Inicializa TTS Service (Kokoro)
         state.tts_service = TTSService()
         if state.tts_service.is_available:
             logger.info("TTS (Kokoro) disponivel")
         else:
             logger.info("TTS (Kokoro) nao instalado - sintese local desabilitada")
-
-        # Inicializa Modal Client (Chatterbox - clonagem de voz)
-        state.modal_client = TTSModalClient()
-        if state.modal_client.is_available:
-            logger.info("TTS (Modal/Chatterbox) disponivel")
-        elif state.modal_client.is_enabled:
-            logger.warning("TTS (Modal) habilitado mas credenciais ausentes")
-        else:
-            logger.info("TTS (Modal) desabilitado (MODAL_ENABLED=false)")
 
         # Inicializa Claude refiner
         state.refiner_backend = "claude"
@@ -147,11 +123,6 @@ class TTSModelStatus(BaseModel):
     voice: str | None = None
 
 
-class ModalModelStatus(BaseModel):
-    status: Literal["available", "credentials_missing", "disabled"]
-    engine: str = "chatterbox"
-
-
 class RefinerStatus(BaseModel):
     status: Literal["available", "unavailable"]
     backend: str | None = None
@@ -161,7 +132,6 @@ class RefinerStatus(BaseModel):
 class ModelsStatus(BaseModel):
     whisper: WhisperModelStatus
     tts: TTSModelStatus
-    modal: ModalModelStatus
     refiner: RefinerStatus
 
 
@@ -210,14 +180,6 @@ async def health_check() -> HealthResponse:
         else:
             tts_status = "not_installed"
 
-    # Status do Modal (Chatterbox)
-    modal_status = "disabled"
-    if state.modal_client:
-        if state.modal_client.is_available:
-            modal_status = "available"
-        elif state.modal_client.is_enabled:
-            modal_status = "credentials_missing"
-
     return HealthResponse(
         status="healthy" if state.models_loaded else "degraded",
         version="0.2.0",
@@ -230,9 +192,6 @@ async def health_check() -> HealthResponse:
             tts=TTSModelStatus(
                 status=tts_status,
                 voice=tts_voice,
-            ),
-            modal=ModalModelStatus(
-                status=modal_status,
             ),
             refiner=RefinerStatus(
                 status="available" if state.refiner_backend else "unavailable",
@@ -260,8 +219,8 @@ async def root():
 
 # Registra routers
 app.include_router(transcribe.router, prefix="/transcribe", tags=["STT"])
+app.include_router(refine.router, prefix="/refine", tags=["Refine"])
 app.include_router(synthesize.router, prefix="/synthesize", tags=["TTS"])
-app.include_router(refine.router, prefix="/refine", tags=["Refiner"])
 
 
 # Injeta servicos nos routers
@@ -269,9 +228,7 @@ app.include_router(refine.router, prefix="/refine", tags=["Refiner"])
 async def inject_services(request, call_next):
     """Injeta servicos no request state para uso nos endpoints."""
     request.state.stt_service = state.stt_service
-    request.state.stt_modal_client = state.stt_modal_client
     request.state.tts_service = state.tts_service
-    request.state.modal_client = state.modal_client
     response = await call_next(request)
     return response
 

@@ -217,7 +217,7 @@ export default function App() {
     });
 
     // --- TTS ---
-    const tts = useTTS(sidecar.whisperServerUrl, persistence.addLog);
+    const tts = useTTS(persistence.addLog);
 
     // --- Load mics ---
     useEffect(() => {
@@ -387,20 +387,44 @@ export default function App() {
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
             mediaRecorder.stop();
             setIsRecording(false);
-            persistence.addLog("Recording captured.", "success");
+            persistence.addLog("Gravacao capturada.", "success");
         }
     }, [isNativeRecording, mediaRecorder, audioStream, persistence]);
 
-    const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 10 * 1024 * 1024) {
+    const handleFileUpload = useCallback(async () => {
+        try {
+            const { open } = await import("@tauri-apps/plugin-dialog");
+            const { readFile } = await import("@tauri-apps/plugin-fs");
+
+            const filePath = await open({
+                filters: [{ name: "Audio", extensions: ["mp3", "wav", "webm", "ogg", "m4a", "flac"] }],
+                multiple: false,
+            });
+
+            if (!filePath || typeof filePath !== "string") return;
+
+            const data = await readFile(filePath);
+            if (data.byteLength > 10 * 1024 * 1024) {
                 setUploadError("Max 10MB");
                 return;
             }
+
+            // Detectar MIME type pelo nome do arquivo
+            const ext = filePath.split(".").pop()?.toLowerCase() || "wav";
+            const mimeMap: Record<string, string> = {
+                mp3: "audio/mpeg", wav: "audio/wav", webm: "audio/webm",
+                ogg: "audio/ogg", m4a: "audio/mp4", flac: "audio/flac",
+            };
+            const mime = mimeMap[ext] || "audio/wav";
+
+            const blob = new Blob([data], { type: mime });
             setUploadError(null);
-            setAudioBlob(file);
-            persistence.addLog(`Loaded: ${file.name}`, "success");
+            setAudioBlob(blob);
+            const fileName = filePath.split("/").pop() || filePath;
+            persistence.addLog(`Arquivo carregado: ${fileName}`, "success");
+        } catch (e) {
+            console.error("File upload failed:", e);
+            setUploadError("Erro ao abrir arquivo");
         }
     }, [persistence]);
 
@@ -602,14 +626,22 @@ export default function App() {
                             persistence.saveAudioToDB(null);
                             setAudioBlob(null);
                         }}
-                        onCopy={() => {
-                            navigator.clipboard.writeText(processing.transcription);
-                            persistence.addLog("Copied", "success");
+                        onCopy={async () => {
+                            try {
+                                const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+                                await writeText(processing.transcription);
+                            } catch {
+                                // Fallback para ambientes sem o plugin
+                                await navigator.clipboard.writeText(processing.transcription);
+                            }
+                            persistence.addLog("Copiado", "success");
                         }}
                         onExportTxt={() => handleDownloadText("txt")}
                         onExportMd={() => handleDownloadText("md")}
                         onReadText={handleReadText}
                         onStopReading={tts.stopReading}
+                        onRefine={processing.refineText}
+                        isRefining={processing.isRefining}
                         canRead={!!processing.transcription}
                         outputStyle={settings.outputStyle}
                         activeContext={persistence.activeContext}
@@ -629,7 +661,7 @@ export default function App() {
                         contextPools={persistence.contextPools}
                         activeContext={persistence.activeContext}
                         onContextChange={persistence.setActiveContext}
-                        onAddContext={persistence.handleAddContext}
+                        onAddContext={persistence.openAddContextModal}
                         onOpenMemory={persistence.openMemoryEditor}
                         outputLanguage={settings.outputLanguage}
                         onLanguageChange={settings.setOutputLanguage as (lang: string) => void}
@@ -645,7 +677,7 @@ export default function App() {
                         audioVisualizer={<AudioVisualizer stream={audioStream} />}
                         selectedMicLabel={
                             selectedMicId === "default"
-                                ? "Default Mic"
+                                ? "Microfone padrao"
                                 : availableMics.find((m) => m.deviceId === selectedMicId)?.label?.slice(0, 15)
                         }
                         autoGainControl={autoGainControl}
@@ -653,19 +685,17 @@ export default function App() {
                 }
                 panelTTS={
                     <PanelTTS
-                        isSpeaking={tts.isSpeaking}
-                        canSpeak={sidecar.sidecarAvailable}
+                        ttsStatus={tts.ttsStatus}
+                        statusMessage={tts.statusMessage}
                         hasText={!!processing.transcription}
                         onReadText={handleReadText}
                         onStopReading={tts.stopReading}
-                        ttsEngine={tts.ttsEngine}
-                        onEngineChange={tts.setTtsEngine}
-                        ttsProfile={tts.ttsProfile}
-                        onProfileChange={tts.setTtsProfile}
-                        ttsCustomParams={tts.ttsCustomParams}
-                        onCustomParamsChange={tts.setTtsCustomParams}
-                        voiceRefAudio={tts.voiceRefAudio}
-                        onVoiceRefChange={tts.setVoiceRefAudio}
+                        xttsParams={tts.xttsParams}
+                        onXttsParamsChange={tts.setXttsParams}
+                        voiceRef={tts.voiceRef}
+                        onVoiceRefChange={tts.setVoiceRef}
+                        modalEndpointUrl={tts.modalEndpointUrl}
+                        onEndpointChange={tts.setModalEndpointUrl}
                     />
                 }
                 panelConfig={
@@ -677,7 +707,7 @@ export default function App() {
                         onApiKeyInputChange={persistence.setApiKeyInput}
                         onSaveApiKey={async () => {
                             await persistence.saveApiKey(persistence.apiKeyInput.trim());
-                            persistence.addLog("API Key saved", "success");
+                            persistence.addLog("API Key salva", "success");
                         }}
                         isApiKeyVisible={persistence.isApiKeyVisible}
                         onToggleApiKeyVisibility={() =>
@@ -704,23 +734,72 @@ export default function App() {
                         sidecarAvailable={sidecar.sidecarAvailable}
                         sidecarStatus={sidecar.sidecarStatus}
                         sttBackend={settings.sttBackend}
-                        ttsEngine={tts.ttsEngine}
-                        ttsProfile={tts.ttsProfile}
                         isSpeaking={tts.isSpeaking}
                         aiModel={settings.aiModel}
                         hasApiKey={!!persistence.apiKey}
                         audioMetrics={null}
+                        ttsStatus={tts.ttsStatus}
                         isRecording={isRecording}
                         isProcessing={processing.isProcessing}
                         selectedMicLabel={
                             selectedMicId === "default"
-                                ? "Default Mic"
-                                : availableMics.find((m) => m.deviceId === selectedMicId)?.label?.slice(0, 20) || "Unknown"
+                                ? "Microfone padrao"
+                                : availableMics.find((m) => m.deviceId === selectedMicId)?.label?.slice(0, 20) || "Desconhecido"
                         }
                         appVersion={settings.appVersion}
                     />
                 }
             />
+
+            {/* ADD CONTEXT MODAL */}
+            {persistence.isAddContextModalOpen && (
+                <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-[#18181b] border border-white/10 rounded-lg shadow-2xl flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-white/10">
+                            <h2 className="text-sm font-bold">Novo Context Pool</h2>
+                            <button
+                                onClick={persistence.cancelAddContext}
+                                className="opacity-50 hover:opacity-100"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-4 flex flex-col gap-3">
+                            <p className="text-[11px] opacity-50">
+                                Nomeie seu novo Context Pool (ex: "Projeto Alpha", "React Docs"):
+                            </p>
+                            <input
+                                type="text"
+                                value={persistence.newContextName}
+                                onChange={(e) => persistence.setNewContextName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') persistence.confirmAddContext();
+                                    if (e.key === 'Escape') persistence.cancelAddContext();
+                                }}
+                                autoFocus
+                                className="w-full bg-black/20 border border-white/10 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-white/30"
+                                placeholder="Nome do contexto..."
+                            />
+                        </div>
+                        <div className="p-4 border-t border-white/10 flex justify-end gap-3">
+                            <button
+                                onClick={persistence.cancelAddContext}
+                                className="px-4 py-2 text-xs font-medium opacity-50 hover:opacity-100 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={persistence.confirmAddContext}
+                                disabled={!persistence.newContextName.trim()}
+                                className="px-4 py-2 text-white text-xs font-medium rounded-sm transition-colors shadow-lg disabled:opacity-30"
+                                style={{ backgroundColor: settings.themeColor }}
+                            >
+                                Criar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MEMORY EDITOR MODAL */}
             {persistence.isMemoryModalOpen && (

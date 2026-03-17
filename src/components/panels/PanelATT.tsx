@@ -13,7 +13,7 @@ interface PanelATTProps {
 
   // Audio
   audioBlob: Blob | null;
-  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onFileUpload: () => void;
   uploadError?: string | null;
 
   // Recording Config
@@ -98,7 +98,7 @@ export function PanelATT({
       {/* Header */}
       <div className="flex items-center gap-2">
         <Mic className="w-4 h-4 text-[var(--accent)]" />
-        <h2 className="text-sm font-semibold">Audio to Text</h2>
+        <h2 className="text-sm font-semibold">Audio para Texto</h2>
       </div>
 
       {/* Context Pool Selector */}
@@ -182,7 +182,7 @@ export function PanelATT({
             {!isRecording ? (
               <Button variant="secondary" className="flex-1 h-10" onClick={onStartRecording}>
                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                Record
+                Gravar
               </Button>
             ) : (
               <Button
@@ -191,7 +191,7 @@ export function PanelATT({
                 onClick={onStopRecording}
               >
                 <div className="w-3 h-3 bg-red-500 rounded-sm" />
-                Stop
+                Parar
               </Button>
             )}
           </div>
@@ -200,7 +200,7 @@ export function PanelATT({
           <div className="h-12 bg-[var(--bg-base)] rounded-[var(--radius-sm)] border border-[var(--border-subtle)] flex items-center justify-center overflow-hidden relative">
             {audioVisualizer || (
               <span className="text-[10px] text-[var(--text-secondary)]">
-                {isRecording ? 'Recording...' : 'Ready'}
+                {isRecording ? 'Gravando...' : 'Pronto'}
               </span>
             )}
             {isRecording && (
@@ -213,7 +213,7 @@ export function PanelATT({
 
           {/* Mic Info */}
           <div className="mt-2 text-[9px] text-[var(--text-secondary)] flex justify-between">
-            <span>Using: {selectedMicLabel}</span>
+            <span>Usando: {selectedMicLabel}</span>
             <span className="opacity-50">AGC {autoGainControl ? 'ON' : 'OFF'}</span>
           </div>
         </div>
@@ -222,22 +222,17 @@ export function PanelATT({
       {/* File Upload */}
       <section className="space-y-3">
         <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
-          Import File
+          Importar Arquivo
         </label>
-        <label className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group">
+        <button
+          onClick={onFileUpload}
+          className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group"
+        >
           <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] truncate max-w-[180px]">
-            {audioBlob && 'name' in audioBlob
-              ? (audioBlob as File).name
-              : 'Select MP3, WAV...'}
+            {audioBlob ? `${(audioBlob.size / 1024).toFixed(1)} KB` : 'Selecione MP3, WAV...'}
           </span>
           <ChevronRight className="w-3 h-3 text-[var(--text-secondary)]" />
-          <input
-            type="file"
-            className="hidden"
-            accept="audio/*"
-            onChange={onFileUpload}
-          />
-        </label>
+        </button>
         {uploadError && (
           <p className="text-[10px] text-red-400 pl-1">{uploadError}</p>
         )}
@@ -248,23 +243,23 @@ export function PanelATT({
       {/* Output Settings */}
       <section className="space-y-4">
         <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-          Output Settings
+          Configuracoes de Saida
         </label>
 
         <div className="space-y-3">
           {/* Language */}
           <div>
             <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
-              Target Language
+              Idioma de Saida
             </label>
             <select
               value={outputLanguage}
               onChange={(e) => onLanguageChange(e.target.value)}
               className="w-full bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] py-2.5 px-3 text-xs focus:outline-none appearance-none text-[var(--text-primary)]"
             >
-              <option value="English">English</option>
-              <option value="Portuguese">Portuguese</option>
-              <option value="Spanish">Spanish</option>
+              <option value="English">Ingles</option>
+              <option value="Portuguese">Portugues</option>
+              <option value="Spanish">Espanhol</option>
             </select>
           </div>
 
@@ -272,7 +267,7 @@ export function PanelATT({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[10px] text-[var(--text-secondary)]">
-                Prompt Style
+                Estilo de Prompt
               </label>
               {onManagePrompts && (
                 <button
@@ -280,7 +275,7 @@ export function PanelATT({
                   className="text-[9px] flex items-center gap-1 hover:opacity-80 transition-colors text-[var(--accent)]"
                 >
                   <Settings2 className="w-3 h-3" />
-                  Manage
+                  Gerenciar
                 </button>
               )}
             </div>
@@ -300,7 +295,7 @@ export function PanelATT({
                 <button
                   onClick={() => onEditPrompt(outputStyle)}
                   className="px-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                  title="Edit prompt"
+                  title="Editar prompt"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -316,7 +311,7 @@ export function PanelATT({
               exit={{ opacity: 0, height: 0 }}
             >
               <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 flex justify-between">
-                <span>Instructions</span>
+                <span>Instrucoes</span>
                 <span
                   className={customStylePrompt.length > 150 ? 'text-red-400' : 'opacity-50'}
                 >

@@ -1,33 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { migrateKey, storeSet } from '../services/TauriStore';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type FontStyle = 'IBM Plex Sans' | 'JetBrains Mono' | 'Georgia';
-export type TranscriptionMode = 'auto' | 'local' | 'cloud';
-export type OutputLanguage = 'English' | 'Portuguese' | 'Spanish';
+import type { OutputStyle, TranscriptionMode, FontStyle, OutputLanguage } from '../types';
+export type { OutputStyle, TranscriptionMode, FontStyle, OutputLanguage };
 export type SttBackend = 'vm' | 'modal';
-
-export type OutputStyle =
-  | 'Whisper Only'
-  | 'Verbatim'
-  | 'Elegant Prose'
-  | 'Ana Suy'
-  | 'Poetic / Verses'
-  | 'Normal'
-  | 'Verbose'
-  | 'Concise'
-  | 'Formal'
-  | 'Prompt (Claude)'
-  | 'Prompt (LLM)'
-  | 'Bullet Points'
-  | 'Summary'
-  | 'Tech Docs'
-  | 'Email'
-  | 'Tweet Thread'
-  | 'Code Generator'
-  | 'Custom';
 
 export interface UseSettingsReturn {
   // Theme
@@ -78,6 +58,8 @@ export interface UseSettingsReturn {
 // HOOK
 // ============================================================================
 
+const STORE = 'settings.json' as const;
+
 export function useSettings(): UseSettingsReturn {
   // Theme & Appearance
   const [themeColor, setThemeColor] = useState<string>('#4f46e5');
@@ -86,31 +68,19 @@ export function useSettings(): UseSettingsReturn {
   const [fontFamily, setFontFamily] = useState<FontStyle>('IBM Plex Sans');
   const [fontSize, setFontSize] = useState<number>(14);
 
-  // Output settings
-  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(() => {
-    return (localStorage.getItem('gemini_outputLanguage') as OutputLanguage) || 'English';
-  });
-  const [outputStyle, setOutputStyle] = useState<OutputStyle>(() => {
-    return (localStorage.getItem('gemini_outputStyle') as OutputStyle) || 'Verbatim';
-  });
-  const [customStylePrompt, setCustomStylePrompt] = useState<string>(() => {
-    return localStorage.getItem('gemini_customStylePrompt') || '';
-  });
+  // Output settings (defaults ate carregar do store)
+  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('English');
+  const [outputStyle, setOutputStyle] = useState<OutputStyle>('Verbatim');
+  const [customStylePrompt, setCustomStylePrompt] = useState<string>('');
 
   // AI config
-  const [aiModel, setAiModel] = useState<string>(() => {
-    return localStorage.getItem('claude_refiner_model') || 'sonnet';
-  });
+  const [aiModel, setAiModel] = useState<string>('sonnet');
 
   // Transcription mode
-  const [transcriptionMode, setTranscriptionMode] = useState<TranscriptionMode>(() => {
-    return (localStorage.getItem('voice_ai_mode') as TranscriptionMode) || 'auto';
-  });
+  const [transcriptionMode, setTranscriptionMode] = useState<TranscriptionMode>('auto');
 
   // STT Backend
-  const [sttBackend, setSttBackend] = useState<SttBackend>(() => {
-    return (localStorage.getItem('stt_backend') as SttBackend) || 'vm';
-  });
+  const [sttBackend, setSttBackend] = useState<SttBackend>('vm');
 
   // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -119,18 +89,39 @@ export function useSettings(): UseSettingsReturn {
   // App version
   const [appVersion, setAppVersion] = useState<string>('0.0.0');
 
-  // --- Persist effects ---
-  useEffect(() => localStorage.setItem('gemini_outputLanguage', outputLanguage), [outputLanguage]);
-  useEffect(() => localStorage.setItem('gemini_outputStyle', outputStyle), [outputStyle]);
-  useEffect(() => localStorage.setItem('gemini_customStylePrompt', customStylePrompt), [customStylePrompt]);
-  useEffect(() => localStorage.setItem('claude_refiner_model', aiModel), [aiModel]);
-  useEffect(() => localStorage.setItem('voice_ai_mode', transcriptionMode), [transcriptionMode]);
-  useEffect(() => localStorage.setItem('stt_backend', sttBackend), [sttBackend]);
+  // --- Carregar do store no mount (com migracao automatica de localStorage) ---
+  useEffect(() => {
+    const loadAll = async () => {
+      const [lang, style, custom, model, mode, backend] = await Promise.all([
+        migrateKey<string>(STORE, 'gemini_outputLanguage', 'English'),
+        migrateKey<string>(STORE, 'gemini_outputStyle', 'Verbatim'),
+        migrateKey<string>(STORE, 'gemini_customStylePrompt', ''),
+        migrateKey<string>(STORE, 'claude_refiner_model', 'sonnet'),
+        migrateKey<string>(STORE, 'voice_ai_mode', 'auto'),
+        migrateKey<string>(STORE, 'stt_backend', 'vm'),
+      ]);
+      setOutputLanguage(lang as OutputLanguage);
+      setOutputStyle(style as OutputStyle);
+      setCustomStylePrompt(custom);
+      setAiModel(model);
+      setTranscriptionMode(mode as TranscriptionMode);
+      setSttBackend(backend as SttBackend);
+    };
+    loadAll();
+  }, []);
+
+  // --- Persistir mudancas ---
+  useEffect(() => { storeSet(STORE, 'gemini_outputLanguage', outputLanguage); }, [outputLanguage]);
+  useEffect(() => { storeSet(STORE, 'gemini_outputStyle', outputStyle); }, [outputStyle]);
+  useEffect(() => { storeSet(STORE, 'gemini_customStylePrompt', customStylePrompt); }, [customStylePrompt]);
+  useEffect(() => { storeSet(STORE, 'claude_refiner_model', aiModel); }, [aiModel]);
+  useEffect(() => { storeSet(STORE, 'voice_ai_mode', transcriptionMode); }, [transcriptionMode]);
+  useEffect(() => { storeSet(STORE, 'stt_backend', sttBackend); }, [sttBackend]);
 
   // Fetch app version
   useEffect(() => {
-    const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
-    if (isTauri) {
+    const isTauriEnv = typeof window !== 'undefined' && '__TAURI__' in window;
+    if (isTauriEnv) {
       import('@tauri-apps/api/app').then(({ getVersion }) => {
         getVersion().then((v) => setAppVersion(v)).catch(() => {});
       });

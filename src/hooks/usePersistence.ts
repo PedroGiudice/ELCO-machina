@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { LogEntry, LogCategory } from '../types';
+import { migrateKey, storeSet, storeGet } from '../services/TauriStore';
 
 // ============================================================================
 // TYPES
@@ -215,11 +217,12 @@ const loadApiKey = async (): Promise<string> => {
     return process.env.API_KEY;
   }
 
+  // Fallback: migrar de localStorage via TauriStore
   try {
-    const saved = localStorage.getItem('gemini_api_key');
-    if (saved) return saved;
+    const migrated = await migrateKey<string>('settings.json', 'gemini_api_key', '');
+    if (migrated) return migrated;
   } catch (e) {
-    console.error('Failed to load API key from localStorage:', e);
+    console.error('Failed to migrate API key:', e);
   }
 
   return '';
@@ -237,10 +240,11 @@ const saveApiKeyToStore = async (key: string): Promise<void> => {
     }
   }
 
+  // Fallback via TauriStore (que ja tem fallback localStorage interno)
   try {
-    localStorage.setItem('gemini_api_key', key);
+    await storeSet('settings.json', 'gemini_api_key', key);
   } catch (e) {
-    console.error('Failed to save API key to localStorage:', e);
+    console.error('Failed to save API key via TauriStore:', e);
   }
 };
 
@@ -265,17 +269,17 @@ const loadHistory = async (): Promise<HistoryItem[]> => {
     return indexedDBHistory;
   }
 
+  // Fallback: migrar de localStorage via TauriStore
   try {
-    const saved = localStorage.getItem('gemini_history_v2');
-    if (saved) {
-      const parsed = JSON.parse(saved) as HistoryItem[];
-      return parsed.map((item) => ({
+    const migrated = await migrateKey<HistoryItem[]>('data.json', 'gemini_history_v2', []);
+    if (migrated.length > 0) {
+      return migrated.map((item) => ({
         ...item,
         id: item.id || generateHistoryId(),
       }));
     }
   } catch (e) {
-    console.error('Failed to load from localStorage:', e);
+    console.error('Failed to migrate history:', e);
   }
   return [];
 };
@@ -294,10 +298,11 @@ const saveHistory = async (history: HistoryItem[]): Promise<void> => {
 
   await saveHistoryToIndexedDB(history);
 
+  // Fallback via TauriStore
   try {
-    localStorage.setItem('gemini_history_v2', JSON.stringify(history));
+    await storeSet('data.json', 'gemini_history_v2', history);
   } catch (e) {
-    console.error('Failed to save to localStorage:', e);
+    console.error('Failed to save history via TauriStore:', e);
   }
 };
 
@@ -319,7 +324,12 @@ export interface UsePersistenceReturn {
   setActiveContext: (ctx: string) => void;
   contextMemory: Record<string, string>;
   updateContextMemory: (ctx: string, memory: string) => void;
-  handleAddContext: () => Promise<void>;
+  isAddContextModalOpen: boolean;
+  newContextName: string;
+  setNewContextName: (v: string) => void;
+  openAddContextModal: () => void;
+  cancelAddContext: () => void;
+  confirmAddContext: () => Promise<void>;
 
   // Memory Editor
   isMemoryModalOpen: boolean;
@@ -346,8 +356,8 @@ export interface UsePersistenceReturn {
   saveContextToDB: (item: ContextItem) => Promise<void>;
 
   // Logs
-  logs: { msg: string; type: 'info' | 'success' | 'error'; time?: Date }[];
-  addLog: (msg: string, type: 'info' | 'success' | 'error') => void;
+  logs: LogEntry[];
+  addLog: (msg: string, type: 'info' | 'success' | 'error' | 'warning', category?: LogCategory) => void;
 }
 
 // ============================================================================
@@ -356,11 +366,11 @@ export interface UsePersistenceReturn {
 
 export function usePersistence(): UsePersistenceReturn {
   // Logs
-  const [logs, setLogs] = useState<{ msg: string; type: 'info' | 'success' | 'error'; time?: Date }[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   const addLog = useCallback(
-    (msg: string, type: 'info' | 'success' | 'error' = 'info') => {
-      setLogs((prev) => [...prev.slice(-49), { msg, type, time: new Date() }]);
+    (msg: string, type: 'info' | 'success' | 'error' | 'warning' = 'info', category: LogCategory = 'app') => {
+      setLogs((prev) => [...prev.slice(-99), { msg, type, category, time: new Date() }]);
     },
     [],
   );
@@ -371,10 +381,12 @@ export function usePersistence(): UsePersistenceReturn {
 
   // Context
   const [contextPools, setContextPools] = useState<string[]>(['General']);
-  const [activeContext, setActiveContext] = useState<string>(() => {
-    return localStorage.getItem('gemini_active_context') || 'General';
-  });
+  const [activeContext, setActiveContext] = useState<string>('General');
   const [contextMemory, setContextMemory] = useState<Record<string, string>>({});
+
+  // Add Context Modal
+  const [isAddContextModalOpen, setIsAddContextModalOpen] = useState(false);
+  const [newContextName, setNewContextName] = useState('');
 
   // Memory Editor
   const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
@@ -396,6 +408,13 @@ export function usePersistence(): UsePersistenceReturn {
     });
   }, []);
 
+  // Load active context
+  useEffect(() => {
+    migrateKey<string>('settings.json', 'gemini_active_context', 'General').then((ctx) => {
+      setActiveContext(ctx);
+    });
+  }, []);
+
   // Load History
   useEffect(() => {
     loadHistory().then((loaded) => {
@@ -412,10 +431,9 @@ export function usePersistence(): UsePersistenceReturn {
   }, [history, historyLoaded]);
 
   // Persist active context
-  useEffect(
-    () => localStorage.setItem('gemini_active_context', activeContext),
-    [activeContext],
-  );
+  useEffect(() => {
+    storeSet('settings.json', 'gemini_active_context', activeContext);
+  }, [activeContext]);
 
   // Load contexts and audio from IndexedDB
   useEffect(() => {
@@ -431,16 +449,16 @@ export function usePersistence(): UsePersistenceReturn {
           initialPools.push(ctx.name);
         });
       } else {
-        // Migration from localStorage
-        const lsPools = localStorage.getItem('gemini_context_pools');
-        const lsMemory = localStorage.getItem('gemini_context_memory');
+        // Migration from localStorage/TauriStore
+        const lsPools = await storeGet<string | null>('data.json', 'gemini_context_pools', null) as string | null;
+        const lsMemory = await storeGet<string | null>('data.json', 'gemini_context_memory', null) as string | null;
 
         if (lsPools && lsMemory) {
           try {
             const pools = JSON.parse(lsPools) as string[];
             const memory = JSON.parse(lsMemory) as Record<string, string>;
 
-            addLog('Migrating data to secure storage...', 'info');
+            addLog('Migrando dados para armazenamento seguro...', 'info', 'app');
 
             for (const name of pools) {
               const mem = memory[name] || '';
@@ -448,7 +466,7 @@ export function usePersistence(): UsePersistenceReturn {
               initialMemory[name] = mem;
               initialPools.push(name);
             }
-            addLog('Data migration complete.', 'success');
+            addLog('Migracao de dados concluida.', 'success', 'app');
           } catch (e) {
             console.error('Migration failed', e);
           }
@@ -495,19 +513,29 @@ export function usePersistence(): UsePersistenceReturn {
     setContextMemory((prev) => ({ ...prev, [ctx]: memory }));
   }, []);
 
-  const handleAddContext = useCallback(async () => {
-    const name = prompt(
-      "Name your new Context Pool (e.g. 'Project Alpha', 'React Docs'):",
-    );
-    if (name && !contextPools.includes(name)) {
-      setContextPools((prev) => [...prev, name]);
-      setActiveContext(name);
-      setContextMemory((prev) => ({ ...prev, [name]: '' }));
+  const openAddContextModal = useCallback(() => {
+    setNewContextName('');
+    setIsAddContextModalOpen(true);
+  }, []);
 
-      await saveContextToDB({ name, memory: '', lastUpdated: Date.now() });
-      addLog(`Context '${name}' created & persisted.`, 'success');
-    }
-  }, [contextPools, addLog]);
+  const cancelAddContext = useCallback(() => {
+    setIsAddContextModalOpen(false);
+    setNewContextName('');
+  }, []);
+
+  const confirmAddContext = useCallback(async () => {
+    const name = newContextName.trim();
+    if (!name || contextPools.includes(name)) return;
+
+    setContextPools((prev) => [...prev, name]);
+    setActiveContext(name);
+    setContextMemory((prev) => ({ ...prev, [name]: '' }));
+    setIsAddContextModalOpen(false);
+    setNewContextName('');
+
+    await saveContextToDB({ name, memory: '', lastUpdated: Date.now() });
+    addLog(`Contexto '${name}' criado e persistido.`, 'success', 'app');
+  }, [newContextName, contextPools, addLog]);
 
   const openMemoryEditor = useCallback(() => {
     setTempMemoryEdit(contextMemory[activeContext] || '');
@@ -528,7 +556,7 @@ export function usePersistence(): UsePersistenceReturn {
 
     setIsSavingContext(false);
     setIsMemoryModalOpen(false);
-    addLog('Context memory saved to secure storage.', 'success');
+    addLog('Memoria de contexto salva no armazenamento seguro.', 'success', 'app');
   }, [tempMemoryEdit, activeContext, addLog]);
 
   const saveApiKeyFn = useCallback(async (key: string) => {
@@ -550,7 +578,12 @@ export function usePersistence(): UsePersistenceReturn {
     setActiveContext,
     contextMemory,
     updateContextMemory,
-    handleAddContext,
+    isAddContextModalOpen,
+    newContextName,
+    setNewContextName,
+    openAddContextModal,
+    cancelAddContext,
+    confirmAddContext,
 
     // Memory Editor
     isMemoryModalOpen,
@@ -581,7 +614,8 @@ export function usePersistence(): UsePersistenceReturn {
     addLog,
   }), [
     history, historyLoaded, addToHistory, deleteHistoryItemFn, clearAllHistoryFn,
-    contextPools, activeContext, contextMemory, updateContextMemory, handleAddContext,
+    contextPools, activeContext, contextMemory, updateContextMemory,
+    isAddContextModalOpen, newContextName, openAddContextModal, cancelAddContext, confirmAddContext,
     isMemoryModalOpen, tempMemoryEdit, isSavingContext, openMemoryEditor, saveMemoryFn,
     apiKey, apiKeyInput, isApiKeyVisible, saveApiKeyFn,
     logs, addLog,

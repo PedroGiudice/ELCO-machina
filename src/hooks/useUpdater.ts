@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { safeFetch } from '../services/safeFetch';
 
 // ============================================================================
 // TYPES
@@ -24,7 +25,7 @@ const isAndroid = (): boolean => {
   return typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 };
 
-const ANDROID_UPDATE_URL = 'http://137.131.201.119/proatt/latest-android.json';
+const ANDROID_UPDATE_URL = 'http://217.76.48.35:8090/proatt/latest-android.json';
 
 const isNewerVersion = (remote: string, local: string): boolean => {
   const r = remote.split('.').map(Number);
@@ -120,7 +121,7 @@ export function useUpdater(): UseUpdaterReturn {
         const localVersion = await getVersion();
         console.log(`[Updater-Android] Versao local: ${localVersion}`);
 
-        const resp = await fetch(ANDROID_UPDATE_URL);
+        const resp = await safeFetch(ANDROID_UPDATE_URL);
         if (!resp.ok) {
           console.log(`[Updater-Android] Servidor retornou ${resp.status}`);
           setUpdateStatus('idle');

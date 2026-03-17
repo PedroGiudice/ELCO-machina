@@ -2,7 +2,7 @@
  * VoiceAI Client - Abstrai chamadas ao sidecar Python
  *
  * Funcionalidades:
- * - Transcricao local via Faster-Whisper
+ * - Transcricao via Whisper (VM ou Modal)
  * - Refinamento opcional via Claude
  * - Health check do sidecar
  *
@@ -55,6 +55,16 @@ async function safeFetch(
   }
 }
 
+// ============================================================================
+// TTS (XTTS v2)
+// ============================================================================
+
+export type { XTTSParams, TTSSynthesizeRequest } from "../types";
+
+// ============================================================================
+// STT
+// ============================================================================
+
 // Formatos de audio suportados
 export type AudioFormat = "webm" | "wav" | "mp3" | "ogg" | "m4a";
 
@@ -91,7 +101,23 @@ export interface TranscribeResponse {
   model_used: string | null;
 }
 
-// Response do health check (piper/modal, nao xtts)
+// Request para refinamento (alinhado com backend POST /refine)
+export interface RefineRequest {
+  text: string;
+  system_instruction: string;
+  model?: string;
+  temperature?: number;
+}
+
+// Response do refinamento (alinhado com backend)
+export interface RefineResponse {
+  refined_text: string;
+  success: boolean;
+  model_used: string;
+  error: string | null;
+}
+
+// Response do health check
 export interface HealthResponse {
   status: "healthy" | "degraded";
   version: string;
@@ -100,9 +126,8 @@ export interface HealthResponse {
       status: "loaded" | "available" | "not_loaded";
       model: string | null;
     };
-    piper: {
-      status: "loaded" | "available" | "not_implemented";
-      model: string | null;
+    tts: {
+      status: "loaded" | "available" | "not_installed" | "not_available";
     };
     modal: {
       status: "loaded" | "available" | "not_implemented";
@@ -203,7 +228,7 @@ export class VoiceAIClient {
   }
 
   /**
-   * Transcreve audio usando o sidecar local
+   * Transcreve audio usando o sidecar
    *
    * @param request Dados da transcricao (audio base64, formato, idioma, etc)
    * @returns Transcricao com texto e metadados
@@ -267,6 +292,60 @@ export class VoiceAIClient {
   }
 
   /**
+   * Refina texto usando Claude CLI via sidecar
+   *
+   * @param request Dados do refinamento (texto, system_instruction, modelo)
+   * @returns Texto refinado com metadados
+   */
+  async refine(request: RefineRequest): Promise<RefineResponse> {
+    const body: Record<string, unknown> = {
+      text: request.text,
+      system_instruction: request.system_instruction,
+    };
+
+    if (request.model !== undefined) {
+      body.model = request.model;
+    }
+    if (request.temperature !== undefined) {
+      body.temperature = request.temperature;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await safeFetch(`${this.baseUrl}/refine`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `HTTP ${response.status}: ${response.statusText}`
+        );
+      }
+
+      const data: RefineResponse = await response.json();
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Timeout no refinamento.");
+      }
+
+      throw error;
+    }
+  }
+
+  /**
    * Converte Blob para base64
    */
   static async blobToBase64(blob: Blob): Promise<string> {
@@ -310,23 +389,8 @@ export async function ensureSidecarRunning(): Promise<boolean> {
   return await client.isAvailable();
 }
 
-/**
- * Para o sidecar - no-op para servidor remoto
- */
-export async function stopSidecar(): Promise<void> {
-  // Servidor remoto - nao gerenciado pelo cliente
-}
-
-/**
- * Verifica status do servidor via health check HTTP
- */
-export async function getSidecarStatus(): Promise<boolean> {
-  const client = getVoiceAIClient();
-  return await client.isAvailable();
-}
-
 // ============================================================
-// Singleton e Hook
+// Singleton
 // ============================================================
 
 // Instancia singleton para uso global
@@ -336,8 +400,8 @@ let clientInstance: VoiceAIClient | null = null;
 let configuredUrl: string | null = null;
 
 /**
- * Define a URL do servidor Whisper (remoto ou local)
- * @param url URL do servidor (ex: http://100.123.73.128:8765) ou null para usar Contabo via Tailscale
+ * Define a URL do servidor Whisper
+ * @param url URL do servidor (ex: http://100.123.73.128:8765) ou null para usar default via Tailscale
  */
 export function setVoiceAIUrl(url: string | null): void {
   configuredUrl = url && url.trim() !== "" ? url.trim() : null;
@@ -370,20 +434,3 @@ export function getVoiceAIClient(): VoiceAIClient {
   return clientInstance;
 }
 
-/**
- * Hook para uso em componentes React
- * Verifica disponibilidade do sidecar e fornece metodos de transcricao
- */
-export function useVoiceAI() {
-  const client = getVoiceAIClient();
-
-  return {
-    client,
-    transcribe: client.transcribe.bind(client),
-    health: client.health.bind(client),
-    isAvailable: client.isAvailable.bind(client),
-    getStatus: client.getStatus.bind(client),
-    blobToBase64: VoiceAIClient.blobToBase64,
-    getFormatFromMimeType: VoiceAIClient.getFormatFromMimeType,
-  };
-}

@@ -48,9 +48,9 @@ interface PanelConfigProps {
 }
 
 const aiModels = [
-    { id: "haiku", label: "Haiku", desc: "Fastest" },
-    { id: "sonnet", label: "Sonnet", desc: "Balanced" },
-    { id: "opus", label: "Opus", desc: "Max Quality" },
+    { id: "haiku", label: "Haiku", desc: "Mais rapido" },
+    { id: "sonnet", label: "Sonnet", desc: "Equilibrado" },
+    { id: "opus", label: "Opus", desc: "Qualidade maxima" },
 ];
 
 const sttBackends = [
@@ -87,7 +87,7 @@ export function PanelConfig({
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Settings className="w-4 h-4 text-[var(--accent)]" />
-                    <h2 className="text-sm font-semibold">Settings</h2>
+                    <h2 className="text-sm font-semibold">Configuracoes</h2>
                 </div>
                 {currentUser && (
                     <div className="flex items-center gap-2">
@@ -105,68 +105,19 @@ export function PanelConfig({
                 )}
             </div>
 
-            {/* API Key */}
-            <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
-                        <Key className="w-3 h-3" />
-                        Claude API Key
-                    </label>
-                    <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${apiKey ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}
-                    >
-                        {apiKey ? "CONFIGURADA" : "NÃO CONFIGURADA"}
-                    </span>
-                </div>
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <input
-                            type={isApiKeyVisible ? "text" : "password"}
-                            value={apiKeyInput}
-                            onChange={(e) =>
-                                onApiKeyInputChange(e.target.value)
-                            }
-                            placeholder="Cole sua API Key..."
-                            className="w-full px-3 py-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-sm focus:outline-none focus:border-[var(--accent)] text-[var(--text-primary)]"
-                        />
-                        <button
-                            onClick={onToggleApiKeyVisibility}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                        >
-                            {isApiKeyVisible ? (
-                                <EyeOff className="w-4 h-4" />
-                            ) : (
-                                <Eye className="w-4 h-4" />
-                            )}
-                        </button>
-                    </div>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={onSaveApiKey}
-                        disabled={!apiKeyInput.trim() || apiKeyInput === apiKey}
-                    >
-                        Salvar
-                    </Button>
-                </div>
-                <p className="text-[9px] text-[var(--text-secondary)]">
-                    Obtenha em: console.anthropic.com/settings/keys
-                </p>
-            </section>
-
             <div className="w-full h-px bg-[var(--border-subtle)]" />
 
             {/* Audio Engine */}
             <section className="space-y-4">
                 <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
                     <Mic className="w-3 h-3" />
-                    Audio Engine
+                    Motor de Audio
                 </label>
 
                 {/* Mic Selection */}
                 <div>
                     <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
-                        Input Device
+                        Dispositivo de Entrada
                     </label>
                     <div className="relative">
                         <select
@@ -174,11 +125,11 @@ export function PanelConfig({
                             onChange={(e) => onMicChange(e.target.value)}
                             className="w-full bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] py-2 px-3 text-xs focus:outline-none appearance-none text-[var(--text-primary)]"
                         >
-                            <option value="default">System Default</option>
+                            <option value="default">Padrao do sistema</option>
                             {availableMics.map((mic) => (
                                 <option key={mic.deviceId} value={mic.deviceId}>
                                     {mic.label ||
-                                        `Microphone ${mic.deviceId.slice(0, 5)}...`}
+                                        `Microfone ${mic.deviceId.slice(0, 5)}...`}
                                 </option>
                             ))}
                         </select>
@@ -189,20 +140,20 @@ export function PanelConfig({
                 {/* Audio Toggles */}
                 <div className="space-y-2">
                     <ToggleOption
-                        label="Noise Suppression"
-                        description="Filter background static"
+                        label="Reducao de Ruido"
+                        description="Filtra ruido de fundo"
                         checked={noiseSuppression}
                         onChange={onNoiseSuppressionChange}
                     />
                     <ToggleOption
-                        label="Echo Cancellation"
-                        description="Prevent audio feedback"
+                        label="Cancelamento de Eco"
+                        description="Evita retorno de audio"
                         checked={echoCancellation}
                         onChange={onEchoCancellationChange}
                     />
                     <ToggleOption
-                        label="Auto Gain Control"
-                        description="Normalize volume levels"
+                        label="Ganho Automatico"
+                        description="Normaliza nivel de volume"
                         checked={autoGainControl}
                         onChange={onAutoGainControlChange}
                     />
@@ -215,13 +166,13 @@ export function PanelConfig({
             <section className="space-y-4">
                 <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
                     <Cpu className="w-3 h-3" />
-                    Intelligence Model
+                    Modelo de IA
                 </label>
 
                 {/* Claude Version */}
                 <div>
                     <label className="text-[10px] text-[var(--text-secondary)] mb-1.5 block">
-                        Claude Version
+                        Versao Claude
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                         {aiModels.map((model) => (

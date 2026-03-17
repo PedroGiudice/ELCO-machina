@@ -273,73 +273,24 @@ function getBuiltinDefaults(): PromptTemplate[] {
 
 const STORE_KEY = 'prompt_templates';
 
-const isTauri = (): boolean =>
-  typeof window !== 'undefined' && '__TAURI__' in window;
-
-let storeInstance: { get: (k: string) => Promise<unknown>; set: (k: string, v: unknown) => Promise<void> } | null = null;
-let storeInitPromise: Promise<typeof storeInstance> | null = null;
-
-async function getStore(): Promise<typeof storeInstance> {
-  if (!isTauri()) return null;
-  if (storeInstance) return storeInstance;
-  if (storeInitPromise) return storeInitPromise;
-
-  storeInitPromise = (async () => {
-    try {
-      const { load } = await import('@tauri-apps/plugin-store');
-      storeInstance = await load('prompts.json', { defaults: {}, autoSave: 100 });
-      return storeInstance;
-    } catch (e) {
-      console.error('PromptStore: Failed to init Tauri Store:', e);
-      return null;
-    } finally {
-      storeInitPromise = null;
-    }
-  })();
-
-  return storeInitPromise;
-}
+import { migrateKey, storeSet } from './TauriStore';
 
 async function loadTemplates(): Promise<PromptTemplate[]> {
-  const store = await getStore();
-  if (store) {
-    try {
-      const saved = (await store.get(STORE_KEY)) as PromptTemplate[] | undefined;
-      if (saved && Array.isArray(saved) && saved.length > 0) return saved;
-    } catch (e) {
-      console.error('PromptStore: Failed to load from Tauri Store:', e);
-    }
-  }
-
-  // Fallback localStorage
   try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as PromptTemplate[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
+    const saved = await migrateKey<PromptTemplate[]>('data.json', STORE_KEY, []);
+    if (Array.isArray(saved) && saved.length > 0) return saved;
   } catch (e) {
-    console.error('PromptStore: Failed to load from localStorage:', e);
+    console.error('PromptStore: Failed to load templates:', e);
   }
 
   return [];
 }
 
 async function saveTemplates(templates: PromptTemplate[]): Promise<void> {
-  const store = await getStore();
-  if (store) {
-    try {
-      await store.set(STORE_KEY, templates);
-      return;
-    } catch (e) {
-      console.error('PromptStore: Failed to save to Tauri Store:', e);
-    }
-  }
-
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(templates));
+    await storeSet('data.json', STORE_KEY, templates);
   } catch (e) {
-    console.error('PromptStore: Failed to save to localStorage:', e);
+    console.error('PromptStore: Failed to save templates:', e);
   }
 }
 

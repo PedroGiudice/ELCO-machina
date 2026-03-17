@@ -4,6 +4,8 @@ import {
   setVoiceAIUrl,
   getVoiceAIClient,
 } from '../services/VoiceAIClient';
+import { safeFetch } from '../services/safeFetch';
+import { migrateKey, storeSet } from '../services/TauriStore';
 
 // ============================================================================
 // TYPES
@@ -30,25 +32,30 @@ export interface UseSidecarReturn {
 // ============================================================================
 
 export function useSidecar(
-  addLog?: (msg: string, type: 'info' | 'success' | 'error') => void,
+  addLog?: (msg: string, type: 'info' | 'success' | 'error' | 'warning', category?: string) => void,
 ): UseSidecarReturn {
-  const log = (msg: string, type: 'info' | 'success' | 'error') => {
-    if (addLog) addLog(msg, type);
+  const log = (msg: string, type: 'info' | 'success' | 'error' | 'warning', category?: string) => {
+    if (addLog) addLog(msg, type, category);
     else console.log(`[Sidecar ${type}]`, msg);
   };
   const [sidecarAvailable, setSidecarAvailable] = useState<boolean>(false);
   const [sidecarStatus, setSidecarStatus] = useState<string>('checking');
   const clientRef = useRef<VoiceAIClient | null>(null);
 
-  const [whisperServerUrl, setWhisperServerUrl] = useState<string>(() => {
-    return localStorage.getItem('whisper_server_url') || 'http://100.123.73.128:8765';
-  });
+  const [whisperServerUrl, setWhisperServerUrl] = useState<string>('http://100.123.73.128:8765');
   const [whisperTestStatus, setWhisperTestStatus] = useState<WhisperTestStatus>('idle');
   const [whisperTestMessage, setWhisperTestMessage] = useState<string>('');
 
+  // Carregar URL do store no mount
+  useEffect(() => {
+    migrateKey<string>('settings.json', 'whisper_server_url', 'http://100.123.73.128:8765').then((url) => {
+      setWhisperServerUrl(url);
+    });
+  }, []);
+
   // Persist URL and apply on change
   useEffect(() => {
-    localStorage.setItem('whisper_server_url', whisperServerUrl);
+    storeSet('settings.json', 'whisper_server_url', whisperServerUrl);
     setVoiceAIUrl(whisperServerUrl || null);
   }, [whisperServerUrl]);
 
@@ -65,9 +72,9 @@ export function useSidecar(
         if (health?.status === 'healthy') {
           setSidecarAvailable(true);
           setSidecarStatus(
-            `Local STT (Whisper ${health.models?.whisper?.model || 'medium'})`,
+            `STT (Whisper ${health.models?.whisper?.model || 'medium'})`,
           );
-          log('Voice AI Sidecar conectado - Transcricao local ativada', 'success');
+          log('Voice AI Sidecar conectado', 'success', 'ipc');
         } else {
           setSidecarAvailable(false);
           setSidecarStatus('Sidecar offline');
@@ -75,7 +82,7 @@ export function useSidecar(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error('[useSidecar] health check failed:', msg, err);
-        log(`Health check falhou: ${msg}`, 'error');
+        log(`Health check falhou: ${msg}`, 'error', 'ipc');
         setSidecarAvailable(false);
         setSidecarStatus(`Sidecar offline: ${msg}`);
       }
@@ -109,7 +116,7 @@ export function useSidecar(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${url}/health`, {
+      const response = await safeFetch(`${url}/health`, {
         method: 'GET',
         signal: controller.signal,
       });

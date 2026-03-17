@@ -53,3 +53,6 @@ sidecar/.env
 
 # AppImage build artifacts
 squashfs-root/
+
+# Refiner output (generated at runtime)
+refiner-output/

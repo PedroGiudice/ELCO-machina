@@ -1,78 +1,90 @@
-import * as React from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { Volume2, VolumeX, ChevronRight, Upload } from 'lucide-react';
+import { Volume2, VolumeX, Upload, RotateCcw, Loader2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
-
-interface TTSCustomParams {
-  exaggeration: number;
-  speed: number;
-  stability: number;
-  steps: number;
-  sentence_silence: number;
-}
+import { safeFetch } from '../../services/safeFetch';
+import type { XTTSParams } from '../../types';
+import { DEFAULT_XTTS_PARAMS, type TTSStatus, type VoiceRef } from '../../hooks/useTTS';
 
 interface PanelTTSProps {
   // State
-  isSpeaking: boolean;
-  canSpeak: boolean;
+  ttsStatus: TTSStatus;
+  statusMessage: string | null;
   hasText: boolean;
 
   // Actions
   onReadText: () => void;
   onStopReading: () => void;
 
-  // Engine Settings
-  ttsEngine: 'piper' | 'chatterbox';
-  onEngineChange: (engine: 'piper' | 'chatterbox') => void;
-
-  // Profile
-  ttsProfile: string;
-  onProfileChange: (profile: string) => void;
-
-  // Custom Params
-  ttsCustomParams: TTSCustomParams;
-  onCustomParamsChange: (params: TTSCustomParams) => void;
+  // XTTS Params
+  xttsParams: XTTSParams;
+  onXttsParamsChange: (params: XTTSParams) => void;
 
   // Voice Cloning
-  voiceRefAudio: string | null;
-  onVoiceRefChange: (ref: string | null) => void;
+  voiceRef: VoiceRef | null;
+  onVoiceRefChange: (ref: VoiceRef | null) => void;
+
+  // Endpoint
+  modalEndpointUrl: string;
+  onEndpointChange: (url: string) => void;
+
+  // Audio URL (para player inline)
+  ttsAudioUrl?: string | null;
 }
 
-const profiles = [
-  { id: 'standard', label: 'Standard', desc: 'Balanced' },
-  { id: 'legal', label: 'Legal', desc: 'Formal' },
-  { id: 'expressive', label: 'Expressive', desc: 'Emotional' },
-  { id: 'fast_preview', label: 'Fast Preview', desc: 'Quick' },
-  { id: 'custom', label: 'Custom', desc: 'Your settings' },
-];
+const STATUS_LABELS: Record<TTSStatus, string> = {
+  idle: 'Pronto',
+  cold_start: 'Inicializando GPU...',
+  synthesizing: 'Sintetizando...',
+  playing: 'Reproduzindo...',
+  error: 'Erro',
+};
+
+const STATUS_COLORS: Record<TTSStatus, string> = {
+  idle: 'text-[var(--text-secondary)]',
+  cold_start: 'text-yellow-400',
+  synthesizing: 'text-blue-400',
+  playing: 'text-green-400',
+  error: 'text-red-400',
+};
 
 export function PanelTTS({
-  isSpeaking,
-  canSpeak,
+  ttsStatus,
+  statusMessage,
   hasText,
   onReadText,
   onStopReading,
-  ttsEngine,
-  onEngineChange,
-  ttsProfile,
-  onProfileChange,
-  ttsCustomParams,
-  onCustomParamsChange,
-  voiceRefAudio,
+  xttsParams,
+  onXttsParamsChange,
+  voiceRef,
   onVoiceRefChange,
+  modalEndpointUrl,
+  onEndpointChange,
 }: PanelTTSProps) {
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          onVoiceRefChange(reader.result.split(',')[1]);
-        }
-      };
-      reader.readAsDataURL(file);
+  const isSpeaking = ttsStatus === 'playing';
+  const isBusy = ttsStatus === 'cold_start' || ttsStatus === 'synthesizing';
+
+  const handleSelectAudio = useCallback(async () => {
+    const selected = await open({
+      filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'ogg', 'flac', 'webm'] }],
+      multiple: false,
+    });
+    if (selected) {
+      const bytes = await readFile(selected);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      onVoiceRefChange({ path: selected, base64 });
     }
+  }, [onVoiceRefChange]);
+
+  const updateParam = <K extends keyof XTTSParams>(key: K, value: XTTSParams[K]) => {
+    onXttsParamsChange({ ...xttsParams, [key]: value });
   };
 
   return (
@@ -80,214 +92,296 @@ export function PanelTTS({
       {/* Header */}
       <div className="flex items-center gap-2">
         <Volume2 className="w-4 h-4 text-[var(--accent)]" />
-        <h2 className="text-sm font-semibold">Text to Speech</h2>
+        <h2 className="text-sm font-semibold">Texto para Fala (XTTS v2)</h2>
+      </div>
+
+      {/* Status */}
+      <div className={`flex items-center gap-2 text-[10px] ${STATUS_COLORS[ttsStatus]}`}>
+        {isBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+        {ttsStatus === 'error' && <AlertCircle className="w-3 h-3" />}
+        <span>{statusMessage || STATUS_LABELS[ttsStatus]}</span>
       </div>
 
       {/* Main Action */}
       <Button
         variant={isSpeaking ? 'secondary' : 'primary'}
         className={`w-full h-14 text-base ${isSpeaking ? 'text-red-400 border-red-500/50' : ''}`}
-        onClick={isSpeaking ? onStopReading : onReadText}
-        disabled={!canSpeak || !hasText}
+        onClick={isSpeaking || isBusy ? onStopReading : onReadText}
+        disabled={(!hasText || !voiceRef) && !isSpeaking && !isBusy}
       >
-        {isSpeaking ? (
+        {isSpeaking || isBusy ? (
           <>
             <VolumeX className="w-5 h-5" />
-            Stop Reading
+            Parar
           </>
         ) : (
           <>
             <Volume2 className="w-5 h-5" />
-            Read Text Aloud
+            Ler Texto em Voz Alta
           </>
         )}
       </Button>
 
       {!hasText && (
         <p className="text-[10px] text-[var(--text-secondary)] text-center">
-          Write or transcribe text first
+          Escreva ou transcreva um texto primeiro
         </p>
       )}
 
-      {!canSpeak && hasText && (
-        <p className="text-[10px] text-red-400 text-center">
-          Servidor de voz inacessivel. Verifique se o sidecar esta ativo.
+      {hasText && !voiceRef && (
+        <p className="text-[10px] text-yellow-400 text-center">
+          Envie um audio de referencia para clonagem de voz
         </p>
       )}
 
       <div className="w-full h-px bg-[var(--border-subtle)]" />
 
-      {/* Engine Selection */}
+      {/* Voice Cloning */}
       <section className="space-y-3">
         <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-          TTS Engine
+          Clonagem de Voz
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onEngineChange('chatterbox')}
-            className={`
-              flex flex-col items-start p-3 rounded-[var(--radius-md)] border transition-all text-left
-              ${
-                ttsEngine === 'chatterbox'
-                  ? 'bg-[var(--accent-dim)] border-[var(--accent)]'
-                  : 'bg-[var(--bg-overlay)] border-[var(--border-subtle)] opacity-60 hover:opacity-100'
-              }
-            `}
+        <p className="text-[9px] text-[var(--text-secondary)]">
+          {voiceRef
+            ? `Amostra: ${voiceRef.path.split('/').pop() ?? voiceRef.path}`
+            : 'Selecione um audio de referencia (obrigatorio para XTTS v2).'}
+        </p>
+        <button
+          type="button"
+          onClick={handleSelectAudio}
+          className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group"
+        >
+          <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] flex items-center gap-2">
+            <Upload className="w-3 h-3" />
+            {voiceRef ? 'Trocar amostra de voz' : 'Selecionar amostra de voz'}
+          </span>
+        </button>
+        {voiceRef && (
+          <button
+            onClick={() => onVoiceRefChange(null)}
+            className="text-[10px] text-red-400 hover:text-red-300"
           >
-            <span className="text-xs font-bold">Chatterbox</span>
-            <span className="text-[9px] text-[var(--text-secondary)]">
-              Natural, voice cloning
-            </span>
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onEngineChange('piper')}
-            className={`
-              flex flex-col items-start p-3 rounded-[var(--radius-md)] border transition-all text-left
-              ${
-                ttsEngine === 'piper'
-                  ? 'bg-[var(--accent-dim)] border-[var(--accent)]'
-                  : 'bg-[var(--bg-overlay)] border-[var(--border-subtle)] opacity-60 hover:opacity-100'
-              }
-            `}
-          >
-            <span className="text-xs font-bold">Piper</span>
-            <span className="text-[9px] text-[var(--text-secondary)]">Local, fast</span>
-          </motion.button>
-        </div>
+            Remover amostra
+          </button>
+        )}
       </section>
 
-      {/* Chatterbox Settings */}
-      {ttsEngine === 'chatterbox' && (
-        <>
-          <div className="w-full h-px bg-[var(--border-subtle)]" />
+      <div className="w-full h-px bg-[var(--border-subtle)]" />
 
-          {/* Profile Selection */}
-          <section className="space-y-3">
-            <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-              Voice Profile
-            </label>
-            <div className="space-y-2">
-              {profiles.map((profile) => (
-                <motion.button
-                  key={profile.id}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onProfileChange(profile.id)}
-                  className={`
-                    w-full flex items-center justify-between p-3 rounded-[var(--radius-sm)] border transition-all
-                    ${
-                      ttsProfile === profile.id
-                        ? 'bg-[var(--accent-dim)] border-[var(--accent)]'
-                        : 'bg-[var(--bg-overlay)] border-[var(--border-subtle)] opacity-60 hover:opacity-100'
-                    }
-                  `}
-                >
-                  <div className="flex flex-col items-start">
-                    <span className="text-xs font-medium">{profile.label}</span>
-                    <span className="text-[9px] text-[var(--text-secondary)]">
-                      {profile.desc}
-                    </span>
-                  </div>
-                  {ttsProfile === profile.id && (
-                    <div className="w-2 h-2 rounded-full bg-[var(--accent)]" />
-                  )}
-                </motion.button>
-              ))}
-            </div>
-          </section>
+      {/* XTTS v2 Parameters */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+            Parametros XTTS v2
+          </label>
+          <button
+            onClick={() => onXttsParamsChange(DEFAULT_XTTS_PARAMS)}
+            className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            title="Resetar para valores padrao"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Resetar
+          </button>
+        </div>
 
-          {/* Custom Parameters */}
-          {ttsProfile === 'custom' && (
-            <motion.section
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="space-y-4 p-3 bg-[var(--bg-base)] rounded-[var(--radius-md)] border border-[var(--border-subtle)]"
-            >
-              <Slider
-                label="Expressiveness"
-                value={ttsCustomParams.exaggeration}
-                onChange={(v) =>
-                  onCustomParamsChange({ ...ttsCustomParams, exaggeration: v })
-                }
-                min={0}
-                max={1}
-                step={0.1}
-                formatValue={(v) => v.toFixed(1)}
-              />
-              <Slider
-                label="Speed"
-                value={ttsCustomParams.speed}
-                onChange={(v) =>
-                  onCustomParamsChange({ ...ttsCustomParams, speed: v })
-                }
-                min={0.5}
-                max={2}
-                step={0.1}
-                formatValue={(v) => `${v.toFixed(1)}x`}
-              />
-              <Slider
-                label="Stability"
-                value={ttsCustomParams.stability}
-                onChange={(v) =>
-                  onCustomParamsChange({ ...ttsCustomParams, stability: v })
-                }
-                min={0}
-                max={1}
-                step={0.1}
-                formatValue={(v) => v.toFixed(1)}
-              />
-              <Slider
-                label="Quality (steps)"
-                value={ttsCustomParams.steps}
-                onChange={(v) =>
-                  onCustomParamsChange({ ...ttsCustomParams, steps: v })
-                }
-                min={4}
-                max={32}
-                step={2}
-                formatValue={(v) => String(v)}
-              />
-            </motion.section>
-          )}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="space-y-4 p-3 bg-[var(--bg-base)] rounded-[var(--radius-md)] border border-[var(--border-subtle)]"
+        >
+          <Slider
+            label="Velocidade"
+            value={xttsParams.speed}
+            onChange={(v) => updateParam('speed', v)}
+            min={0.5}
+            max={2.0}
+            step={0.05}
+            formatValue={(v) => `${v.toFixed(2)}x`}
+          />
+          <Slider
+            label="Temperatura"
+            value={xttsParams.temperature}
+            onChange={(v) => updateParam('temperature', v)}
+            min={0.1}
+            max={0.8}
+            step={0.05}
+            formatValue={(v) => v.toFixed(2)}
+          />
+          <Slider
+            label="Top K"
+            value={xttsParams.top_k}
+            onChange={(v) => updateParam('top_k', v)}
+            min={1}
+            max={100}
+            step={1}
+            formatValue={(v) => String(Math.round(v))}
+          />
+          <Slider
+            label="Top P"
+            value={xttsParams.top_p}
+            onChange={(v) => updateParam('top_p', v)}
+            min={0.1}
+            max={1.0}
+            step={0.05}
+            formatValue={(v) => v.toFixed(2)}
+          />
+          <Slider
+            label="Penalidade de Repeticao"
+            value={xttsParams.repetition_penalty}
+            onChange={(v) => updateParam('repetition_penalty', v)}
+            min={1.0}
+            max={5.0}
+            step={0.1}
+            formatValue={(v) => v.toFixed(1)}
+          />
+          <Slider
+            label="Penalidade de Comprimento"
+            value={xttsParams.length_penalty}
+            onChange={(v) => updateParam('length_penalty', v)}
+            min={0.5}
+            max={2.0}
+            step={0.1}
+            formatValue={(v) => v.toFixed(1)}
+          />
+        </motion.div>
+      </section>
 
-          <div className="w-full h-px bg-[var(--border-subtle)]" />
+      <div className="w-full h-px bg-[var(--border-subtle)]" />
 
-          {/* Voice Cloning */}
-          <section className="space-y-3">
-            <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-              Voice Cloning (Optional)
-            </label>
-            <p className="text-[9px] text-[var(--text-secondary)]">
-              {voiceRefAudio
-                ? 'Usando sua voz personalizada para clonagem.'
-                : 'Usando voz PT-BR padrao. Envie um audio para clonar outra voz.'
-              }
-            </p>
-            <label className="flex items-center justify-between w-full h-11 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors group">
-              <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] flex items-center gap-2">
-                <Upload className="w-3 h-3" />
-                {voiceRefAudio ? 'Amostra carregada' : 'Enviar amostra de voz'}
-              </span>
-              <ChevronRight className="w-3 h-3 text-[var(--text-secondary)]" />
-              <input
-                type="file"
-                className="hidden"
-                accept="audio/*"
-                onChange={handleFileChange}
-              />
-            </label>
-            {voiceRefAudio && (
-              <button
-                onClick={() => onVoiceRefChange(null)}
-                className="text-[10px] text-red-400 hover:text-red-300"
-              >
-                Remover amostra (voltar para voz padrao)
-              </button>
-            )}
-          </section>
-        </>
-      )}
+      {/* Endpoint URL */}
+      <EndpointSection
+        modalEndpointUrl={modalEndpointUrl}
+        onEndpointChange={onEndpointChange}
+      />
     </div>
+  );
+}
+
+// ============================================================================
+// Endpoint Section com Health Check
+// ============================================================================
+
+type HealthStatus = 'unknown' | 'checking' | 'connected' | 'starting' | 'offline';
+
+const HEALTH_LABELS: Record<HealthStatus, string> = {
+  unknown: '',
+  checking: 'Verificando...',
+  connected: 'Conectado',
+  starting: 'Inicializando...',
+  offline: 'Offline',
+};
+
+const HEALTH_COLORS: Record<HealthStatus, string> = {
+  unknown: '',
+  checking: 'text-blue-400',
+  connected: 'text-green-400',
+  starting: 'text-yellow-400',
+  offline: 'text-red-400',
+};
+
+function deriveHealthUrl(synthesizeUrl: string): string {
+  // https://pedrogiudice--xtts-serve-xttsserver-synthesize.modal.run
+  // -> https://pedrogiudice--xtts-serve-xttsserver-health.modal.run
+  return synthesizeUrl.replace(/-synthesize\./, '-health.');
+}
+
+function EndpointSection({
+  modalEndpointUrl,
+  onEndpointChange,
+}: {
+  modalEndpointUrl: string;
+  onEndpointChange: (url: string) => void;
+}) {
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>('unknown');
+  const [healthDetail, setHealthDetail] = useState<string | null>(null);
+
+  const testConnection = useCallback(async () => {
+    if (!modalEndpointUrl.trim()) return;
+
+    setHealthStatus('checking');
+    setHealthDetail(null);
+
+    const healthUrl = deriveHealthUrl(modalEndpointUrl);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s para cold start
+
+      const response = await safeFetch(healthUrl, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        setHealthStatus('connected');
+        const gpu = data.gpu || 'desconhecida';
+        const loadTime = data.model_load_s ? `${data.model_load_s}s` : '?';
+        setHealthDetail(`GPU: ${gpu} | Modelo carregado em ${loadTime}`);
+      } else if (response.status === 503 || response.status === 502) {
+        setHealthStatus('starting');
+        setHealthDetail('Servidor em cold start. Aguarde e tente novamente.');
+      } else {
+        setHealthStatus('offline');
+        setHealthDetail(`HTTP ${response.status}`);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setHealthStatus('starting');
+        setHealthDetail('Timeout -- servidor pode estar em cold start (ate 70s).');
+      } else {
+        setHealthStatus('offline');
+        setHealthDetail('Servidor inacessivel. Verifique a URL.');
+      }
+    }
+  }, [modalEndpointUrl]);
+
+  return (
+    <section className="space-y-2">
+      <label className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+        Servidor TTS (XTTS v2)
+      </label>
+      <input
+        type="url"
+        value={modalEndpointUrl}
+        onChange={(e) => {
+          onEndpointChange(e.target.value);
+          setHealthStatus('unknown');
+          setHealthDetail(null);
+        }}
+        className="w-full px-3 py-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[11px] font-mono focus:outline-none focus:border-[var(--accent)] transition-colors"
+        placeholder="https://..."
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={testConnection}
+          disabled={healthStatus === 'checking' || !modalEndpointUrl.trim()}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] hover:bg-[var(--accent-dim)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {healthStatus === 'checking' ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : healthStatus === 'connected' ? (
+            <Wifi className="w-3 h-3 text-green-400" />
+          ) : healthStatus === 'offline' ? (
+            <WifiOff className="w-3 h-3 text-red-400" />
+          ) : (
+            <Wifi className="w-3 h-3" />
+          )}
+          Testar Conexao
+        </button>
+        {healthStatus !== 'unknown' && (
+          <span className={`text-[10px] ${HEALTH_COLORS[healthStatus]}`}>
+            {HEALTH_LABELS[healthStatus]}
+          </span>
+        )}
+      </div>
+      {healthDetail && (
+        <p className="text-[9px] text-[var(--text-secondary)]">
+          {healthDetail}
+        </p>
+      )}
+    </section>
   );
 }
