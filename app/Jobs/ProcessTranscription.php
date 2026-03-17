@@ -28,7 +28,9 @@ class ProcessTranscription implements ShouldQueue
         $transcription->update(['status' => TranscriptionStatus::Processing]);
 
         try {
-            $response = $modalService->run('whisper-vllm', [
+            $sttModel = $modalService->defaultModel('stt');
+
+            $response = $modalService->run($sttModel, [
                 'audio' => $transcription->audio_volume_path,
                 'language' => $transcription->language,
                 'use_volume' => true,
@@ -43,9 +45,9 @@ class ProcessTranscription implements ShouldQueue
             $transcription->update([
                 'status' => TranscriptionStatus::Completed,
                 'text' => $result['text'] ?? null,
-                'inference_time_s' => $result['inference_time_s'] ?? null,
+                'inference_time_s' => $result['inference_s'] ?? $result['inference_time_s'] ?? null,
                 'rtf' => $result['rtf'] ?? null,
-                'metadata' => $result['metadata'] ?? null,
+                'metadata' => $result,
             ]);
         } catch (\Throwable $e) {
             $transcription->update([
