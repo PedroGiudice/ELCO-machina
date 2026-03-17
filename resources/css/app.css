@@ -9,3 +9,41 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/* ELCO Theme Variables */
+:root {
+    --bg-base: #0a0a0f;
+    --bg-elevated: #12121a;
+    --bg-surface: #1a1a24;
+    --bg-overlay: #1a1a24;
+    --text-primary: #e8e8ed;
+    --text-secondary: #8888a0;
+    --border-subtle: #2a2a3a;
+    --accent: #6366f1;
+    --accent-primary: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Custom slider thumb reset */
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+    appearance: none;
+    border: none;
+    background: transparent;
+}
+
+/* Font editor class */
+.font-editor {
+    font-family: 'Georgia', 'Times New Roman', serif;
+}
