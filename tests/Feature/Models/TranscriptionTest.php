@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Models;
 
-use App\Enums\OutputStyle;
 use App\Enums\RecordingStyle;
 use App\Enums\TranscriptionStatus;
 use App\Models\Synthesis;
@@ -20,7 +19,7 @@ class TranscriptionTest extends TestCase
 
         $this->assertDatabaseHas('transcriptions', ['id' => $transcription->id]);
         $this->assertInstanceOf(TranscriptionStatus::class, $transcription->status);
-        $this->assertInstanceOf(OutputStyle::class, $transcription->output_style);
+        $this->assertIsString($transcription->output_style);
         $this->assertInstanceOf(RecordingStyle::class, $transcription->recording_style);
     }
 

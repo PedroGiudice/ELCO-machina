@@ -189,7 +189,10 @@
                     <label class="text-[10px] text-[var(--text-secondary)]">
                         Estilo de Prompt
                     </label>
-                    <button class="text-[9px] flex items-center gap-1 hover:opacity-80 transition-colors text-[var(--accent)]">
+                    <button
+                        wire:click="$dispatch('open-prompt-manager')"
+                        class="text-[9px] flex items-center gap-1 hover:opacity-80 transition-colors text-[var(--accent)]"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
                         Gerenciar
                     </button>
@@ -199,14 +202,23 @@
                         wire:model="outputStyle"
                         class="flex-1 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] py-2.5 px-3 text-xs focus:outline-none appearance-none text-[var(--text-primary)]"
                     >
-                        @foreach($styles as $style)
-                            <option value="{{ $style }}">{{ $style }}</option>
+                        @foreach($prompts as $prompt)
+                            <option value="{{ $prompt->name }}">{{ $prompt->name }}</option>
                         @endforeach
                     </select>
                     @if($outputStyle !== 'Whisper Only')
-                        <button class="px-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors" title="Editar prompt">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
-                        </button>
+                        @php
+                            $selectedPrompt = $prompts->firstWhere('name', $outputStyle);
+                        @endphp
+                        @if($selectedPrompt)
+                            <button
+                                wire:click="$dispatch('edit-prompt', { promptId: '{{ $selectedPrompt->id }}' })"
+                                class="px-2 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                                title="Editar prompt"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                            </button>
+                        @endif
                     @endif
                 </div>
             </div>

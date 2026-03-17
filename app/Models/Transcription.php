@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\OutputStyle;
 use App\Enums\RecordingStyle;
 use App\Enums\TranscriptionStatus;
 use Database\Factories\TranscriptionFactory;
@@ -36,7 +35,7 @@ class Transcription extends Model
     protected function casts(): array
     {
         return [
-            'output_style' => OutputStyle::class,
+            'output_style' => 'string',
             'recording_style' => RecordingStyle::class,
             'status' => TranscriptionStatus::class,
             'audio_size_bytes' => 'integer',

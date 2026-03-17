@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name', 'ELCO') }}</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css'])
     @livewireStyles
 </head>
 <body class="antialiased">
@@ -125,6 +125,10 @@
                     @livewire('panel-stats')
                 </div>
             </div>
+
+            {{-- Global Modals --}}
+            @livewire('prompt-editor')
+            @livewire('prompt-manager')
 
             {{-- Bottom Navigation (mobile only) --}}
             <div class="lg:hidden">

@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Enums\OutputStyle;
 use App\Enums\RecordingStyle;
 use App\Enums\TranscriptionStatus;
 use App\Models\Transcription;
@@ -16,7 +15,7 @@ class TranscriptionFactory extends Factory
     {
         return [
             'text' => fake()->paragraphs(2, true),
-            'output_style' => OutputStyle::Verbatim,
+            'output_style' => 'verbatim',
             'language' => 'pt',
             'recording_style' => RecordingStyle::Dictation,
             'audio_volume_path' => 'volumes/audio/'.fake()->uuid().'.wav',

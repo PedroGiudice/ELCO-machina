@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Enums\OutputStyle;
 use Database\Factories\PromptFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,8 +16,9 @@ class Prompt extends Model
     protected $fillable = [
         'name',
         'content',
-        'output_style',
+        'temperature',
         'is_default',
+        'is_builtin',
         'sort_order',
     ];
 
@@ -25,9 +26,22 @@ class Prompt extends Model
     protected function casts(): array
     {
         return [
-            'output_style' => OutputStyle::class,
+            'temperature' => 'float',
             'is_default' => 'boolean',
+            'is_builtin' => 'boolean',
             'sort_order' => 'integer',
         ];
+    }
+
+    /** @return Builder<static> */
+    public function scopeBuiltin(Builder $query): Builder
+    {
+        return $query->where('is_builtin', true);
+    }
+
+    /** @return Builder<static> */
+    public function scopeCustom(Builder $query): Builder
+    {
+        return $query->where('is_builtin', false);
     }
 }

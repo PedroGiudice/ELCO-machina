@@ -2,6 +2,9 @@
 
 namespace App\Livewire;
 
+use App\Models\Prompt;
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -25,14 +28,8 @@ class PanelAtt extends Component
 
     public string $activeContext = 'General';
 
+    /** @var array<int, string> */
     public array $contextPools = ['General', 'Legal', 'Medical'];
-
-    public array $styles = [
-        'Whisper Only', 'Verbatim', 'Elegant Prose', 'Ana Suy', 'Poetic / Verses',
-        'Normal', 'Verbose', 'Concise', 'Formal', 'Prompt (Claude)', 'Prompt (LLM)',
-        'Bullet Points', 'Summary', 'Tech Docs', 'Email', 'Tweet Thread',
-        'Code Generator', 'Custom',
-    ];
 
     public function updatedAudioFile(): void
     {
@@ -68,8 +65,18 @@ class PanelAtt extends Component
         $this->activeContext = $ctx;
     }
 
-    public function render()
+    #[On('prompt-saved')]
+    public function refreshPrompts(): void
     {
-        return view('livewire.panel-att');
+        // Re-render will reload prompts from DB
+    }
+
+    public function render(): View
+    {
+        $prompts = Prompt::query()->orderBy('sort_order')->get();
+
+        return view('livewire.panel-att', [
+            'prompts' => $prompts,
+        ]);
     }
 }
