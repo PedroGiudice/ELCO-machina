@@ -56,3 +56,5 @@ squashfs-root/
 
 # Refiner output (generated at runtime)
 refiner-output/
+.worktrees/
+.serena/
