@@ -1,0 +1,391 @@
+{
+  "title": "ELCO Machina - Modal GPU",
+  "description": "GPU pipeline monitoring for Whisper STT and XTTS TTS.\n\n- **GPU**: compute %, VRAM, temperature\n- **Containers**: running, terminations, cold starts\n- **Inputs**: success rate, execution time\n- **Logs**: function logs, errors & retries",
+  "widgets": [
+    {
+      "id": 1,
+      "definition": {
+        "type": "note",
+        "content": "# ELCO Machina\n\nVoice AI pipeline monitoring.\n\n- **Whisper HTTP**: STT via vLLM + GPU snapshot (L4)\n- **XTTS Serve**: TTS via Coqui XTTS v2 (L4)\n- **Whisper Bench**: faster-whisper benchmark (T4)\n- **Whisper Offline**: vLLM offline batch (L4)",
+        "background_color": "white",
+        "font_size": "14",
+        "text_align": "left",
+        "vertical_align": "top",
+        "show_tick": false,
+        "tick_pos": "50%",
+        "tick_edge": "left",
+        "has_padding": true
+      },
+      "layout": { "x": 0, "y": 0, "width": 3, "height": 4 }
+    },
+    {
+      "id": 2,
+      "definition": {
+        "title": "GPU Compute Utilization %",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "max", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:modal.gpu.compute.utilization{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "warm", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": { "x": 3, "y": 0, "width": 5, "height": 4 }
+    },
+    {
+      "id": 3,
+      "definition": {
+        "title": "GPU Memory (GB)",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "max", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1 / 1073741824" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:modal.gpu.memory.usage{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "purple", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "area"
+          }
+        ]
+      },
+      "layout": { "x": 8, "y": 0, "width": 4, "height": 4 }
+    },
+    {
+      "id": 4,
+      "definition": {
+        "title": "Running Containers",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "sum:modal.container.running{$app} by {app_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "cool", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "bars"
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 4, "width": 4, "height": 3 }
+    },
+    {
+      "id": 5,
+      "definition": {
+        "title": "Container Terminations (by reason)",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["sum", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "sum:modal.container.terminations{$app} by {reason}.as_count()"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "warm", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "bars"
+          }
+        ]
+      },
+      "layout": { "x": 4, "y": 4, "width": 4, "height": 3 }
+    },
+    {
+      "id": 6,
+      "definition": {
+        "title": "Cold Start (seconds)",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "max", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1 / 1000000" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:modal.input_events.coldstart_time_us{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "orange", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": { "x": 8, "y": 4, "width": 4, "height": 3 }
+    },
+    {
+      "id": 7,
+      "definition": {
+        "title": "Total Inputs vs Successful",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["sum", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [
+              { "formula": "query1", "alias": "Total" },
+              { "formula": "query2", "alias": "Success" }
+            ],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "sum:modal.input_events.total_inputs{$app}.as_count()"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query2",
+                "query": "sum:modal.input_events.successes{$app}.as_count()"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "dog_classic", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "bars"
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 7, "width": 4, "height": 3 }
+    },
+    {
+      "id": 8,
+      "definition": {
+        "title": "Input Execution Time (seconds)",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "max", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1 / 1000000" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:modal.input_events.elapsed_time_us{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "dog_classic", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "scale": "linear", "include_zero": true, "min": "auto", "max": "auto" }
+      },
+      "layout": { "x": 4, "y": 7, "width": 4, "height": 3 }
+    },
+    {
+      "id": 9,
+      "definition": {
+        "title": "Running / Pending Inputs",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [
+              { "formula": "query1", "alias": "Running" },
+              { "formula": "query2", "alias": "Pending" }
+            ],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "sum:modal.function.running_inputs{$app} by {app_name,function_name}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "query2",
+                "query": "sum:modal.function.pending_inputs{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "cool", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": { "x": 8, "y": 7, "width": 4, "height": 3 }
+    },
+    {
+      "id": 10,
+      "definition": {
+        "title": "CPU %",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "max", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:modal.cpu.utilization{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "classic", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 10, "width": 4, "height": 3 }
+    },
+    {
+      "id": 11,
+      "definition": {
+        "title": "Container RAM (GB)",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": ["avg", "max", "value"],
+        "type": "timeseries",
+        "requests": [
+          {
+            "formulas": [{ "formula": "query1 / 1073741824" }],
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "query1",
+                "query": "avg:modal.memory.usage{$app} by {app_name,function_name}"
+              }
+            ],
+            "response_format": "timeseries",
+            "style": { "palette": "classic", "order_by": "values", "line_type": "solid", "line_width": "normal" },
+            "display_type": "area"
+          }
+        ]
+      },
+      "layout": { "x": 4, "y": 10, "width": 4, "height": 3 }
+    },
+    {
+      "id": 12,
+      "definition": {
+        "title": "Function Logs",
+        "title_size": "16",
+        "title_align": "left",
+        "type": "list_stream",
+        "requests": [
+          {
+            "response_format": "event_list",
+            "query": {
+              "data_source": "logs_stream",
+              "query_string": "source:modal service:modal.function-logs",
+              "indexes": [],
+              "storage": "hot"
+            },
+            "columns": [
+              { "field": "status_line", "width": "auto" },
+              { "field": "timestamp", "width": "auto" },
+              { "field": "host", "width": "auto" },
+              { "field": "service", "width": "auto" },
+              { "field": "content", "width": "compact" }
+            ]
+          }
+        ]
+      },
+      "layout": { "x": 8, "y": 10, "width": 4, "height": 6 }
+    },
+    {
+      "id": 13,
+      "definition": {
+        "title": "Audit Logs",
+        "title_size": "16",
+        "title_align": "left",
+        "type": "list_stream",
+        "requests": [
+          {
+            "response_format": "event_list",
+            "query": {
+              "data_source": "logs_stream",
+              "query_string": "source:modal service:modal.audit-logs",
+              "indexes": [],
+              "storage": "hot"
+            },
+            "columns": [
+              { "field": "status_line", "width": "auto" },
+              { "field": "timestamp", "width": "auto" },
+              { "field": "host", "width": "auto" },
+              { "field": "service", "width": "auto" },
+              { "field": "content", "width": "compact" }
+            ]
+          }
+        ]
+      },
+      "layout": { "x": 0, "y": 13, "width": 8, "height": 3 }
+    }
+  ],
+  "template_variables": [
+    {
+      "name": "app",
+      "prefix": "app_name",
+      "default": "*",
+      "available_values": [
+        "whisper-http",
+        "whisper-bench",
+        "whisper-offline",
+        "xtts-serve"
+      ]
+    }
+  ],
+  "layout_type": "ordered",
+  "notify_list": [],
+  "reflow_type": "fixed"
+}
