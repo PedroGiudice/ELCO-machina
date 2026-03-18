@@ -42,4 +42,9 @@ return [
         'stt' => env('VOICE_STT_MODEL', 'whisper-http'),
         'tts' => env('VOICE_TTS_MODEL', 'xtts-serve'),
     ],
+
+    // Refiner (Claude CLI)
+    'refiner' => [
+        'timeout' => (int) env('REFINER_TIMEOUT', 60),
+    ],
 ];

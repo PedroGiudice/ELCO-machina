@@ -6,6 +6,7 @@ use App\Enums\TranscriptionStatus;
 use App\Models\Prompt;
 use App\Models\Transcription;
 use App\Services\ModalService;
+use App\Services\RefinerService;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -73,7 +74,8 @@ class PanelAtt extends Component
             $path = $this->audioFile->store('audio', 'local');
             $fullPath = storage_path("app/{$path}");
 
-            $this->statusMessage = 'Enviando para transcricao (GPU)...';
+            // --- Step 1: Transcription (Whisper via Modal GPU) ---
+            $this->statusMessage = '[1/2] Transcrevendo com Whisper (GPU)...';
 
             $modal = app(ModalService::class);
 
@@ -86,10 +88,61 @@ class PanelAtt extends Component
 
             $result = $modal->transcribe($fullPath, $lang);
 
-            $this->resultText = $result['text'] ?? '';
+            $rawText = $result['text'] ?? '';
             $this->inferenceTime = $result['inference_s'] ?? null;
             $this->audioDuration = $result['duration_audio_s'] ?? null;
 
+            if (trim($rawText) === '') {
+                $this->resultText = '';
+                $this->statusMessage = 'Transcricao vazia -- audio sem fala detectada.';
+                $this->statusType = 'error';
+
+                return;
+            }
+
+            // --- Step 2: Refinement (Claude CLI) ---
+            $selectedPrompt = Prompt::where('name', $this->outputStyle)->first();
+            $isWhisperOnly = ! $selectedPrompt || $selectedPrompt->name === 'Whisper Only';
+
+            if ($isWhisperOnly) {
+                $this->resultText = $rawText;
+                $this->statusMessage = 'Transcricao concluida (Whisper Only).';
+                $this->statusType = 'success';
+            } else {
+                $this->statusMessage = '[2/2] Refinando com Claude...';
+
+                $instruction = $selectedPrompt->system_instruction;
+
+                // Replace {CUSTOM_INSTRUCTIONS} for Custom template
+                if ($selectedPrompt->name === 'Custom') {
+                    $instruction = str_replace(
+                        '{CUSTOM_INSTRUCTIONS}',
+                        $this->customStylePrompt,
+                        $instruction,
+                    );
+                }
+
+                $refiner = app(RefinerService::class);
+                $refineResult = $refiner->refine(
+                    text: $rawText,
+                    systemInstruction: $instruction,
+                    model: 'sonnet',
+                    temperature: $selectedPrompt->temperature ?? 0.3,
+                );
+
+                if ($refineResult['success']) {
+                    $this->resultText = $refineResult['refined_text'];
+                    $this->statusMessage = "Concluido (Whisper + Claude/{$refineResult['model_used']}).";
+                    $this->statusType = 'success';
+                } else {
+                    // Fallback to raw text on refine failure
+                    $this->resultText = $rawText;
+                    $this->statusMessage = "Refinamento falhou: {$refineResult['error']}. Texto bruto exibido.";
+                    $this->statusType = 'error';
+                }
+            }
+
+            // Save to DB
             Transcription::create([
                 'audio_path' => $path,
                 'language' => $lang,
@@ -97,11 +150,11 @@ class PanelAtt extends Component
                 'text' => $this->resultText,
                 'inference_time_s' => $this->inferenceTime,
                 'rtf' => $result['rtf'] ?? null,
-                'metadata' => $result,
+                'metadata' => array_merge($result, [
+                    'output_style' => $this->outputStyle,
+                    'refined' => ! $isWhisperOnly,
+                ]),
             ]);
-
-            $this->statusMessage = 'Transcricao concluida.';
-            $this->statusType = 'success';
 
         } catch (\Throwable $e) {
             $this->statusMessage = 'Erro: '.mb_substr($e->getMessage(), 0, 200);
