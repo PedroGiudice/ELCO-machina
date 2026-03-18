@@ -21,7 +21,7 @@ class TranscriptionFactory extends Factory
             'audio_volume_path' => 'volumes/audio/'.fake()->uuid().'.wav',
             'audio_size_bytes' => fake()->numberBetween(100_000, 5_000_000),
             'audio_duration_s' => fake()->randomFloat(2, 5.0, 300.0),
-            'engine' => 'whisper-vllm',
+            'engine' => 'whisper-http',
             'status' => TranscriptionStatus::Completed,
             'error_message' => null,
             'inference_time_s' => fake()->randomFloat(2, 1.0, 30.0),

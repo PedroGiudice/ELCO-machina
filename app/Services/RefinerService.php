@@ -27,7 +27,6 @@ class RefinerService
         string $text,
         string $systemInstruction,
         string $model = 'sonnet',
-        float $_temperature = 0.3,
     ): array {
         if (trim($text) === '') {
             return [

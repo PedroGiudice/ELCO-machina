@@ -127,7 +127,6 @@ class PanelAtt extends Component
                     text: $rawText,
                     systemInstruction: $instruction,
                     model: 'sonnet',
-                    temperature: $selectedPrompt->temperature ?? 0.3,
                 );
 
                 if ($refineResult['success']) {

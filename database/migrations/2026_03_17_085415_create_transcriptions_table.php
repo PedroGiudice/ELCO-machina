@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('audio_volume_path')->nullable();
             $table->unsignedInteger('audio_size_bytes')->nullable();
             $table->float('audio_duration_s')->nullable();
-            $table->string('engine')->default('whisper-vllm');
+            $table->string('engine')->default('whisper-http');
             $table->string('status')->default('pending');
             $table->text('error_message')->nullable();
             $table->float('inference_time_s')->nullable();

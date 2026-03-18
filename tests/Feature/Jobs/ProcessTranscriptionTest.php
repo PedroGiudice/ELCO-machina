@@ -21,7 +21,7 @@ class ProcessTranscriptionTest extends TestCase
         $mockModal = Mockery::mock(ModalService::class);
         $mockModal->shouldReceive('run')
             ->once()
-            ->with('whisper-vllm', Mockery::on(function (array $options) use ($transcription) {
+            ->with('whisper-http', Mockery::on(function (array $options) use ($transcription) {
                 return $options['audio'] === $transcription->audio_volume_path
                     && $options['language'] === 'pt'
                     && $options['use_volume'] === true;
