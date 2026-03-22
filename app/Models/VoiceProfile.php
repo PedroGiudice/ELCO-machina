@@ -9,6 +9,8 @@ class VoiceProfile extends Model
     protected $fillable = [
         'name',
         'file_path',
+        'ref_text',
+        'volume_filename',
         'duration_s',
         'sample_rate',
         'is_preset',

@@ -4,6 +4,7 @@ namespace Tests\Feature\Livewire;
 
 use App\Livewire\PanelTts;
 use App\Models\VoiceProfile;
+use App\Services\TtsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -49,7 +50,7 @@ class PanelTtsTest extends TestCase
             ->assertSee('Escreva um texto');
     }
 
-    public function test_qwen_requires_voice_ref(): void
+    public function test_qwen_requires_voice_with_volume(): void
     {
         Livewire::test(PanelTts::class)
             ->set('ttsModel', 'qwen-tts')
@@ -57,7 +58,26 @@ class PanelTtsTest extends TestCase
             ->set('selectedVoiceId', null)
             ->call('synthesize')
             ->assertSet('statusType', 'error')
-            ->assertSee('audio de referencia');
+            ->assertSee('voz com upload no volume');
+    }
+
+    public function test_qwen_requires_voice_with_ref_text(): void
+    {
+        $voice = VoiceProfile::create([
+            'name' => 'No Ref Text',
+            'file_path' => 'voice_profiles/test.wav',
+            'volume_filename' => 'voice_1.wav',
+            'ref_text' => null,
+            'is_preset' => false,
+        ]);
+
+        Livewire::test(PanelTts::class)
+            ->set('ttsModel', 'qwen-tts')
+            ->set('text', 'Teste')
+            ->call('selectVoice', $voice->id)
+            ->call('synthesize')
+            ->assertSet('statusType', 'error')
+            ->assertSee('texto de referencia');
     }
 
     public function test_voice_profile_select(): void
@@ -77,14 +97,37 @@ class PanelTtsTest extends TestCase
     {
         Storage::fake('local');
 
+        $mock = $this->mock(TtsService::class);
+        $mock->shouldReceive('uploadVoiceToVolume')
+            ->once()
+            ->andReturn(['success' => true, 'filename' => 'voice_1.wav', 'error' => null]);
+
         $file = UploadedFile::fake()->create('minha_voz.wav', 100, 'audio/wav');
 
         Livewire::test(PanelTts::class)
             ->set('newVoiceName', 'Minha Voz')
+            ->set('newVoiceRefText', 'Texto de referencia do audio')
             ->set('newVoiceFile', $file)
             ->call('uploadVoice');
 
-        $this->assertDatabaseHas('voice_profiles', ['name' => 'Minha Voz']);
+        $this->assertDatabaseHas('voice_profiles', [
+            'name' => 'Minha Voz',
+            'ref_text' => 'Texto de referencia do audio',
+        ]);
+    }
+
+    public function test_upload_voice_requires_ref_text(): void
+    {
+        Storage::fake('local');
+
+        $file = UploadedFile::fake()->create('minha_voz.wav', 100, 'audio/wav');
+
+        Livewire::test(PanelTts::class)
+            ->set('newVoiceName', 'Minha Voz')
+            ->set('newVoiceRefText', '')
+            ->set('newVoiceFile', $file)
+            ->call('uploadVoice')
+            ->assertHasErrors(['newVoiceRefText']);
     }
 
     public function test_delete_voice_removes_non_preset(): void

@@ -18,9 +18,11 @@ import modal
 
 APP_NAME = "tts-chatterbox"
 GPU_TYPE = "a10g"
+VOICE_REFS_PATH = "/voice-refs"
 
 app = modal.App(APP_NAME, tags={"project": "elco-machina", "model": "chatterbox-multilingual"})
 hf_secret = modal.Secret.from_name("huggingface-secret")
+voice_refs_vol = modal.Volume.from_name("tts-voice-refs", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.10")
@@ -37,16 +39,27 @@ image = (
     gpu=GPU_TYPE,
     image=image,
     secrets=[hf_secret],
+    volumes={VOICE_REFS_PATH: voice_refs_vol},
     timeout=600,
     scaledown_window=2,
 )
 class TTSService:
     @modal.enter()
     def load(self):
+        import torch
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         self.model = ChatterboxMultilingualTTS.from_pretrained(device="cuda")
         self.sr = self.model.sr
+
+        # torch.compile — marginal gains due to T3 CPU-GPU sync issues
+        # but free to try, won't hurt
+        try:
+            self.model = torch.compile(self.model)
+            print("[INIT] torch.compile applied")
+        except Exception as e:
+            print(f"[INIT] torch.compile skipped: {e}")
+
         print(f"[INIT] Chatterbox-Multilingual loaded, sr={self.sr}")
 
     @modal.fastapi_endpoint(method="POST")
@@ -54,12 +67,16 @@ class TTSService:
         self,
         text: str = fastapi.Form(...),
         ref_audio_base64: str = fastapi.Form(""),
+        ref_audio_path: str = fastapi.Form(""),
         ref_text: str = fastapi.Form(""),
         language: str = fastapi.Form("pt"),
         exaggeration: float = fastapi.Form(0.5),
         cfg_weight: float = fastapi.Form(0.5),
     ) -> fastapi.Response:
-        """Voice cloning TTS. Returns audio WAV bytes."""
+        """Voice cloning TTS. Returns audio WAV bytes.
+
+        ref audio: ref_audio_path (volume, for curl) or ref_audio_base64 (from PHP).
+        """
         import os
         import subprocess
         import tempfile
@@ -79,10 +96,23 @@ class TTSService:
                 "cfg_weight": cfg_weight,
             }
 
-            # Handle ref audio for voice cloning (convert any format to WAV PCM)
+            # Resolve ref audio: volume path > base64
             ref_path = None
-            if ref_audio_base64.strip():
+            ref_bytes = None
+            if ref_audio_path.strip():
+                vol_path = os.path.join(VOICE_REFS_PATH, ref_audio_path.strip())
+                if not os.path.exists(vol_path):
+                    return fastapi.Response(
+                        content=f"Voice ref not found: {ref_audio_path}",
+                        status_code=404,
+                        media_type="text/plain",
+                    )
+                with open(vol_path, "rb") as f:
+                    ref_bytes = f.read()
+            elif ref_audio_base64.strip():
                 ref_bytes = base64.b64decode(ref_audio_base64)
+
+            if ref_bytes:
                 with tempfile.NamedTemporaryFile(suffix=".input", delete=False) as f:
                     f.write(ref_bytes)
                     tmp_in = f.name
@@ -98,8 +128,7 @@ class TTSService:
 
             wav = self.model.generate(**gen_kwargs)
 
-            # Cleanup temp file
-            if ref_path:
+            if ref_path and os.path.exists(ref_path):
                 os.unlink(ref_path)
 
             duration = wav.shape[-1] / self.sr
@@ -123,14 +152,4 @@ class TTSService:
         except Exception as e:
             return fastapi.Response(content=str(e), status_code=500, media_type="text/plain")
 
-    @modal.fastapi_endpoint(method="GET")
-    def web_health(self) -> dict:
-        import torch
-        has_model = hasattr(self, "model") and self.model is not None
-        return {
-            "status": "healthy" if has_model else "degraded",
-            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-            "model": "chatterbox-multilingual-500M",
-            "backend": "chatterbox-native",
-            "sample_rate": getattr(self, "sr", None),
-        }
+

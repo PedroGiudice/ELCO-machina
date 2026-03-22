@@ -26,13 +26,12 @@ class PanelTts extends Component
 
     public string $newVoiceName = '';
 
+    public string $newVoiceRefText = '';
+
     // Chatterbox params
     public float $exaggeration = 0.5;
 
     public float $cfgWeight = 0.5;
-
-    // Qwen params
-    public string $refText = '';
 
     // Estado
     public string $ttsStatus = 'idle';
@@ -57,7 +56,6 @@ class PanelTts extends Component
         $this->ttsModel = $model;
         $this->exaggeration = 0.5;
         $this->cfgWeight = 0.5;
-        $this->refText = '';
     }
 
     public function selectVoice(int $id): void
@@ -70,6 +68,7 @@ class PanelTts extends Component
         $this->validate([
             'newVoiceFile' => 'required|file|max:51200|mimes:mp3,wav,webm,ogg,flac',
             'newVoiceName' => 'required|string|max:100',
+            'newVoiceRefText' => 'required|string|max:1000',
         ]);
 
         $path = $this->newVoiceFile->store('voice_profiles', 'local');
@@ -77,11 +76,31 @@ class PanelTts extends Component
         $voice = VoiceProfile::create([
             'name' => $this->newVoiceName,
             'file_path' => $path,
+            'ref_text' => $this->newVoiceRefText,
         ]);
+
+        // Upload to Modal volume for Qwen-TTS
+        $volumeFilename = "voice_{$voice->id}.wav";
+        $localPath = storage_path("app/{$path}");
+
+        $tts = app(TtsService::class);
+        $uploadResult = $tts->uploadVoiceToVolume(
+            localPath: $localPath,
+            volumeFilename: $volumeFilename,
+            refText: $this->newVoiceRefText,
+        );
+
+        if ($uploadResult['success']) {
+            $voice->update(['volume_filename' => $volumeFilename]);
+        } else {
+            $this->statusMessage = "Voz salva localmente, mas upload ao volume falhou: {$uploadResult['error']}";
+            $this->statusType = 'error';
+        }
 
         $this->selectedVoiceId = $voice->id;
         $this->newVoiceFile = null;
         $this->newVoiceName = '';
+        $this->newVoiceRefText = '';
     }
 
     public function deleteVoice(int $id): void
@@ -108,19 +127,24 @@ class PanelTts extends Component
             return;
         }
 
-        $refPath = null;
+        $voice = null;
         if ($this->selectedVoiceId) {
             $voice = VoiceProfile::find($this->selectedVoiceId);
-            if ($voice) {
-                $refPath = storage_path("app/{$voice->file_path}");
-            }
         }
 
-        if (! $refPath && $this->ttsModel === 'qwen-tts') {
-            $this->statusMessage = 'Qwen3-TTS requer um audio de referencia para clonagem.';
-            $this->statusType = 'error';
+        if ($this->ttsModel === 'qwen-tts') {
+            if (! $voice || ! $voice->volume_filename) {
+                $this->statusMessage = 'Qwen3-TTS requer uma voz com upload no volume (selecione ou faca upload).';
+                $this->statusType = 'error';
 
-            return;
+                return;
+            }
+            if (! $voice->ref_text) {
+                $this->statusMessage = 'Qwen3-TTS requer texto de referencia na voz selecionada.';
+                $this->statusType = 'error';
+
+                return;
+            }
         }
 
         $this->ttsStatus = 'synthesizing';
@@ -135,14 +159,14 @@ class PanelTts extends Component
             if ($this->ttsModel === 'chatterbox') {
                 $params['exaggeration'] = $this->exaggeration;
                 $params['cfg_weight'] = $this->cfgWeight;
-            } elseif ($this->ttsModel === 'qwen-tts' && trim($this->refText) !== '') {
-                $params['ref_text'] = $this->refText;
             }
 
             $tts = app(TtsService::class);
             $result = $tts->synthesize(
                 text: $this->text,
-                refAudioPath: $refPath,
+                volumeFilename: $voice?->volume_filename,
+                refText: $voice?->ref_text,
+                localRefPath: $voice ? storage_path("app/{$voice->file_path}") : null,
                 model: $this->ttsModel,
                 language: $this->language,
                 params: $params,

@@ -81,17 +81,22 @@
                     @foreach($voices as $voice)
                         <label class="flex items-center justify-between px-3 py-2 bg-[var(--bg-overlay)] border rounded-[var(--radius-sm)] cursor-pointer transition-colors
                             {{ $selectedVoiceId === $voice->id ? 'border-[var(--accent)] bg-[var(--accent-dim)]' : 'border-[var(--border-subtle)] hover:bg-[var(--accent-dim)]' }}">
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 min-w-0">
                                 <input
                                     type="radio"
                                     wire:click="selectVoice({{ $voice->id }})"
                                     {{ $selectedVoiceId === $voice->id ? 'checked' : '' }}
-                                    class="accent-[var(--accent)]"
+                                    class="accent-[var(--accent)] shrink-0"
                                 >
-                                <span class="text-xs">{{ $voice->name }}</span>
-                                @if($voice->is_preset)
-                                    <span class="text-[9px] px-1.5 py-0.5 bg-[var(--accent-dim)] text-[var(--accent)] rounded">preset</span>
-                                @endif
+                                <div class="min-w-0">
+                                    <span class="text-xs">{{ $voice->name }}</span>
+                                    @if($voice->is_preset)
+                                        <span class="text-[9px] px-1.5 py-0.5 bg-[var(--accent-dim)] text-[var(--accent)] rounded">preset</span>
+                                    @endif
+                                    @if($voice->ref_text)
+                                        <p class="text-[9px] text-[var(--text-secondary)] truncate" title="{{ $voice->ref_text }}">{{ Str::limit($voice->ref_text, 50) }}</p>
+                                    @endif
+                                </div>
                             </div>
                             @if(!$voice->is_preset)
                                 <button wire:click.prevent="deleteVoice({{ $voice->id }})" class="text-[10px] text-red-400 hover:text-red-300">
@@ -118,7 +123,16 @@
                     </span>
                     <input type="file" wire:model="newVoiceFile" accept=".wav,.mp3,.ogg,.flac,.webm" class="hidden">
                 </label>
-                @if($newVoiceFile && $newVoiceName)
+                <div class="space-y-1">
+                    <label class="text-[10px] text-[var(--text-secondary)]">Texto de referencia (transcricao do audio)</label>
+                    <textarea
+                        wire:model="newVoiceRefText"
+                        rows="2"
+                        class="w-full px-2 py-1.5 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[11px] focus:outline-none focus:border-[var(--accent)] resize-y"
+                        placeholder="Escreva exatamente o que e dito no audio de referencia"
+                    ></textarea>
+                </div>
+                @if($newVoiceFile && $newVoiceName && $newVoiceRefText)
                     <button
                         wire:click="uploadVoice"
                         class="w-full py-1.5 text-[10px] font-medium bg-[var(--accent-dim)] text-[var(--accent)] border border-[var(--accent)] rounded-[var(--radius-sm)] hover:bg-[var(--accent)] hover:text-[var(--bg-base)] transition-colors"
@@ -147,18 +161,10 @@
                         Expressividade: 0.5 = neutro. CFG Weight: 0.0 = minimiza sotaque do ref audio.
                     </p>
                 @elseif($ttsModel === 'qwen-tts')
-                    <div class="space-y-2">
-                        <label class="text-xs text-[var(--text-secondary)]">Transcricao do ref audio (opcional)</label>
-                        <textarea
-                            wire:model="refText"
-                            rows="2"
-                            class="w-full px-2 py-1.5 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[11px] focus:outline-none focus:border-[var(--accent)] resize-y"
-                            placeholder="Se fornecida, usa modo ICL (melhor qualidade)..."
-                        ></textarea>
-                        <p class="text-[9px] text-[var(--text-secondary)]">
-                            Sem transcricao: clonagem por embedding (mais simples). Com: modo ICL (mais fiel).
-                        </p>
-                    </div>
+                    <p class="text-[10px] text-[var(--text-secondary)]">
+                        O texto de referencia e o audio sao vinculados ao perfil de voz.
+                        Selecione uma voz no banco ao lado ou faca upload de uma nova.
+                    </p>
                 @endif
             </div>
         </section>

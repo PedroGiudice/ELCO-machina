@@ -24,10 +24,11 @@ return [
             'deployed' => false,
         ],
         'qwen-tts' => [
-            'script' => 'modal_tts_qwen_native.py',
-            'gpu' => 'A10G',
+            'script' => 'modal_tts_qwen_vllm_snap.py',
+            'gpu' => 'H100',
             'deployed' => true,
             'endpoint' => env('QWEN_TTS_ENDPOINT'),
+            'volume' => 'tts-voice-refs',
             'health' => env('QWEN_TTS_HEALTH'),
         ],
         'chatterbox' => [

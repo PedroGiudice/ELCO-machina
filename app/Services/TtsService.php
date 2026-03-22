@@ -9,12 +9,17 @@ class TtsService
     /**
      * Synthesize speech via a deployed TTS model endpoint.
      *
-     * @param  array<string, mixed>  $params  Model-specific params (exaggeration, cfg_weight, ref_text)
-     * @return array{audio_bytes: string, inference_time: ?float, audio_duration: ?float, sample_rate: ?int, success: bool, error: ?string}
+     * For qwen-tts: ref_audio_path (volume filename) + ref_text are required.
+     * For chatterbox: ref_audio sent as base64 (no volume support).
+     *
+     * @param  array<string, mixed>  $params  Model-specific params (exaggeration, cfg_weight)
+     * @return array{audio_bytes: ?string, inference_time: ?float, audio_duration: ?float, sample_rate: ?int, success: bool, error: ?string}
      */
     public function synthesize(
         string $text,
-        ?string $refAudioPath = null,
+        ?string $volumeFilename = null,
+        ?string $refText = null,
+        ?string $localRefPath = null,
         ?string $model = null,
         string $language = 'pt',
         array $params = [],
@@ -40,17 +45,20 @@ class TtsService
             $formData['language'] = $language;
         }
 
-        // Ref audio as base64
-        if ($refAudioPath && file_exists($refAudioPath)) {
-            $formData['ref_audio_base64'] = base64_encode(file_get_contents($refAudioPath));
-        }
-
-        // Model-specific params
+        // Voice reference
         if ($model === 'qwen-tts') {
-            if (! empty($params['ref_text'])) {
-                $formData['ref_text'] = $params['ref_text'];
+            if (! $volumeFilename) {
+                return $this->fail('Qwen3-TTS requer audio de referencia (volume_filename).');
             }
+            if (! $refText || trim($refText) === '') {
+                return $this->fail('Qwen3-TTS requer ref_text (transcricao do audio de referencia).');
+            }
+            $formData['ref_audio_path'] = $volumeFilename;
+            $formData['ref_text'] = $refText;
         } elseif ($model === 'chatterbox') {
+            if ($localRefPath && file_exists($localRefPath)) {
+                $formData['ref_audio_base64'] = base64_encode(file_get_contents($localRefPath));
+            }
             $formData['exaggeration'] = (string) ($params['exaggeration'] ?? 0.5);
             $formData['cfg_weight'] = (string) ($params['cfg_weight'] ?? 0.5);
         }
@@ -75,6 +83,46 @@ class TtsService
         } catch (\Throwable $e) {
             return $this->fail(mb_substr($e->getMessage(), 0, 200));
         }
+    }
+
+    /**
+     * Upload a voice reference file (+ companion ref_text .txt) to the Modal volume.
+     *
+     * @return array{success: bool, filename: ?string, error: ?string}
+     */
+    public function uploadVoiceToVolume(
+        string $localPath,
+        string $volumeFilename,
+        string $refText = '',
+    ): array {
+        $volume = config('voice.models.qwen-tts.volume', 'tts-voice-refs');
+
+        if (! file_exists($localPath)) {
+            return ['success' => false, 'filename' => null, 'error' => "Arquivo nao encontrado: {$localPath}"];
+        }
+
+        // Upload audio to Modal volume
+        $result = \Illuminate\Support\Facades\Process::run(
+            "modal volume put {$volume} {$localPath} {$volumeFilename}"
+        );
+
+        if (! $result->successful()) {
+            return ['success' => false, 'filename' => null, 'error' => 'modal volume put falhou: '.$result->errorOutput()];
+        }
+
+        // Upload companion ref_text .txt
+        if (trim($refText) !== '') {
+            $txtName = pathinfo($volumeFilename, PATHINFO_FILENAME).'.txt';
+            $tmpTxt = tempnam(sys_get_temp_dir(), 'ref_').'.txt';
+            file_put_contents($tmpTxt, trim($refText));
+
+            \Illuminate\Support\Facades\Process::run(
+                "modal volume put {$volume} {$tmpTxt} {$txtName}"
+            );
+            unlink($tmpTxt);
+        }
+
+        return ['success' => true, 'filename' => $volumeFilename, 'error' => null];
     }
 
     /**
