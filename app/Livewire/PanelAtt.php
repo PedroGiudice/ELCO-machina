@@ -111,7 +111,7 @@ class PanelAtt extends Component
             } else {
                 $this->statusMessage = '[2/2] Refinando texto...';
 
-                $instruction = $selectedPrompt->system_instruction;
+                $instruction = $selectedPrompt->content;
 
                 // Replace {CUSTOM_INSTRUCTIONS} for Custom template
                 if ($selectedPrompt->name === 'Custom') {
