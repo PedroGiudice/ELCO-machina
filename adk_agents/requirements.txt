@@ -1,3 +1,0 @@
-google-adk>=0.1.0
-uvicorn
-fastapi
