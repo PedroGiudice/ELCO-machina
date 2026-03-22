@@ -109,7 +109,7 @@ class PanelAtt extends Component
                 $this->statusMessage = 'Transcricao concluida (Whisper Only).';
                 $this->statusType = 'success';
             } else {
-                $this->statusMessage = '[2/2] Refinando com Claude...';
+                $this->statusMessage = '[2/2] Refinando texto...';
 
                 $instruction = $selectedPrompt->system_instruction;
 
@@ -126,12 +126,11 @@ class PanelAtt extends Component
                 $refineResult = $refiner->refine(
                     text: $rawText,
                     systemInstruction: $instruction,
-                    model: 'sonnet',
                 );
 
                 if ($refineResult['success']) {
                     $this->resultText = $refineResult['refined_text'];
-                    $this->statusMessage = "Concluido (Whisper + Claude/{$refineResult['model_used']}).";
+                    $this->statusMessage = "Concluido (Whisper + {$refineResult['model_used']}).";
                     $this->statusType = 'success';
                 } else {
                     // Fallback to raw text on refine failure

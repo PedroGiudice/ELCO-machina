@@ -43,8 +43,10 @@ return [
         'tts' => env('VOICE_TTS_MODEL', 'xtts-serve'),
     ],
 
-    // Refiner (Claude CLI)
+    // Refiner (Qwen3-4B via Modal vLLM)
     'refiner' => [
-        'timeout' => (int) env('REFINER_TIMEOUT', 60),
+        'endpoint' => env('REFINER_ENDPOINT'),
+        'health' => env('REFINER_HEALTH'),
+        'timeout' => (int) env('REFINER_TIMEOUT', 30),
     ],
 ];
