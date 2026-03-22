@@ -23,24 +23,26 @@ return [
             'gpu' => 'L4',
             'deployed' => false,
         ],
-        'xtts' => [
-            'script' => 'modal_xtts_bench.py',
-            'gpu' => 'L4',
-            'deployed' => false,
-        ],
-        'xtts-serve' => [
-            'script' => 'modal_xtts_serve.py',
-            'gpu' => 'L4',
+        'qwen-tts' => [
+            'script' => 'modal_tts_qwen_native.py',
+            'gpu' => 'A10G',
             'deployed' => true,
-            'endpoint' => env('XTTS_SERVE_ENDPOINT'),
-            'health' => env('XTTS_SERVE_HEALTH'),
+            'endpoint' => env('QWEN_TTS_ENDPOINT'),
+            'health' => env('QWEN_TTS_HEALTH'),
+        ],
+        'chatterbox' => [
+            'script' => 'modal_tts_chatterbox.py',
+            'gpu' => 'A10G',
+            'deployed' => true,
+            'endpoint' => env('CHATTERBOX_TTS_ENDPOINT'),
+            'health' => env('CHATTERBOX_TTS_HEALTH'),
         ],
     ],
 
     // Default model for each pipeline stage
     'defaults' => [
         'stt' => env('VOICE_STT_MODEL', 'whisper-http'),
-        'tts' => env('VOICE_TTS_MODEL', 'xtts-serve'),
+        'tts' => env('VOICE_TTS_MODEL', 'qwen-tts'),
     ],
 
     // Refiner (Qwen3-4B via Modal vLLM)
