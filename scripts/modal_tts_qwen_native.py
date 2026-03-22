@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
-"""Qwen3-TTS via qwen-tts SDK nativo no Modal (A10G GPU).
+"""Qwen3-TTS 1.7B Base via qwen-tts SDK no Modal (A10G GPU).
 
-Voice cloning com 3s de ref audio. Memory snapshot para cold start rapido.
+Voice cloning com 3s de ref audio. Usa SDPA (flash-attn nao e dep do qwen-tts).
 
-Deploy:
-    modal deploy scripts/modal_tts_qwen_native.py
-
-Test:
-    curl -X POST https://<url>/web_synthesize \
-      -F "text=Ola mundo" -F "ref_audio_base64=<base64>" -F "language=Portuguese"
-
-Health:
-    curl https://<url>/web_health
+Deploy:  modal deploy scripts/modal_tts_qwen_native.py
+Health:  curl https://<url>/web_health
+Synth:   curl -X POST https://<url>/web_synthesize -F "text=..." -F "ref_audio_base64=..."
 """
 
 import base64
@@ -23,69 +17,62 @@ import modal
 
 APP_NAME = "tts-serve"
 MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
-GPU_TYPE = "a10g"
+GPU_TYPE = "A10G"
 
 app = modal.App(APP_NAME, tags={"project": "elco-machina", "model": "qwen3-tts"})
-
-hf_cache_vol = modal.Volume.from_name("hf-cache", create_if_missing=True)
 hf_secret = modal.Secret.from_name("huggingface-secret")
 
+
+def download_model_weights():
+    from huggingface_hub import snapshot_download
+    snapshot_download(MODEL_NAME)
+
+
+FLASH_ATTN_WHEEL = (
+    "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/"
+    "flash_attn-2.8.3+cu12torch2.8cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
+)
+
 image = (
-    modal.Image.from_registry(
-        "nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12"
+    modal.Image.debian_slim(python_version="3.12")
+    .apt_install("ffmpeg", "libsndfile1", "sox")
+    .pip_install(
+        "torch==2.8.0",
+        "torchaudio==2.8.0",
+        FLASH_ATTN_WHEEL,
+        find_links="https://download.pytorch.org/whl/cu126",
     )
-    .entrypoint([])
-    .apt_install("ffmpeg", "libsndfile1")
-    .uv_pip_install(
-        "qwen-tts",
-        "torch>=2.1",
-        "torchaudio>=2.1",
+    .pip_install(
+        "qwen-tts>=0.1.0",
         "soundfile",
+        "huggingface_hub",
         "numpy",
         "fastapi[standard]",
     )
-    .pip_install("flash-attn", extra_options="--no-build-isolation")
+    .run_function(download_model_weights, secrets=[hf_secret])
 )
 
 
 @app.cls(
-    image=image,
     gpu=GPU_TYPE,
-    memory=16384,
-    timeout=300,
+    image=image,
     secrets=[hf_secret],
-    volumes={"/root/.cache/huggingface": hf_cache_vol},
-    enable_memory_snapshot=True,
-    scaledown_window=60,
+    timeout=600,
+    scaledown_window=2,
 )
 class TTSService:
-    @modal.enter(snap=True)
+    @modal.enter()
     def load(self):
-        """Load model and snapshot."""
         import torch
         from qwen_tts import Qwen3TTSModel
 
         self.model = Qwen3TTSModel.from_pretrained(
             MODEL_NAME,
-            device_map="cuda:0",
-            dtype=torch.bfloat16,
+            device_map="cuda",
             attn_implementation="flash_attention_2",
+            dtype=torch.bfloat16,
         )
-
-        # Warm up
-        wavs, sr = self.model.generate_voice_clone(
-            text="Teste de aquecimento.",
-            language="Portuguese",
-            ref_audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone.wav",
-            ref_text="Okay. Yeah.",
-        )
-        self.sr = sr
-        print(f"[INIT] Qwen3-TTS loaded, sample_rate={sr}")
-
-    @modal.enter(snap=False)
-    def restore(self):
-        """Post-snapshot restore."""
-        print("[RESTORE] Qwen3-TTS restored from snapshot")
+        print("[INIT] Qwen3-TTS loaded with Flash Attention 2")
 
     @modal.fastapi_endpoint(method="POST")
     def web_synthesize(
@@ -95,14 +82,11 @@ class TTSService:
         ref_text: str = fastapi.Form(""),
         language: str = fastapi.Form("Portuguese"),
     ) -> fastapi.Response:
-        """Synthesize via HTTP. Returns audio WAV bytes.
+        """Voice cloning TTS. Returns audio WAV bytes."""
+        import os
+        import subprocess
+        import tempfile
 
-        Form fields:
-            text: Text to synthesize
-            ref_audio_base64: Reference audio as base64 (WAV)
-            ref_text: Transcript of reference audio (optional but recommended)
-            language: Portuguese, English, Spanish, etc.
-        """
         import numpy as np
         import soundfile as sf
 
@@ -112,16 +96,36 @@ class TTSService:
         t0 = time.perf_counter()
 
         try:
+            # Decode and convert ref audio to WAV PCM (accepts any ffmpeg format)
             ref_bytes = base64.b64decode(ref_audio_base64)
-            ref_data, ref_sr = sf.read(io.BytesIO(ref_bytes))
+            with tempfile.NamedTemporaryFile(suffix=".input", delete=False) as tmp_in:
+                tmp_in.write(ref_bytes)
+                tmp_in_path = tmp_in.name
+
+            tmp_wav_path = tmp_in_path + ".wav"
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", tmp_in_path, "-ar", "16000", "-ac", "1",
+                 "-sample_fmt", "s16", tmp_wav_path],
+                capture_output=True, check=True,
+            )
+            os.unlink(tmp_in_path)
+
+            ref_data, ref_sr = sf.read(tmp_wav_path)
+            os.unlink(tmp_wav_path)
             ref_audio_tuple = (ref_data.astype(np.float32), ref_sr)
 
-            wavs, sr = self.model.generate_voice_clone(
-                text=text,
-                language=language,
-                ref_audio=ref_audio_tuple,
-                ref_text=ref_text if ref_text.strip() else None,
-            )
+            gen_kwargs = {
+                "text": text,
+                "language": language,
+                "ref_audio": ref_audio_tuple,
+            }
+
+            if ref_text.strip():
+                gen_kwargs["ref_text"] = ref_text
+            else:
+                gen_kwargs["x_vector_only_mode"] = True
+
+            wavs, sr = self.model.generate_voice_clone(**gen_kwargs)
 
             wav = wavs[0]
             duration = len(wav) / sr
@@ -147,14 +151,11 @@ class TTSService:
 
     @modal.fastapi_endpoint(method="GET")
     def web_health(self) -> dict:
-        """Health check."""
         import torch
-
         has_model = hasattr(self, "model") and self.model is not None
         return {
             "status": "healthy" if has_model else "degraded",
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             "model": MODEL_NAME,
-            "sample_rate": getattr(self, "sr", None),
             "backend": "qwen-tts-native",
         }
