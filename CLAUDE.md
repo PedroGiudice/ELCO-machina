@@ -212,7 +212,7 @@ scp opc@137.131.201.119:"/home/opc/ELCO-machina/src-tauri/gen/android/app/build/
 
 - **Nginx:** porta `8090`, config em `/etc/nginx/conf.d/updates.conf`
 - **Root:** `/var/www/updates/`
-- **URL base:** `http://100.114.203.28:8090/proatt/`
+- **URL base:** `https://extractlab.cormorant-alpha.ts.net/proatt/`
 - **Manifesto:** `/var/www/updates/proatt/latest.json`
 
 **Workflow de publicação (build + publish):**
@@ -230,7 +230,7 @@ cp "src-tauri/target/release/bundle/appimage/Pro ATT Machine_X.Y.Z_amd64.AppImag
 # (ver formato em /var/www/updates/proatt/latest.json)
 
 # 5. Verificar publicação
-curl -s http://100.114.203.28:8090/proatt/latest.json | python3 -m json.tool
+curl -s https://extractlab.cormorant-alpha.ts.net/proatt/latest.json | python3 -m json.tool
 ```
 
 **IMPORTANTE:**

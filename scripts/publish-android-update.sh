@@ -20,7 +20,7 @@ set -euo pipefail
 PROJECT_DIR="/home/opc/ELCO-machina"
 UPDATES_DIR="/var/www/updates/proatt"
 APK_SOURCE="$PROJECT_DIR/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk"
-TAILSCALE_IP="100.114.203.28"
+DOMAIN="extractlab.cormorant-alpha.ts.net"
 PORT="8090"
 
 # Ler versao do tauri.conf.json
@@ -39,7 +39,7 @@ echo "[INFO] APK encontrado: $APK_SIZE"
 
 # Nome do APK no servidor (com versao para cache-busting)
 APK_FILENAME="pro-att-machine_${VERSION}_arm64.apk"
-APK_URL="http://${TAILSCALE_IP}:${PORT}/proatt/${APK_FILENAME}"
+APK_URL="https://${DOMAIN}/proatt/${APK_FILENAME}"
 
 # Timestamp ISO 8601
 PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -71,7 +71,7 @@ echo "[INFO] Verificando servidor..."
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/proatt/latest-android.json")
 if [ "$HTTP_CODE" = "200" ]; then
     SERVED_VERSION=$(curl -s "http://localhost:${PORT}/proatt/latest-android.json" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
-    echo "[CONCLUIDO] Android v$SERVED_VERSION publicada em http://${TAILSCALE_IP}:${PORT}/proatt/latest-android.json"
+    echo "[CONCLUIDO] Android v$SERVED_VERSION publicada em https://${DOMAIN}/proatt/latest-android.json"
     echo "[INFO] APK disponivel em: $APK_URL"
 else
     echo "[FALHA] Servidor retornou HTTP $HTTP_CODE"
