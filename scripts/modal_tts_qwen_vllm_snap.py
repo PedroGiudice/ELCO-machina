@@ -463,7 +463,7 @@ class TTSService:
     volumes={VOICE_REFS_PATH: voice_refs_vol},
     enable_memory_snapshot=True,
     experimental_options={"enable_gpu_snapshot": True},
-    scaledown_window=2,
+    scaledown_window=15,
 )
 class VoiceDesignService:
     @modal.enter(snap=True)
@@ -522,7 +522,7 @@ class VoiceDesignService:
 
         self.logger.info("Waking vLLM-Omni (VoiceDesign)...")
         _wake_up()
-        _wait_ready(self.vllm_proc, timeout=MINUTES)
+        _wait_ready(self.vllm_proc, timeout=2 * MINUTES)
         self.logger.info("vLLM-Omni (VoiceDesign) awake on port %d", VLLM_PORT)
 
     @modal.exit()
@@ -540,31 +540,21 @@ class VoiceDesignService:
         if hasattr(self, "_vllm_log"):
             self._vllm_log.close()
 
-    @modal.fastapi_endpoint(method="POST")
-    def web_design(
+    @modal.method()
+    def design(
         self,
-        text: str = fastapi.Form(...),
-        voice_instructions: str = fastapi.Form(...),
-        language: str = fastapi.Form("Portuguese"),
-        save_as: str = fastapi.Form(""),
-    ) -> fastapi.Response:
-        """Generate speech from a text description of desired voice.
-
-        voice_instructions: e.g. "A deep, calm male voice with Brazilian accent"
-        save_as: if provided, saves the generated audio to the volume as a ref file.
-        """
+        text: str,
+        voice_instructions: str,
+        language: str = "Portuguese",
+        save_as: str = "",
+    ) -> dict:
+        """Core design logic. Returns dict with audio_bytes, metadata, or error."""
         import soundfile as sf
 
         if not text.strip():
-            return fastapi.Response(
-                content="Empty text", status_code=400, media_type="text/plain"
-            )
+            return {"error": "Empty text", "status": 400}
         if not voice_instructions.strip():
-            return fastapi.Response(
-                content="voice_instructions is required",
-                status_code=400,
-                media_type="text/plain",
-            )
+            return {"error": "voice_instructions is required", "status": 400}
 
         t0 = time.perf_counter()
 
@@ -591,18 +581,13 @@ class VoiceDesignService:
                     resp.status_code,
                     resp.text[:500],
                 )
-                return fastapi.Response(
-                    content=resp.text,
-                    status_code=resp.status_code,
-                    media_type="text/plain",
-                )
+                return {"error": resp.text[:500], "status": resp.status_code}
 
             audio_bytes = resp.content
             elapsed = time.perf_counter() - t0
 
             duration = 0.0
             sr = 24000
-            content_type = resp.headers.get("content-type", "audio/wav")
             try:
                 buf = io.BytesIO(audio_bytes)
                 data, sr = sf.read(buf)
@@ -611,6 +596,7 @@ class VoiceDesignService:
                 duration = len(audio_bytes) / (sr * 2)
 
             # Optionally save to volume as a voice reference
+            saved_as = ""
             if save_as.strip():
                 filename = save_as.strip()
                 if not filename.endswith(".wav"):
@@ -618,11 +604,11 @@ class VoiceDesignService:
                 vol_path = os.path.join(VOICE_REFS_PATH, filename)
                 with open(vol_path, "wb") as f:
                     f.write(audio_bytes)
-                # Save companion ref_text (the text spoken, for Base to use later)
                 txt_path = os.path.splitext(vol_path)[0] + ".txt"
                 with open(txt_path, "w") as f:
                     f.write(text.strip())
                 voice_refs_vol.commit()
+                saved_as = filename
                 self.logger.info("[VoiceDesign] Saved to volume: %s", filename)
 
             self.logger.info(
@@ -630,18 +616,44 @@ class VoiceDesignService:
                 voice_instructions[:60], duration, elapsed, len(audio_bytes),
             )
 
-            return fastapi.Response(
-                content=audio_bytes,
-                media_type=content_type,
-                headers={
-                    "X-Inference-Time": f"{elapsed:.2f}",
-                    "X-Audio-Duration": f"{duration:.2f}",
-                    "X-Sample-Rate": str(sr),
-                    "X-Saved-As": save_as.strip() if save_as.strip() else "",
-                },
-            )
+            return {
+                "audio_bytes": base64.b64encode(audio_bytes).decode(),
+                "inference_time": round(elapsed, 2),
+                "duration": round(duration, 2),
+                "sample_rate": sr,
+                "saved_as": saved_as,
+                "size": len(audio_bytes),
+            }
         except Exception as e:
             self.logger.error("[VoiceDesign] Error: %s", e)
+            return {"error": str(e), "status": 500}
+
+    @modal.fastapi_endpoint(method="POST")
+    def web_design(
+        self,
+        text: str = fastapi.Form(...),
+        voice_instructions: str = fastapi.Form(...),
+        language: str = fastapi.Form("Portuguese"),
+        save_as: str = fastapi.Form(""),
+    ) -> fastapi.Response:
+        """HTTP wrapper around design()."""
+        result = self.design.local(text, voice_instructions, language, save_as)
+
+        if "error" in result:
             return fastapi.Response(
-                content=str(e), status_code=500, media_type="text/plain"
+                content=result["error"],
+                status_code=result.get("status", 500),
+                media_type="text/plain",
             )
+
+        audio_bytes = base64.b64decode(result["audio_bytes"])
+        return fastapi.Response(
+            content=audio_bytes,
+            media_type="audio/wav",
+            headers={
+                "X-Inference-Time": str(result["inference_time"]),
+                "X-Audio-Duration": str(result["duration"]),
+                "X-Sample-Rate": str(result["sample_rate"]),
+                "X-Saved-As": result.get("saved_as", ""),
+            },
+        )

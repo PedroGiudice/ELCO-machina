@@ -46,6 +46,12 @@ return [
         'tts' => env('VOICE_TTS_MODEL', 'qwen-tts'),
     ],
 
+    // VoiceDesign (Qwen3-TTS VoiceDesign via Modal SDK subprocess)
+    'voice_design' => [
+        'script' => env('VOICE_DESIGN_SCRIPT', base_path('scripts/voicedesign_client.py')),
+        'timeout' => (int) env('VOICE_DESIGN_TIMEOUT', 600),
+    ],
+
     // Refiner (Qwen3-4B via Modal vLLM)
     'refiner' => [
         'endpoint' => env('REFINER_ENDPOINT'),

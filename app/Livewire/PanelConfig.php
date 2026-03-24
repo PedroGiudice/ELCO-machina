@@ -6,9 +6,9 @@ use Livewire\Component;
 
 class PanelConfig extends Component
 {
-    public string $aiModel = 'sonnet';
+    public string $aiModel = 'qwen3-4b';
 
-    public string $sttBackend = 'modal';
+    public string $sttBackend = 'whisper-http';
 
     public bool $noiseSuppression = true;
 
@@ -19,14 +19,11 @@ class PanelConfig extends Component
     public string $selectedMicId = 'default';
 
     public array $aiModels = [
-        ['id' => 'haiku', 'label' => 'Haiku', 'desc' => 'Mais rapido'],
-        ['id' => 'sonnet', 'label' => 'Sonnet', 'desc' => 'Equilibrado'],
-        ['id' => 'opus', 'label' => 'Opus', 'desc' => 'Qualidade maxima'],
+        ['id' => 'qwen3-4b', 'label' => 'Qwen3-4B', 'desc' => 'Refinamento via Modal (GPU)'],
     ];
 
     public array $sttBackends = [
-        ['id' => 'vm', 'label' => 'VM', 'desc' => 'whisper.cpp small (CPU, ~80s/min)'],
-        ['id' => 'modal', 'label' => 'Modal', 'desc' => 'large-v3-turbo (GPU, ~8s/min)'],
+        ['id' => 'whisper-http', 'label' => 'Whisper HTTP', 'desc' => 'large-v3-turbo (Modal GPU, ~8s/min)'],
     ];
 
     public function setAiModel(string $model): void

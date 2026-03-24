@@ -38,6 +38,7 @@ image = (
     .apt_install("ffmpeg", "libsndfile1")
     .pip_install(
         "torch",
+        "torchvision",
         "transformers>=4.52.0",
         "accelerate",
         "qwen-omni-utils",
@@ -53,11 +54,11 @@ image = (
     image=image,
     gpu=GPU_TYPE,
     memory=32768,
-    timeout=300,
+    timeout=600,
     secrets=[hf_secret],
     volumes={VOICE_REFS_PATH: voice_refs_vol},
     enable_memory_snapshot=True,
-    scaledown_window=2,
+    scaledown_window=15,
 )
 class VoiceAnalyzerService:
     @modal.enter(snap=True)

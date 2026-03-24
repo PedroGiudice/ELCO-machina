@@ -2,11 +2,18 @@
 
 namespace App\Livewire;
 
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class PanelEditor extends Component
 {
     public string $value = '';
+
+    #[On('text-to-editor')]
+    public function receiveText(string $text): void
+    {
+        $this->value = $text;
+    }
 
     public int $fontSize = 14;
 

@@ -186,6 +186,107 @@ class ModalService
     }
 
     /**
+     * Design a voice from text description via Modal SDK (subprocess).
+     *
+     * Calls VoiceDesignService.design() through the Python client script.
+     * The script communicates via Modal SDK (not HTTP) to avoid gateway bugs.
+     *
+     * @return array{success: bool, inference_time: ?float, duration: ?float, sample_rate: ?int, saved_as: ?string, size: ?int, file_path: ?string, error: ?string}
+     */
+    public function designVoice(
+        string $text,
+        string $voiceInstructions,
+        string $language = 'Portuguese',
+        string $saveAs = '',
+    ): array {
+        if (trim($text) === '') {
+            return $this->designFail('Texto vazio.');
+        }
+
+        if (trim($voiceInstructions) === '') {
+            return $this->designFail('Instrucoes de voz vazias (voice_instructions).');
+        }
+
+        $script = config('voice.voice_design.script', $this->scriptsPath.'/voicedesign_client.py');
+        $timeout = (int) config('voice.voice_design.timeout', 600);
+
+        $outputDir = storage_path('app/voice_designs');
+        if (! is_dir($outputDir)) {
+            mkdir($outputDir, 0755, true);
+        }
+        $outputPath = $outputDir.'/'.uniqid('vd_').'.wav';
+
+        $command = [
+            'python3', '-u', $script,
+            '--text', $text,
+            '--voice-instructions', $voiceInstructions,
+            '--language', $language,
+            '--output', $outputPath,
+        ];
+
+        if (trim($saveAs) !== '') {
+            $command[] = '--save-as';
+            $command[] = $saveAs;
+        }
+
+        $process = \Illuminate\Support\Facades\Process::timeout($timeout)->command($command)->run();
+
+        $stdout = trim($process->output());
+
+        // Try to parse JSON from stdout regardless of exit code
+        $parsed = null;
+        if ($stdout !== '') {
+            $parsed = json_decode($stdout, true);
+        }
+
+        if (! $process->successful()) {
+            $errorMessage = $parsed['error'] ?? $process->errorOutput() ?: 'VoiceDesign process failed (exit code '.$process->exitCode().')';
+
+            return $this->designFail($errorMessage);
+        }
+
+        if ($parsed === null) {
+            return $this->designFail('No JSON output from voicedesign_client.');
+        }
+
+        if (isset($parsed['error'])) {
+            return $this->designFail($parsed['error']);
+        }
+
+        // The script writes the WAV to the --output path we specified.
+        // Verify the file exists at the expected output path.
+        $filePath = file_exists($outputPath) ? $outputPath : null;
+
+        return [
+            'success' => true,
+            'inference_time' => $parsed['inference_time'] ?? null,
+            'duration' => $parsed['duration'] ?? null,
+            'sample_rate' => $parsed['sample_rate'] ?? null,
+            'saved_as' => $parsed['saved_as'] ?? null,
+            'size' => $parsed['size'] ?? null,
+            'file_path' => $filePath,
+            'error' => null,
+        ];
+    }
+
+    /**
+     * @return array{success: false, inference_time: null, duration: null, sample_rate: null, saved_as: null, size: null, file_path: null, error: string}
+     */
+    private function designFail(string $error): array
+    {
+        return [
+            'success' => false,
+            'inference_time' => null,
+            'duration' => null,
+            'sample_rate' => null,
+            'saved_as' => null,
+            'size' => null,
+            'file_path' => null,
+            'error' => $error,
+        ];
+    }
+
+    /**
      * Get default model for a pipeline stage.
      */
     public function defaultModel(string $stage): string

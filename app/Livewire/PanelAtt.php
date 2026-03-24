@@ -72,7 +72,8 @@ class PanelAtt extends Component
 
         try {
             $path = $this->audioFile->store('audio', 'local');
-            $fullPath = storage_path("app/{$path}");
+            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
+            $this->audioFile = null;
 
             // --- Step 1: Transcription (Whisper via Modal GPU) ---
             $this->statusMessage = '[1/2] Transcrevendo com Whisper (GPU)...';
@@ -153,6 +154,10 @@ class PanelAtt extends Component
                     'refined' => ! $isWhisperOnly,
                 ]),
             ]);
+
+            // Send result to editor panel and switch tab
+            $this->dispatch('text-to-editor', text: $this->resultText);
+            $this->dispatch('switch-panel', panel: 'editor');
 
         } catch (\Throwable $e) {
             $this->statusMessage = 'Erro: '.mb_substr($e->getMessage(), 0, 200);

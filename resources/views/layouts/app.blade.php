@@ -11,6 +11,7 @@
 <body class="antialiased">
     <div
         x-data="{ activePanel: 'att' }"
+        x-on:switch-panel.window="activePanel = $event.detail.panel"
         class="flex h-dvh w-full bg-[var(--bg-base)] text-[var(--text-primary)]"
         style="padding-top: var(--sat); padding-left: var(--sal); padding-right: var(--sar);"
     >
