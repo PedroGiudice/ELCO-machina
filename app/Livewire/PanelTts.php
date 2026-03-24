@@ -34,8 +34,6 @@ class PanelTts extends Component
     public float $cfgWeight = 0.5;
 
     // Estado
-    public string $ttsStatus = 'idle';
-
     public ?string $statusMessage = null;
 
     public ?string $statusType = null;
@@ -147,9 +145,8 @@ class PanelTts extends Component
             }
         }
 
-        $this->ttsStatus = 'synthesizing';
-        $this->statusMessage = 'Sintetizando...';
-        $this->statusType = 'info';
+        $this->statusMessage = null;
+        $this->statusType = null;
         $this->ttsAudioUrl = null;
         $this->inferenceTime = null;
         $this->audioDuration = null;
@@ -179,10 +176,27 @@ class PanelTts extends Component
                 return;
             }
 
-            // Save WAV to temp storage and generate URL
-            $filename = 'tts_output/'.uniqid('tts_').'.wav';
-            Storage::disk('local')->put($filename, $result['audio_bytes']);
-            $this->ttsAudioUrl = route('tts.audio', ['file' => basename($filename)]);
+            // Save as OGG (WAV doesn't play on all Linux browsers)
+            $id = uniqid('tts_');
+            $wavPath = storage_path("app/tts_output/{$id}.wav");
+            $oggPath = storage_path("app/tts_output/{$id}.ogg");
+
+            if (! is_dir(dirname($wavPath))) {
+                mkdir(dirname($wavPath), 0755, true);
+            }
+            file_put_contents($wavPath, $result['audio_bytes']);
+
+            $proc = \Illuminate\Support\Facades\Process::run(
+                "ffmpeg -y -i {$wavPath} -c:a libvorbis -q:a 6 {$oggPath}"
+            );
+
+            if ($proc->successful() && file_exists($oggPath)) {
+                unlink($wavPath);
+                $this->ttsAudioUrl = route('tts.audio', ['file' => "{$id}.ogg"]);
+            } else {
+                // Fallback to WAV if ffmpeg fails
+                $this->ttsAudioUrl = route('tts.audio', ['file' => "{$id}.wav"]);
+            }
 
             $this->inferenceTime = $result['inference_time'];
             $this->audioDuration = $result['audio_duration'];
@@ -192,7 +206,7 @@ class PanelTts extends Component
             $this->statusMessage = 'Erro: '.mb_substr($e->getMessage(), 0, 200);
             $this->statusType = 'error';
         } finally {
-            $this->ttsStatus = 'idle';
+            $this->dispatch('synthesize-complete');
         }
     }
 

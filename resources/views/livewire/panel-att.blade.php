@@ -272,22 +272,86 @@
         </div>
     @endif
 
-    {{-- Process Button --}}
-    <x-button
-        variant="primary"
-        class="w-full h-12"
-        wire:click="process"
-        :disabled="!$audioFile || $isProcessing"
-        :isLoading="$isProcessing"
+    {{-- Process Button + Processing State --}}
+    <div x-data="{
+        running: false,
+        elapsed: 0,
+        phase: 0,
+        timer: null,
+        phases: ['Enviando audio', 'Transcrevendo', 'Processando resultado'],
+        start() {
+            this.elapsed = 0;
+            this.phase = 0;
+            this.running = true;
+            this.timer = setInterval(() => {
+                this.elapsed++;
+                if (this.elapsed === 2) this.phase = 1;
+                if (this.elapsed === 8) this.phase = 2;
+            }, 1000);
+        },
+        stop() {
+            this.running = false;
+            clearInterval(this.timer);
+            this.timer = null;
+        },
+        get time() {
+            const m = Math.floor(this.elapsed / 60);
+            const s = this.elapsed % 60;
+            return m > 0 ? m + ':' + String(s).padStart(2, '0') : s + 's';
+        }
+    }"
+    @click="if (!running && $el.querySelector('button:not([disabled])')) start()"
+    @process-complete.window="stop()"
     >
-        @if($isProcessing)
-            <svg class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-            Processando...
-        @else
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
-            Transcrever
-        @endif
-    </x-button>
+        <x-button
+            variant="primary"
+            class="w-full h-12"
+            wire:click="process"
+            x-bind:disabled="running"
+            :disabled="!$audioFile"
+        >
+            <template x-if="!running">
+                <span class="flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                    Transcrever
+                </span>
+            </template>
+            <template x-if="running">
+                <span class="flex items-center justify-center gap-2">
+                    <span class="flex items-end gap-[3px] h-4">
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.0s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.15s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.3s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.45s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.6s]"></span>
+                    </span>
+                    <span x-text="phases[phase]"></span>
+                    <span class="text-xs opacity-60" x-text="time"></span>
+                </span>
+            </template>
+        </x-button>
+
+        {{-- Processing panel --}}
+        <div x-show="running" x-transition.opacity class="mt-3 p-3 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] space-y-3">
+            <div class="w-full h-1 bg-[var(--bg-base)] rounded-full overflow-hidden">
+                <div class="h-full w-1/3 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent rounded-full animate-[sweep_1.5s_ease-in-out_infinite]"></div>
+            </div>
+            <div class="flex items-center justify-center gap-3">
+                <template x-for="(p, i) in phases" :key="i">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full transition-colors duration-300"
+                              :class="i < phase ? 'bg-green-400' : i === phase ? 'bg-[var(--accent)] animate-pulse' : 'bg-[var(--border-subtle)]'"></span>
+                        <span class="text-[9px] transition-colors duration-300"
+                              :class="i === phase ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] opacity-50'"
+                              x-text="p"></span>
+                    </div>
+                </template>
+            </div>
+            <p class="text-[9px] text-[var(--text-secondary)] text-center">
+                Whisper (L4) &middot; Cold start ~15-40s, warm ~3-10s
+            </p>
+        </div>
+    </div>
 
     {{-- Ready Indicator --}}
     @if($audioFile && !$isProcessing && !$resultText)

@@ -16,8 +16,10 @@
 
     @if($statusMessage)
         <div class="flex items-center gap-2 text-[10px] {{ $statusColors[$statusType] ?? 'text-[var(--text-secondary)]' }}">
-            @if($ttsStatus === 'synthesizing')
-                <svg class="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            @if($statusType === 'success')
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><path d="M20 6 9 17l-5-5"/></svg>
+            @elseif($statusType === 'error')
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
             @endif
             <span>{{ $statusMessage }}</span>
         </div>
@@ -117,9 +119,13 @@
                     class="w-full px-2 py-1.5 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] text-[11px] focus:outline-none focus:border-[var(--accent)]"
                 >
                 <label class="flex items-center justify-between w-full h-9 px-3 bg-[var(--bg-overlay)] border border-dashed border-[var(--border-subtle)] rounded-[var(--radius-sm)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors">
-                    <span class="text-[10px] text-[var(--text-secondary)] flex items-center gap-1">
+                    <span wire:loading.remove wire:target="newVoiceFile" class="text-[10px] text-[var(--text-secondary)] flex items-center gap-1">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
                         {{ $newVoiceFile ? $newVoiceFile->getClientOriginalName() : 'Selecionar audio' }}
+                    </span>
+                    <span wire:loading wire:target="newVoiceFile" class="text-[10px] text-blue-400 flex items-center gap-1">
+                        <svg class="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                        Carregando...
                     </span>
                     <input type="file" wire:model="newVoiceFile" accept=".wav,.mp3,.ogg,.flac,.webm" class="hidden">
                 </label>
@@ -135,9 +141,15 @@
                 @if($newVoiceFile && $newVoiceName && $newVoiceRefText)
                     <button
                         wire:click="uploadVoice"
-                        class="w-full py-1.5 text-[10px] font-medium bg-[var(--accent-dim)] text-[var(--accent)] border border-[var(--accent)] rounded-[var(--radius-sm)] hover:bg-[var(--accent)] hover:text-[var(--bg-base)] transition-colors"
+                        wire:loading.attr="disabled"
+                        wire:target="uploadVoice"
+                        class="w-full py-1.5 text-[10px] font-medium bg-[var(--accent-dim)] text-[var(--accent)] border border-[var(--accent)] rounded-[var(--radius-sm)] hover:bg-[var(--accent)] hover:text-[var(--bg-base)] transition-colors disabled:opacity-50"
                     >
-                        Salvar voz
+                        <span wire:loading.remove wire:target="uploadVoice">Salvar voz</span>
+                        <span wire:loading wire:target="uploadVoice" class="flex items-center justify-center gap-1.5">
+                            <svg class="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                            Enviando ao volume...
+                        </span>
                     </button>
                 @endif
             </div>
@@ -172,21 +184,96 @@
 
     <div class="w-full h-px bg-[var(--border-subtle)]"></div>
 
-    {{-- Synthesize Button --}}
-    <x-button
-        variant="primary"
-        class="w-full h-14 text-base"
-        wire:click="synthesize"
-        :disabled="empty(trim($text)) || $ttsStatus === 'synthesizing'"
+    {{-- Synthesize Button + Processing State --}}
+    <div x-data="{
+        running: false,
+        elapsed: 0,
+        phase: 0,
+        timer: null,
+        phases: ['Conectando ao modelo', 'Processando texto', 'Sintetizando voz', 'Gerando audio'],
+        start() {
+            this.elapsed = 0;
+            this.phase = 0;
+            this.running = true;
+            this.timer = setInterval(() => {
+                this.elapsed++;
+                if (this.elapsed === 2) this.phase = 1;
+                if (this.elapsed === 5) this.phase = 2;
+                if (this.elapsed === 15) this.phase = 3;
+            }, 1000);
+        },
+        stop() {
+            this.running = false;
+            clearInterval(this.timer);
+            this.timer = null;
+        },
+        get time() {
+            const m = Math.floor(this.elapsed / 60);
+            const s = this.elapsed % 60;
+            return m > 0 ? m + ':' + String(s).padStart(2, '0') : s + 's';
+        }
+    }"
+    @click="if (!running) start()"
+    @synthesize-complete.window="stop()"
     >
-        @if($ttsStatus === 'synthesizing')
-            <svg class="w-5 h-5 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-            Sintetizando...
-        @else
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-            Sintetizar
-        @endif
-    </x-button>
+        {{-- Button --}}
+        <x-button
+            variant="primary"
+            class="w-full h-14 text-base"
+            wire:click="synthesize"
+            x-bind:disabled="running"
+            :disabled="empty(trim($text))"
+        >
+            <template x-if="!running">
+                <span class="flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                    Sintetizar
+                </span>
+            </template>
+            <template x-if="running">
+                <span class="flex items-center justify-center gap-2">
+                    {{-- Waveform equalizer --}}
+                    <span class="flex items-end gap-[3px] h-5">
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.0s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.15s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.3s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.45s]"></span>
+                        <span class="w-[3px] bg-current rounded-full animate-[waveform_0.8s_ease-in-out_infinite_0.6s]"></span>
+                    </span>
+                    <span x-text="phases[phase]"></span>
+                    <span class="text-xs opacity-60" x-text="time"></span>
+                </span>
+            </template>
+        </x-button>
+
+        {{-- Processing panel (visible during synthesis) --}}
+        <div x-show="running" x-transition.opacity class="mt-3 p-3 bg-[var(--bg-overlay)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] space-y-3">
+            {{-- Gradient progress sweep --}}
+            <div class="w-full h-1 bg-[var(--bg-base)] rounded-full overflow-hidden">
+                <div class="h-full w-1/3 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent rounded-full animate-[sweep_1.5s_ease-in-out_infinite]"></div>
+            </div>
+
+            {{-- Phase dots --}}
+            <div class="flex items-center justify-center gap-3">
+                <template x-for="(p, i) in phases" :key="i">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full transition-colors duration-300"
+                              :class="i < phase ? 'bg-green-400' : i === phase ? 'bg-[var(--accent)] animate-pulse' : 'bg-[var(--border-subtle)]'"></span>
+                        <span class="text-[9px] transition-colors duration-300"
+                              :class="i === phase ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] opacity-50'"
+                              x-text="p"></span>
+                    </div>
+                </template>
+            </div>
+
+            {{-- Model + estimate --}}
+            <p class="text-[9px] text-[var(--text-secondary)] text-center">
+                {{ $ttsModel === 'qwen-tts' ? 'Qwen3-TTS (H100)' : 'Chatterbox (A10G)' }}
+                &middot;
+                {{ $ttsModel === 'qwen-tts' ? 'Cold start ~30-90s, warm ~10-25s' : 'Cold start ~20-60s, warm ~5-15s' }}
+            </p>
+        </div>
+    </div>
 
     {{-- Audio Player --}}
     @if($ttsAudioUrl)

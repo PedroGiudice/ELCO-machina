@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Qwen3-TTS 1.7B Base via vLLM-Omni no Modal (H100 GPU).
+"""Qwen TTS + Voice services no Modal (H100 GPU).
 
-Subprocess HTTP + GPU snapshot para cold start ~1-2s.
-Pattern: vllm serve --omni -> sleep -> snapshot -> wake.
+Three services in one deploy:
+  - TTSService (Qwen3-TTS Base): voice cloning with ref audio
+  - VoiceDesignService (Qwen3-TTS VoiceDesign): voice creation from text description
+  - VoiceAnalyzerService (Qwen3-Omni Captioner): analyze voice from audio
 
 Deploy:  modal deploy scripts/modal_tts_qwen_vllm_snap.py
 Synth:   curl -X POST https://<url>/web_synthesize \
            -F "text=Olá" -F "ref_audio_path=ref_ptbr_male.wav"
+Design:  curl -X POST https://<url>/web_design \
+           -F "text=Olá mundo" -F "voice_instructions=A deep male voice"
+Analyze: curl -X POST https://<url>/web_analyze \
+           -F "audio=@voice.wav"
 """
 
 import base64
@@ -20,7 +26,8 @@ import fastapi
 import modal
 
 APP_NAME = "tts-serve-vllm"
-MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+MODEL_BASE = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+MODEL_VOICEDESIGN = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 GPU_TYPE = "H100"
 VLLM_PORT = 8091
 STAGE_CONFIG_PATH = "/opt/stage_configs/qwen3_tts.yaml"
@@ -128,17 +135,17 @@ runtime:
 """
 
 
-def write_stage_config():
+def build_tts_image():
+    """Write stage config + download both TTS model weights."""
+    from huggingface_hub import snapshot_download
+
     config_dir = os.path.dirname(STAGE_CONFIG_PATH)
     os.makedirs(config_dir, exist_ok=True)
     with open(STAGE_CONFIG_PATH, "w") as f:
         f.write(STAGE_CONFIG_YAML)
 
-
-def download_model_weights():
-    from huggingface_hub import snapshot_download
-
-    snapshot_download(MODEL_NAME)
+    snapshot_download(MODEL_BASE)
+    snapshot_download(MODEL_VOICEDESIGN)
 
 
 image = (
@@ -152,8 +159,7 @@ image = (
         "requests",
         "fastapi[standard]",
     )
-    .run_function(write_stage_config)
-    .run_function(download_model_weights, secrets=[hf_secret])
+    .run_function(build_tts_image, secrets=[hf_secret])
     .env(
         {
             "VLLM_SERVER_DEV_MODE": "1",
@@ -228,7 +234,7 @@ class TTSService:
         self.logger.info("Starting vllm serve --omni ...")
 
         cmd = [
-            "vllm", "serve", MODEL_NAME,
+            "vllm", "serve", MODEL_BASE,
             "--stage-configs-path", STAGE_CONFIG_PATH,
             "--omni",
             "--trust-remote-code",
@@ -316,7 +322,7 @@ class TTSService:
 
         try:
             payload = {
-                "model": MODEL_NAME,
+                "model": MODEL_BASE,
                 "input": text,
                 "voice": "alloy",
                 "language": language,
@@ -438,6 +444,204 @@ class TTSService:
             )
         except Exception as e:
             self.logger.error("[TTS] Error: %s", e)
+            return fastapi.Response(
+                content=str(e), status_code=500, media_type="text/plain"
+            )
+
+
+# ---------------------------------------------------------------------------
+# VoiceDesign: create voice profiles from text description (no microphone)
+# Same infra, different model, dies immediately after use.
+# ---------------------------------------------------------------------------
+
+@app.cls(
+    image=image,
+    gpu=GPU_TYPE,
+    memory=32768,
+    timeout=600,
+    secrets=[hf_secret],
+    volumes={VOICE_REFS_PATH: voice_refs_vol},
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
+    scaledown_window=2,
+)
+class VoiceDesignService:
+    @modal.enter(snap=True)
+    def start(self):
+        import logging
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+        )
+        self.logger = logging.getLogger("tts-voicedesign")
+        self.logger.info("Starting vllm serve --omni (VoiceDesign)...")
+
+        cmd = [
+            "vllm", "serve", MODEL_VOICEDESIGN,
+            "--stage-configs-path", STAGE_CONFIG_PATH,
+            "--omni",
+            "--trust-remote-code",
+            "--enforce-eager",
+            "--host", "0.0.0.0",
+            "--port", str(VLLM_PORT),
+            "--gpu-memory-utilization", "0.9",
+            "--enable-sleep-mode",
+            "--uvicorn-log-level", "error",
+            "--disable-uvicorn-access-log",
+        ]
+
+        self._vllm_log = open("/tmp/vllm-stderr.log", "w")
+        self.vllm_proc = subprocess.Popen(cmd, stderr=self._vllm_log)
+
+        _wait_ready(self.vllm_proc)
+        self.logger.info("vLLM-Omni (VoiceDesign) ready on port %d", VLLM_PORT)
+
+        self.logger.info("Putting to sleep...")
+        _sleep()
+        self.logger.info("vLLM-Omni sleeping — snapshot point")
+
+    @modal.enter(snap=False)
+    def restore(self):
+        import logging
+
+        try:
+            import torch.distributed as dist
+
+            if dist.is_initialized():
+                dist.destroy_process_group()
+        except Exception:
+            pass
+
+        if not hasattr(self, "logger"):
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s - %(levelname)s - %(message)s",
+            )
+            self.logger = logging.getLogger("tts-voicedesign")
+
+        self.logger.info("Waking vLLM-Omni (VoiceDesign)...")
+        _wake_up()
+        _wait_ready(self.vllm_proc, timeout=MINUTES)
+        self.logger.info("vLLM-Omni (VoiceDesign) awake on port %d", VLLM_PORT)
+
+    @modal.exit()
+    def stop(self):
+        try:
+            _sleep()
+        except Exception:
+            pass
+        if hasattr(self, "vllm_proc") and self.vllm_proc.poll() is None:
+            self.vllm_proc.terminate()
+            try:
+                self.vllm_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.vllm_proc.kill()
+        if hasattr(self, "_vllm_log"):
+            self._vllm_log.close()
+
+    @modal.fastapi_endpoint(method="POST")
+    def web_design(
+        self,
+        text: str = fastapi.Form(...),
+        voice_instructions: str = fastapi.Form(...),
+        language: str = fastapi.Form("Portuguese"),
+        save_as: str = fastapi.Form(""),
+    ) -> fastapi.Response:
+        """Generate speech from a text description of desired voice.
+
+        voice_instructions: e.g. "A deep, calm male voice with Brazilian accent"
+        save_as: if provided, saves the generated audio to the volume as a ref file.
+        """
+        import soundfile as sf
+
+        if not text.strip():
+            return fastapi.Response(
+                content="Empty text", status_code=400, media_type="text/plain"
+            )
+        if not voice_instructions.strip():
+            return fastapi.Response(
+                content="voice_instructions is required",
+                status_code=400,
+                media_type="text/plain",
+            )
+
+        t0 = time.perf_counter()
+
+        try:
+            payload = {
+                "model": MODEL_VOICEDESIGN,
+                "input": text,
+                "voice": "alloy",
+                "language": language,
+                "task_type": "VoiceDesign",
+                "instructions": voice_instructions.strip(),
+                "response_format": "wav",
+            }
+
+            resp = http_requests.post(
+                f"http://localhost:{VLLM_PORT}/v1/audio/speech",
+                json=payload,
+                timeout=300,
+            )
+
+            if resp.status_code != 200:
+                self.logger.error(
+                    "[VoiceDesign] vLLM-Omni error: %d %s",
+                    resp.status_code,
+                    resp.text[:500],
+                )
+                return fastapi.Response(
+                    content=resp.text,
+                    status_code=resp.status_code,
+                    media_type="text/plain",
+                )
+
+            audio_bytes = resp.content
+            elapsed = time.perf_counter() - t0
+
+            duration = 0.0
+            sr = 24000
+            content_type = resp.headers.get("content-type", "audio/wav")
+            try:
+                buf = io.BytesIO(audio_bytes)
+                data, sr = sf.read(buf)
+                duration = len(data) / sr
+            except Exception:
+                duration = len(audio_bytes) / (sr * 2)
+
+            # Optionally save to volume as a voice reference
+            if save_as.strip():
+                filename = save_as.strip()
+                if not filename.endswith(".wav"):
+                    filename += ".wav"
+                vol_path = os.path.join(VOICE_REFS_PATH, filename)
+                with open(vol_path, "wb") as f:
+                    f.write(audio_bytes)
+                # Save companion ref_text (the text spoken, for Base to use later)
+                txt_path = os.path.splitext(vol_path)[0] + ".txt"
+                with open(txt_path, "w") as f:
+                    f.write(text.strip())
+                voice_refs_vol.commit()
+                self.logger.info("[VoiceDesign] Saved to volume: %s", filename)
+
+            self.logger.info(
+                "[VoiceDesign] '%s' -> %.1fs audio in %.1fs (%d bytes)",
+                voice_instructions[:60], duration, elapsed, len(audio_bytes),
+            )
+
+            return fastapi.Response(
+                content=audio_bytes,
+                media_type=content_type,
+                headers={
+                    "X-Inference-Time": f"{elapsed:.2f}",
+                    "X-Audio-Duration": f"{duration:.2f}",
+                    "X-Sample-Rate": str(sr),
+                    "X-Saved-As": save_as.strip() if save_as.strip() else "",
+                },
+            )
+        except Exception as e:
+            self.logger.error("[VoiceDesign] Error: %s", e)
             return fastapi.Response(
                 content=str(e), status_code=500, media_type="text/plain"
             )

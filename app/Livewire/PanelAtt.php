@@ -159,6 +159,7 @@ class PanelAtt extends Component
             $this->statusType = 'error';
         } finally {
             $this->isProcessing = false;
+            $this->dispatch('process-complete');
         }
     }
 
