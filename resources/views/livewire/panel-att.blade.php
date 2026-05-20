@@ -7,7 +7,10 @@
         selectedMicLabel: 'Default Mic',
         autoGainControl: true,
 
+        micError: null,
+
         async startRecording() {
+            this.micError = null;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: this.autoGainControl }
@@ -16,16 +19,27 @@
                 const chunks = [];
 
                 this.mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-                this.mediaRecorder.onstop = () => {
+                this.mediaRecorder.onstop = async () => {
                     this.audioBlob = new Blob(chunks, { type: 'audio/webm' });
                     this.audioBlobSize = (this.audioBlob.size / 1024).toFixed(1);
                     stream.getTracks().forEach(t => t.stop());
+
+                    // Upload recorded blob to Livewire as audioFile
+                    const file = new File([this.audioBlob], 'recording.webm', { type: 'audio/webm' });
+                    @this.upload('audioFile', file);
                 };
 
                 this.mediaRecorder.start();
                 this.isRecording = true;
             } catch (err) {
                 console.error('Mic error:', err);
+                if (err.name === 'NotAllowedError') {
+                    this.micError = 'Permissao de microfone negada. Clique no icone de cadeado na barra de endereco e permita o microfone.';
+                } else if (err.name === 'NotFoundError') {
+                    this.micError = 'Nenhum microfone detectado.';
+                } else {
+                    this.micError = 'Erro ao acessar microfone: ' + err.message;
+                }
             }
         },
 
@@ -98,6 +112,11 @@
                     </button>
                 @endforeach
             </div>
+
+            {{-- Mic Error --}}
+            <template x-if="micError">
+                <p class="text-[10px] text-red-400 pl-1" x-text="micError"></p>
+            </template>
 
             {{-- Recording Controls --}}
             <div class="bg-[var(--bg-overlay)] rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-3">
